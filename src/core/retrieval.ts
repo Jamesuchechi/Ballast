@@ -22,11 +22,14 @@ interface RawChunkRow {
   text: string;
   external_id: string;
   checksum: string;
+  connector: string;
+  raw_uri?: string | null;
   distance: number;
 }
 
 /**
- * Executes vector search in PostgreSQL with strict SQL-level workspace isolation (FR3.2, NFR5.2)
+ * Executes private vector search in PostgreSQL with strict SQL-level workspace isolation (FR3.2, FR3.3).
+ * Never returns chunks where connector = 'web'.
  */
 export async function retrievePrivateChunks(
   options: RetrievalOptions
@@ -37,7 +40,7 @@ export async function retrievePrivateChunks(
   const queryVector = generateEmbedding(queryText);
   const vectorStr = formatVectorForPg(queryVector);
 
-  // 2. Query pgvector with strict WHERE workspace_id = $2 (SQL ACL)
+  // 2. Query pgvector for private sources only (s.connector != 'web')
   const rows = await query<RawChunkRow>(
     `SELECT 
        c.id, 
@@ -45,42 +48,47 @@ export async function retrievePrivateChunks(
        c.text, 
        s.external_id, 
        s.checksum,
+       s.connector,
+       s.raw_uri,
        (c.embedding <=> $1::vector) AS distance
      FROM chunks c
      JOIN sources s ON s.id = c.source_id
-     WHERE c.workspace_id = $2
+     WHERE c.workspace_id = $2 AND s.connector != 'web'
      ORDER BY c.embedding <=> $1::vector ASC
      LIMIT $3`,
     [vectorStr, workspaceId, limit]
   );
 
-  // 3. Log access into access_logs for auditing (NFR2.4, NFR6.4)
+  // 3. Log access into access_logs for auditing all accessed private sources (NFR2.4, NFR6.4)
   if (rows.length > 0) {
     try {
-      await query(
-        `INSERT INTO access_logs (
-           workspace_id, source_id, brief_id, action
-         ) VALUES ($1, $2, $3, $4)`,
-        [
-          workspaceId,
-          rows[0].source_id,
-          briefId || null,
-          `retrieve_chunks: hits=${rows.length}`,
-        ]
-      );
+      const distinctSourceIds = Array.from(new Set(rows.map((r) => r.source_id)));
+      for (const sId of distinctSourceIds) {
+        const hitsCount = rows.filter((r) => r.source_id === sId).length;
+        await query(
+          `INSERT INTO access_logs (
+             workspace_id, source_id, brief_id, action
+           ) VALUES ($1, $2, $3, $4)`,
+          [
+            workspaceId,
+            sId,
+            briefId || null,
+            `retrieve_private_chunks: hits=${hitsCount}`,
+          ]
+        );
+      }
     } catch (e) {
-      // Non-fatal logging failure
       console.warn('[RETRIEVAL] Access log record failed:', e);
     }
   }
 
-  // 4. Format into RetrievedQuote[] and SourceBlock[]
+  // 4. Format into RetrievedQuote[] and SourceBlock[] tagged source_class='private'
   const quotes: RetrievedQuote[] = rows.map((r, idx) => ({
-    id: `quote_${r.id.slice(0, 8)}_${idx}`,
+    id: `quote_priv_${r.id.slice(0, 8)}_${idx}`,
     source_id: r.source_id,
     quote: r.text,
     source_class: 'private',
-    connector: 'upload',
+    connector: (r.connector || 'upload') as any,
     url: null,
   }));
 
@@ -88,7 +96,83 @@ export async function retrievePrivateChunks(
     id: r.source_id,
     source_id: r.source_id,
     class: 'private',
-    connector: 'upload',
+    connector: (r.connector || 'upload') as any,
+    body: r.text,
+  }));
+
+  return {
+    quotes,
+    sources,
+    totalChunksSearched: rows.length,
+  };
+}
+
+/**
+ * Executes separate web vector search in PostgreSQL (FR3.3).
+ * Queries only chunks where s.connector = 'web' and tags every result source_class='web'.
+ */
+export async function retrieveWebChunks(
+  options: RetrievalOptions
+): Promise<RetrievalResult> {
+  const { workspaceId, queryText, limit = 6, briefId } = options;
+
+  const queryVector = generateEmbedding(queryText);
+  const vectorStr = formatVectorForPg(queryVector);
+
+  const rows = await query<RawChunkRow>(
+    `SELECT 
+       c.id, 
+       c.source_id, 
+       c.text, 
+       s.external_id, 
+       s.checksum,
+       s.connector,
+       s.raw_uri,
+       (c.embedding <=> $1::vector) AS distance
+     FROM chunks c
+     JOIN sources s ON s.id = c.source_id
+     WHERE c.workspace_id = $2 AND s.connector = 'web'
+     ORDER BY c.embedding <=> $1::vector ASC
+     LIMIT $3`,
+    [vectorStr, workspaceId, limit]
+  );
+
+  if (rows.length > 0) {
+    try {
+      const distinctSourceIds = Array.from(new Set(rows.map((r) => r.source_id)));
+      for (const sId of distinctSourceIds) {
+        const hitsCount = rows.filter((r) => r.source_id === sId).length;
+        await query(
+          `INSERT INTO access_logs (
+             workspace_id, source_id, brief_id, action
+           ) VALUES ($1, $2, $3, $4)`,
+          [
+            workspaceId,
+            sId,
+            briefId || null,
+            `retrieve_web_chunks: hits=${hitsCount}`,
+          ]
+        );
+      }
+    } catch (e) {
+      console.warn('[RETRIEVAL] Web access log record failed:', e);
+    }
+  }
+
+  const quotes: RetrievedQuote[] = rows.map((r, idx) => ({
+    id: `quote_web_${r.id.slice(0, 8)}_${idx}`,
+    source_id: r.source_id,
+    quote: r.text,
+    source_class: 'web',
+    connector: 'web',
+    url: r.raw_uri || r.external_id,
+  }));
+
+  const sources: SourceBlock[] = rows.map((r) => ({
+    id: r.source_id,
+    source_id: r.source_id,
+    class: 'web',
+    connector: 'web',
     body: r.text,
   }));
 

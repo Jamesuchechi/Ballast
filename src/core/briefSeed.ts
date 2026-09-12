@@ -235,3 +235,225 @@ export async function seedCanonicalBrief(workspaceId: string): Promise<SeedBrief
     markdown: renderRes.markdown,
   };
 }
+
+export async function seedCanonicalWorldBrief(workspaceId: string): Promise<SeedBriefResult> {
+  const briefId = crypto.randomUUID();
+  const privateSourceId = crypto.randomUUID();
+  const webSourceId = crypto.randomUUID();
+  const title = 'Stripe Webhook Security & GDPR Article 6 Compliance';
+  const asOf = new Date().toISOString();
+  const question = 'What are the technical signature tolerance and GDPR consent requirements for recurring billing?';
+
+  // 1. Insert Private Source
+  await query(
+    `INSERT INTO sources (id, workspace_id, connector, external_id, checksum, trust_boundary, meta)
+     VALUES ($1, $2, 'upload', 'internal_compliance_audit.md', $3, 'untrusted_content', $4)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      privateSourceId,
+      workspaceId,
+      crypto.createHash('sha256').update('internal_compliance_audit').digest('hex'),
+      JSON.stringify({ filename: 'internal_compliance_audit.md', mime: 'text/markdown' }),
+    ]
+  );
+
+  // 2. Insert Web Snapshot Source (FR2.7)
+  const webChecksum = crypto.createHash('sha256').update('stripe_and_gdpr_specs').digest('hex');
+  await query(
+    `INSERT INTO sources (id, workspace_id, connector, external_id, checksum, trust_boundary, raw_uri, fetched_at, meta)
+     VALUES ($1, $2, 'web', 'https://stripe.com/docs/webhooks/signatures', $3, 'untrusted_content', 'https://stripe.com/docs/webhooks/signatures', NOW(), $4)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      webSourceId,
+      workspaceId,
+      webChecksum,
+      JSON.stringify({ title: 'Stripe Webhook Signatures & GDPR Article 6', domain: 'stripe.com' }),
+    ]
+  );
+
+  // 3. Prepare Evidence Items (Both Private and Web)
+  const evidenceItems: PublishedEvidenceItem[] = [
+    {
+      claim: 'Our internal billing system enforces a 300-second maximum timestamp drift on inbound webhooks.',
+      citations: [
+        {
+          source_class: 'private',
+          citation_type: 'support',
+          quote: 'Our internal billing system enforces a 300-second maximum timestamp drift on inbound webhooks.',
+          source_id: privateSourceId,
+          url: null,
+        },
+      ],
+    },
+    {
+      claim: 'Stripe recommends a tolerance of 300 seconds between header timestamp and server time to prevent replay attacks.',
+      citations: [
+        {
+          source_class: 'web',
+          citation_type: 'support',
+          quote: 'Stripe recommends a tolerance of 300 seconds between timestamp and current server time.',
+          source_id: webSourceId,
+          url: 'https://stripe.com/docs/webhooks/signatures',
+        },
+      ],
+    },
+    {
+      claim: 'GDPR Article 6 requires unambiguous opt-in consent with stored timestamp and IP address for automated debits.',
+      citations: [
+        {
+          source_class: 'web',
+          citation_type: 'support',
+          quote: 'For automated recurring debit arrangements, unambiguous opt-in consent must be stored with timestamp and IP address.',
+          source_id: webSourceId,
+          url: 'https://gdpr-info.eu/art-6-gdpr/',
+        },
+      ],
+    },
+  ];
+
+  const sections: PublishedBriefSections = {
+    answer: `- Inbound webhook HMAC signatures must be validated using raw body bytes and Stripe-Signature header.
+- A tolerance of 300 seconds between timestamp and current server time is required to prevent replay attacks.
+- GDPR Article 6 requires unambiguous affirmative consent for recurring card debits, storing timestamp and IP.`,
+    what_i_used: {
+      private: ['internal_compliance_audit.md'],
+      web: ['https://stripe.com/docs/webhooks/signatures', 'https://gdpr-info.eu/art-6-gdpr/'],
+      unchecked: [],
+    },
+    evidence: evidenceItems,
+    uncertain: ['Card network brand rules (Visa vs Mastercard) may enforce stricter retry intervals than Stripe defaults.'],
+    open_loops: ['Confirm whether EU-based merchant accounts require separate mandate PDFs sent via transactional email.'],
+    actions: ['Draft engineering ticket to configure 300s HMAC verification middleware in production router.'],
+    what_i_did_not_do: [
+      'Did not publish ungrounded assumptions.',
+      'Did not send external network queries beyond snapshot-backed sources.',
+    ],
+  };
+
+  const renderRes = renderBriefMarkdown({
+    title,
+    as_of: asOf,
+    mode: 'world',
+    status: 'published',
+    sections,
+  });
+
+  for (const item of evidenceItems) {
+    const span = renderRes.claimSpans.get(item.claim);
+    if (span) {
+      for (const cit of item.citations) {
+        cit.claim_span = span;
+      }
+    }
+  }
+
+  const criticOutput = {
+    keep: evidenceItems.map((e) => ({
+      claim: e.claim,
+      citation_ids: [e.citations[0].source_id || privateSourceId],
+    })),
+    drop: [],
+    conflicts: [],
+    missing: [],
+    did_not: sections.what_i_did_not_do,
+  };
+
+  const validation = validateForPublish({
+    markdown: renderRes.markdown,
+    mode: 'world',
+    criticOutput,
+    evidence: evidenceItems,
+    unchecked: [],
+    sections,
+  });
+
+  if (!validation.valid) {
+    throw new Error(`Validation failed for world seed brief: ${validation.errors.join('; ')}`);
+  }
+
+  const pdfUri = await renderAndStorePdf(briefId, title, renderRes.markdown);
+
+  await query(
+    `INSERT INTO briefs (
+      id, workspace_id, question, mode, status, markdown, pdf_uri, as_of, 
+      stale_after, progress, published_at, template_version
+    ) VALUES ($1, $2, $3, 'world', 'published', $4, $5, $6, $7, $8, NOW(), 'v1')`,
+    [
+      briefId,
+      workspaceId,
+      question,
+      renderRes.markdown,
+      pdfUri,
+      asOf,
+      new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      JSON.stringify([
+        { step: 'queued', state: 'done' },
+        { step: 'planning', state: 'done' },
+        { step: 'retrieving_private', state: 'done' },
+        { step: 'retrieving_web', state: 'done' },
+        { step: 'drafting', state: 'done' },
+        { step: 'verifying', state: 'done' },
+        { step: 'validating', state: 'done' },
+        { step: 'rendering', state: 'done' },
+        { step: 'published', state: 'done' },
+      ]),
+    ]
+  );
+
+  for (const item of evidenceItems) {
+    for (const cit of item.citations) {
+      await query(
+        `INSERT INTO citations (
+          workspace_id, brief_id, source_class, citation_type, claim_span, quote, source_id, url
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          workspaceId,
+          briefId,
+          cit.source_class,
+          cit.citation_type,
+          JSON.stringify(cit.claim_span),
+          cit.quote,
+          cit.source_id,
+          cit.url,
+        ]
+      );
+    }
+  }
+
+  await query(
+    `INSERT INTO actions (workspace_id, brief_id, type, payload)
+     VALUES ($1, $2, 'email_draft', $3)`,
+    [
+      workspaceId,
+      briefId,
+      JSON.stringify({
+        to: 'engineering-security@internal.co',
+        subject: 'Stripe Webhook Signature Verification Tolerance Setup',
+        body: 'Team,\n\nFollowing our review of Stripe and GDPR Article 6 requirements, please ensure all incoming production webhook requests verify the Stripe-Signature header with raw request bytes and enforce the 300-second maximum timestamp drift.\n\nBest,\nBallast Critic',
+      }),
+    ]
+  );
+
+  await query(
+    `INSERT INTO runs (workspace_id, brief_id, tools_called, tokens_in, tokens_out, latency_ms, cost, circuit_broken, critic_log)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      workspaceId,
+      briefId,
+      JSON.stringify(['retrieval_private', 'web_search', 'retrieval_web']),
+      2450,
+      560,
+      1280,
+      0.0142,
+      false,
+      JSON.stringify(criticOutput),
+    ]
+  );
+
+  return {
+    briefId,
+    sourceId: privateSourceId,
+    pdfUri,
+    markdown: renderRes.markdown,
+  };
+}

@@ -166,12 +166,12 @@ A Home brief grounded in real inbox content, visible source list, visible last-s
 
 ### Deliverables
 
-- [ ] Web search tool, **opt-in per query** via stored `mode=world`.
-- [ ] Fetched pages persisted as `sources.connector=web` with checksum + `fetched_at` + `raw_uri`. Citations without a snapshot are a defect.
-- [ ] **Separate retrieval passes**: private query and web query. Type each row before any concatenation.
-- [ ] Every citation labeled `private` | `web` | `system` in DB and in the rendered brief.
-- [ ] Per-brief cost cap: stop extra search when `runs.cost` hits ceiling; set `circuit_broken`; explain in *What I did not do* (FR8.3).
-- [ ] Home mode: tool router raises if web is invoked. Add a test that a writer message “please search the web” does not call the tool.
+- [x] Web search tool, **opt-in per query** via stored `mode=world`.
+- [x] Fetched pages persisted as `sources.connector=web` with checksum + `fetched_at` + `raw_uri`. Citations without a snapshot are a defect.
+- [x] **Separate retrieval passes**: private query and web query. Type each row before any concatenation.
+- [x] Every citation labeled `private` | `web` | `system` in DB and in the rendered brief.
+- [x] Per-brief cost cap: stop extra search when `runs.cost` hits ceiling; set `circuit_broken`; explain in *What I did not do* (FR8.3).
+- [x] Home mode: tool router raises if web is invoked. Add a test that a writer message “please search the web” does not call the tool.
 
 ### Exit criterion
 

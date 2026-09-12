@@ -105,8 +105,20 @@ export function RightSidebar({
                       <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', textTransform: 'uppercase' }}>
                         {c.citation_type || 'support'}
                       </span>
-                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', padding: '2px 6px', borderRadius: '4px', background: 'var(--card-border)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                        {c.source_class || 'private'}
+                      <span
+                        style={{
+                          fontSize: '0.65rem',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                          color: c.source_class === 'web' ? '#06b6d4' : '#34d399',
+                          border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        [{c.source_class || 'private'}]
                       </span>
                     </div>
                     {c.claim_span && (
@@ -116,7 +128,17 @@ export function RightSidebar({
                     )}
                   </div>
 
-                  <blockquote style={{ fontSize: '0.78rem', fontStyle: 'italic', color: 'var(--text)', borderLeft: '2px solid #10b981', paddingLeft: '10px', margin: 0, lineHeight: '1.5' }}>
+                  <blockquote
+                    style={{
+                      fontSize: '0.78rem',
+                      fontStyle: 'italic',
+                      color: 'var(--text)',
+                      borderLeft: `2px solid ${c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
+                      paddingLeft: '10px',
+                      margin: 0,
+                      lineHeight: '1.5',
+                    }}
+                  >
                     “{c.quote}”
                   </blockquote>
 

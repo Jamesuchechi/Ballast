@@ -2,60 +2,89 @@ import { objectStore } from '@/storage/objectStore';
 
 /**
  * Deterministic pure PDF-1.4 generator.
- * Produces valid PDF documents from brief Markdown / HTML without external binary dependencies.
+ * Produces valid multi-page PDF documents from brief Markdown / HTML without external binary dependencies.
  */
 export function generateSimplePdf(title: string, lines: string[]): Buffer {
-  const contentStreams: string[] = [];
-  
   // Page setup: A4 595 x 842 pt, 50 pt margins
   const marginX = 50;
-  let cursorY = 790;
+  const bottomMargin = 55;
+  const startY = 780;
   const lineLeading = 15;
   const headingLeading = 24;
 
-  let stream = `BT\n/F1 18 Tf\n${marginX} ${cursorY} Td\n(${escapePdf(title)}) Tj\nET\n`;
+  const pageStreams: string[] = [];
+  let currentStream = '';
+  let cursorY = startY;
+  let pageNum = 1;
+
+  function startNewPage() {
+    if (currentStream.length > 0) {
+      pageStreams.push(currentStream);
+    }
+    pageNum++;
+    cursorY = startY;
+    // Running header on subsequent pages
+    currentStream = `BT\n/F2 8 Tf\n${marginX} 810 Td\n(${escapePdf(title)} - Page ${pageNum}) Tj\nET\n`;
+  }
+
+  // First page header
+  currentStream = `BT\n/F1 18 Tf\n${marginX} ${cursorY} Td\n(${escapePdf(title)}) Tj\nET\n`;
   cursorY -= headingLeading;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) {
       cursorY -= 8;
+      if (cursorY < bottomMargin) {
+        startNewPage();
+      }
       continue;
-    }
-
-    if (cursorY < 60) {
-      // New page boundary could be handled, or paginate
-      break;
     }
 
     if (line.startsWith('# ')) {
-      // Main title already placed
+      // Top-level document title already placed
       continue;
     } else if (line.startsWith('## ')) {
+      if (cursorY < bottomMargin + 40) {
+        startNewPage();
+      }
       cursorY -= 8;
       const heading = line.replace('## ', '');
-      stream += `BT\n/F2 13 Tf\n${marginX} ${cursorY} Td\n(${escapePdf(heading)}) Tj\nET\n`;
+      currentStream += `BT\n/F2 13 Tf\n${marginX} ${cursorY} Td\n(${escapePdf(heading)}) Tj\nET\n`;
       cursorY -= headingLeading;
     } else if (line.startsWith('### ')) {
+      if (cursorY < bottomMargin + 25) {
+        startNewPage();
+      }
       const subHeading = line.replace('### ', '');
-      stream += `BT\n/F2 11 Tf\n${marginX + 10} ${cursorY} Td\n(${escapePdf(subHeading)}) Tj\nET\n`;
+      currentStream += `BT\n/F2 11 Tf\n${marginX + 10} ${cursorY} Td\n(${escapePdf(subHeading)}) Tj\nET\n`;
       cursorY -= lineLeading;
     } else {
-      // Standard body or list
+      if (cursorY < bottomMargin + 15) {
+        startNewPage();
+      }
+      // Standard body or bullet line
       const indent = line.startsWith('- ') ? marginX + 15 : marginX;
-      // Truncate line if excessively long for single line or split
-      const displayLine = line.length > 90 ? line.slice(0, 87) + '...' : line;
-      stream += `BT\n/F1 10 Tf\n${indent} ${cursorY} Td\n(${escapePdf(displayLine)}) Tj\nET\n`;
+      const displayLine = line.length > 95 ? line.slice(0, 92) + '...' : line;
+      currentStream += `BT\n/F1 10 Tf\n${indent} ${cursorY} Td\n(${escapePdf(displayLine)}) Tj\nET\n`;
       cursorY -= lineLeading;
     }
   }
 
-  contentStreams.push(stream);
+  if (currentStream.length > 0) {
+    pageStreams.push(currentStream);
+  }
 
-  const streamContent = contentStreams.join('\n');
-  const streamLength = Buffer.byteLength(streamContent);
+  const pageCount = pageStreams.length;
 
-  // Assemble PDF Objects
+  // Object Layout:
+  // 1: Catalog
+  // 2: Pages
+  // 3: Font F1 (Helvetica)
+  // 4: Font F2 (Helvetica-Bold)
+  // For page i (0 to pageCount - 1):
+  // Page object: 5 + 2*i
+  // Stream object: 6 + 2*i
   let offset = 0;
   const offsets: number[] = [];
 
@@ -68,40 +97,56 @@ export function generateSimplePdf(title: string, lines: string[]): Buffer {
   offset += Buffer.byteLength(obj1);
 
   // Object 2: Pages
+  const pageObjectIds: string[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    pageObjectIds.push(`${5 + 2 * i} 0 R`);
+  }
   offsets.push(offset);
-  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
+  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [${pageObjectIds.join(' ')}] /Count ${pageCount} >>\nendobj\n`;
   offset += Buffer.byteLength(obj2);
 
-  // Object 3: Page
+  // Object 3: Font F1 (Helvetica)
   offsets.push(offset);
-  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj\n`;
+  const obj3 = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
   offset += Buffer.byteLength(obj3);
 
-  // Object 4: Content Stream
+  // Object 4: Font F2 (Helvetica-Bold)
   offsets.push(offset);
-  const obj4 = `4 0 obj\n<< /Length ${streamLength} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
+  const obj4 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`;
   offset += Buffer.byteLength(obj4);
 
-  // Object 5: Standard Font Helvetica
-  offsets.push(offset);
-  const obj5 = `5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
-  offset += Buffer.byteLength(obj5);
+  // Pages and Content Streams
+  let pagesBody = '';
+  for (let i = 0; i < pageCount; i++) {
+    const pageId = 5 + 2 * i;
+    const streamId = 6 + 2 * i;
+    const streamContent = pageStreams[i];
+    const streamLength = Buffer.byteLength(streamContent);
 
-  // Object 6: Standard Font Helvetica-Bold
-  offsets.push(offset);
-  const obj6 = `6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`;
-  offset += Buffer.byteLength(obj6);
+    // Page object
+    offsets.push(offset);
+    const pageObj = `${pageId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents ${streamId} 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>\nendobj\n`;
+    pagesBody += pageObj;
+    offset += Buffer.byteLength(pageObj);
 
-  // XREF
+    // Stream object
+    offsets.push(offset);
+    const streamObj = `${streamId} 0 obj\n<< /Length ${streamLength} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
+    pagesBody += streamObj;
+    offset += Buffer.byteLength(streamObj);
+  }
+
+  // XREF Table
+  const totalObjects = 4 + 2 * pageCount;
   const xrefOffset = offset;
-  let xref = `xref\n0 7\n0000000000 65535 f \n`;
+  let xref = `xref\n0 ${totalObjects + 1}\n0000000000 65535 f \n`;
   for (const off of offsets) {
     xref += `${off.toString().padStart(10, '0')} 00000 n \n`;
   }
 
-  const trailer = `trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  const trailer = `trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
-  const fullPdfString = `${header}${obj1}${obj2}${obj3}${obj4}${obj5}${obj6}${xref}${trailer}`;
+  const fullPdfString = `${header}${obj1}${obj2}${obj3}${obj4}${pagesBody}${xref}${trailer}`;
   return Buffer.from(fullPdfString, 'binary');
 }
 

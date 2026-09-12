@@ -103,6 +103,17 @@ export function evaluateCriticDeterministic(input: CriticInput): CriticOutput {
 
   const quoteMap = new Map(input.retrieved.map((q) => [q.id, q]));
 
+  // Check draft actions for prompt injection patterns
+  if (input.draft_brief.sections.actions) {
+    for (const act of input.draft_brief.sections.actions) {
+      const isActionInjection = INJECTION_PATTERNS.some((pat) => pat.test(act));
+      if (isActionInjection) {
+        drop.push({ claim: act, reason: "injection" });
+        didNot.push(`Refused injected action: "${act.slice(0, 60)}"`);
+      }
+    }
+  }
+
   // Check draft evidence claims
   for (const draftItem of input.draft_brief.sections.evidence) {
     // Check for prompt injection patterns

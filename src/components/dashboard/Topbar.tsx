@@ -129,10 +129,15 @@ export function Topbar({
           onClick={onCreateBrief}
           disabled={actionLoading}
           className="dash-btn-primary"
-          style={{ opacity: actionLoading ? 0.6 : 1 }}
+          style={{
+            opacity: actionLoading ? 0.6 : 1,
+            background: mode === 'world' ? 'linear-gradient(135deg, #0891b2, #06b6d4)' : undefined,
+            borderColor: mode === 'world' ? '#0891b2' : undefined,
+          }}
+          title={`Seed a verified canonical brief for ${mode} mode`}
         >
           <PlusCircle size={15} />
-          <span>Seed Brief</span>
+          <span>Seed {mode === 'world' ? 'World' : 'Home'} Brief</span>
         </button>
 
         {/* Right Sidebar Context Inspector Toggle */}

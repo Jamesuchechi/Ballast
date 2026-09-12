@@ -183,4 +183,46 @@ export async function authenticateUser(email: string, password: string): Promise
   };
 }
 
+export interface RequestWithCookies {
+  cookies: {
+    get: (name: string) => { value: string } | undefined;
+  };
+}
+
+/**
+ * Resolves the authenticated session from request cookies.
+ * Verifies HMAC signature, checks expiration, and returns verified SessionPayload.
+ * If fallbackToDefault is true and no valid token is present, resolves the default workspace
+ * (used for guest / demo exploration mode).
+ */
+export async function getAuthSession(
+  req: RequestWithCookies,
+  fallbackToDefault = false
+): Promise<SessionPayload | null> {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload) {
+      return payload;
+    }
+  }
+
+  if (fallbackToDefault) {
+    const defaultWs = await queryOne<{ id: string }>(
+      `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
+    );
+    if (defaultWs) {
+      return {
+        userId: '00000000-0000-0000-0000-000000000000',
+        workspaceId: defaultWs.id,
+        email: 'guest@ballast.local',
+        role: 'member',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+    }
+  }
+
+  return null;
+}
+
 export { COOKIE_NAME };

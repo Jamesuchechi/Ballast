@@ -1,35 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne } from '@/db/client';
+import { query } from '@/db/client';
 import { processQueuedBrief } from '@/core/pipelineWorker';
+import { getAuthSession } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const sessionCookie = req.cookies.get('ballast_session');
-    let workspaceId: string | null = null;
-
-    if (sessionCookie?.value) {
-      const user = await queryOne<{ id: string }>(
-        `SELECT id FROM users WHERE id::text = $1`,
-        [sessionCookie.value]
-      );
-      if (user) {
-        const member = await queryOne<{ workspace_id: string }>(
-          `SELECT workspace_id FROM workspace_members WHERE user_id = $1 LIMIT 1`,
-          [user.id]
-        );
-        if (member) workspaceId = member.workspace_id;
-      }
+    const session = await getAuthSession(req, true);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized or no workspace found' }, { status: 401 });
     }
-
-    if (!workspaceId) {
-      const defaultWs = await queryOne<{ id: string }>(
-        `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-      );
-      if (!defaultWs) {
-        return NextResponse.json({ error: 'No workspace found' }, { status: 400 });
-      }
-      workspaceId = defaultWs.id;
-    }
+    const workspaceId = session.workspaceId;
 
     const body = await req.json();
     const { question, mode = 'home', parent_brief_id = null } = body;

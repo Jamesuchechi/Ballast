@@ -1,5 +1,6 @@
 import { query, queryOne } from '@/db/client';
-import { retrievePrivateChunks } from './retrieval';
+import { retrievePrivateChunks, retrieveWebChunks } from './retrieval';
+import { toolRouter, DEFAULT_BRIEF_COST_CAP } from './toolRouter';
 import { runWriter } from './writer';
 import { runCritic } from './critic';
 import { renderBriefMarkdown } from './renderer';
@@ -15,6 +16,7 @@ import type {
   RetrievedQuote,
   UncheckedConnector,
 } from './types';
+import type { SourceBlock } from './sourceFormatter';
 
 export interface WorkerProgressEntry {
   step: string;
@@ -61,9 +63,13 @@ export async function appendProgress(
 }
 
 /**
- * Runs the full Phase 2 async generation pipeline for a queued brief
+ * Runs the full Phase 4 async generation pipeline for a queued brief.
+ * Supports Home (private only) and World (private + web) modes with two-pass retrieval (FR3.3, FR4.2).
  */
-export async function processQueuedBrief(briefId: string): Promise<BriefV1 | null> {
+export async function processQueuedBrief(
+  briefId: string,
+  options?: { costCap?: number }
+): Promise<BriefV1 | null> {
   const startTime = Date.now();
 
   // 1. Fetch brief
@@ -83,22 +89,33 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
   const { workspace_id: workspaceId, question, mode, parent_brief_id: parentBriefId } = briefRow;
 
   try {
+    let totalCost = 0.0025; // baseline generation cost
+    let circuitBroken = false;
+    let circuitBrokenReason: string | null = null;
+    const toolsCalled: string[] = ['retrieval_private'];
+
     // Transition to running
     await query(`UPDATE briefs SET status = 'running' WHERE id = $1`, [briefId]);
 
     // Step: planning
-    await appendProgress(briefId, 'planning', 'Analyzing question and planning retrieval passes');
+    await appendProgress(briefId, 'planning', `Analyzing question and planning retrieval passes for mode=${mode}`);
 
-    // Step: retrieving_private
+    // Step: retrieving_private (Pass 1 - Private sources only per FR3.3)
     await appendProgress(briefId, 'retrieving_private', 'Executing vector retrieval over private workspace chunks');
-    const retrieval = await retrievePrivateChunks({
+    const privateRetrieval = await retrievePrivateChunks({
       workspaceId,
       queryText: question,
       limit: 8,
       briefId,
     });
 
-    // Step: retrieving_web
+    let webRetrieval = {
+      quotes: [] as RetrievedQuote[],
+      sources: [] as SourceBlock[],
+      totalChunksSearched: 0,
+    };
+
+    // Step: retrieving_web (Pass 2 - Web sources only per FR2.7, FR3.3, FR3.4)
     if (mode === 'home') {
       await appendProgress(
         briefId,
@@ -106,16 +123,51 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
         'Web retrieval disabled in Home mode (FR3.4)'
       );
     } else {
-      await appendProgress(briefId, 'retrieving_web', 'Querying web snapshot cache');
+      await appendProgress(briefId, 'retrieving_web', 'Executing web search and snapshot ingest (FR2.7, FR3.3)');
+      toolsCalled.push('web_search');
+
+      const webToolResult = await toolRouter.executeWebSearch(question, {
+        workspaceId,
+        briefId,
+        mode,
+        currentCost: totalCost,
+        costCap: options?.costCap ?? DEFAULT_BRIEF_COST_CAP,
+      });
+
+      totalCost += webToolResult.costIncurred;
+
+      if (webToolResult.circuitBroken) {
+        circuitBroken = true;
+        circuitBrokenReason = webToolResult.explanation || 'Cost ceiling reached';
+      }
+
+      toolsCalled.push('retrieval_web');
+      webRetrieval = await retrieveWebChunks({
+        workspaceId,
+        queryText: question,
+        limit: 6,
+        briefId,
+      });
     }
+
+    // Combine independently retrieved passes (FR3.3)
+    const allQuotes: RetrievedQuote[] = [
+      ...privateRetrieval.quotes,
+      ...webRetrieval.quotes,
+    ];
+
+    const allSources: SourceBlock[] = [
+      ...privateRetrieval.sources,
+      ...webRetrieval.sources,
+    ];
 
     // Step: drafting
     await appendProgress(briefId, 'drafting', 'Drafting brief sections quoting source evidence');
     const draft = await runWriter({
       question,
       mode,
-      sources: retrieval.sources,
-      retrieved: retrieval.quotes,
+      sources: allSources,
+      retrieved: allQuotes,
     });
 
     // Check for any unchecked / partially failed connectors in this workspace (FR2.6, NFR4.5)
@@ -139,7 +191,7 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
     const criticInput: CriticInput = {
       question,
       mode,
-      retrieved: retrieval.quotes,
+      retrieved: allQuotes,
       draft_brief: draft,
       unchecked: uncheckedList,
     };
@@ -160,7 +212,7 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
     // Step: validating (Publish Validator Gate)
     await appendProgress(briefId, 'validating', 'Enforcing publish constraints and heading presence');
 
-    const quoteMap = new Map(retrieval.quotes.map((q) => [q.id, q]));
+    const quoteMap = new Map(allQuotes.map((q) => [q.id, q]));
     const evidenceItems: PublishedEvidenceItem[] = [];
 
     for (const k of criticOut.keep) {
@@ -184,21 +236,58 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
 
     // Empty evidence path (FR4.9): if keep is empty, publish with empty Answer and filled Uncertain
     const hasEvidence = evidenceItems.length > 0;
-    const answerText = hasEvidence
-      ? draft.sections.answer
-      : 'No citable evidence was found in the indexed corpus to answer this query.\nAsserted claims were withheld to prevent ungrounded hallucinations.';
+    let answerText = '';
+    if (!hasEvidence) {
+      answerText = 'No citable evidence was found in the indexed corpus to answer this query.\nAsserted claims were withheld to prevent ungrounded hallucinations.';
+    } else {
+      // Synthesize answer strictly from verified keep claims (never raw writer draft)
+      const answerBullets = criticOut.keep.map((k) => `- ${k.claim}`);
+      answerText = answerBullets.slice(0, 10).join('\n');
+    }
 
     const uncertainList = hasEvidence
-      ? draft.sections.uncertain
+      ? [...draft.sections.uncertain]
       : [
           ...draft.sections.uncertain,
           'Private corpus does not contain documented statements directly answering the question.',
         ];
 
+    // Surface conflicts into Uncertain section (FR4.5)
+    for (const c of criticOut.conflicts) {
+      const conflictDesc = `Conflict detected: ${c.topic} between cited sources.`;
+      if (!uncertainList.includes(conflictDesc)) {
+        uncertainList.push(conflictDesc);
+      }
+    }
+
     const didNotList = [
       ...draft.sections.what_i_did_not_do,
       'Did not publish ungrounded or unsourced assertions.',
     ];
+
+    // Explain circuit breaker if tripped (FR8.3)
+    if (circuitBroken && circuitBrokenReason) {
+      didNotList.push(circuitBrokenReason);
+    }
+
+    // Filter actions against dropped claims / prompt injections
+    const sanitizedActions: string[] = [];
+    const droppedTexts = criticOut.drop.map((d) => d.claim.toLowerCase());
+    for (const act of draft.sections.actions) {
+      const isDropped = droppedTexts.some((d) => act.toLowerCase().includes(d) || d.includes(act.toLowerCase()));
+      if (isDropped) {
+        didNotList.push(`Refused ungrounded/injected action draft: "${act}"`);
+      } else {
+        sanitizedActions.push(act);
+      }
+    }
+
+    // Merge critic did_not entries
+    for (const d of criticOut.did_not) {
+      if (!didNotList.includes(d)) {
+        didNotList.push(d);
+      }
+    }
 
     const uncheckedBullets = [
       ...draft.sections.what_i_used.unchecked,
@@ -207,16 +296,24 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
       ),
     ];
 
+    const privateSourceLabels = Array.from(
+      new Set(allSources.filter((s) => s.class === 'private').map((s) => s.id))
+    );
+    const webSourceLabels = Array.from(
+      new Set(allSources.filter((s) => s.class === 'web').map((s) => s.id))
+    );
+
     const publishedSections: PublishedBriefSections = {
       answer: answerText,
       what_i_used: {
-        ...draft.sections.what_i_used,
+        private: privateSourceLabels.length > 0 ? privateSourceLabels : draft.sections.what_i_used.private,
+        web: webSourceLabels.length > 0 ? webSourceLabels : draft.sections.what_i_used.web,
         unchecked: uncheckedBullets,
       },
       evidence: evidenceItems,
       uncertain: uncertainList,
       open_loops: draft.sections.open_loops,
-      actions: draft.sections.actions,
+      actions: sanitizedActions,
       what_i_did_not_do: didNotList,
     };
 
@@ -259,8 +356,8 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
 
     // Step: proposing_actions
     await appendProgress(briefId, 'proposing_actions', 'Extracting human-gated action drafts');
-    if (draft.sections.actions.length > 0) {
-      for (const act of draft.sections.actions) {
+    if (sanitizedActions.length > 0) {
+      for (const act of sanitizedActions) {
         await query(
           `INSERT INTO actions (
             brief_id, workspace_id, type, payload
@@ -277,7 +374,7 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
       }
     }
 
-    // Persist Citations
+    // Persist Citations (Support - with authentic source_class: 'private' | 'web')
     for (const item of evidenceItems) {
       for (const cit of item.citations) {
         await query(
@@ -295,6 +392,29 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
             cit.url || null,
           ]
         );
+      }
+    }
+
+    // Persist Conflict Citations (FR4.5)
+    for (const c of criticOut.conflicts) {
+      for (const citId of c.citation_ids) {
+        const q = quoteMap.get(citId);
+        if (q) {
+          await query(
+            `INSERT INTO citations (
+              workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
+            ) VALUES ($1, $2, $3, $4, 'conflict', $5, $6, $7)`,
+            [
+              workspaceId,
+              briefId,
+              q.source_id || null,
+              q.source_class,
+              JSON.stringify({ start: 0, end: 0 }),
+              q.quote,
+              q.url || null,
+            ]
+          );
+        }
       }
     }
 
@@ -325,20 +445,21 @@ export async function processQueuedBrief(briefId: string): Promise<BriefV1 | nul
       [briefId, markdown, pdfUri]
     );
 
-    // Persist runs telemetry (FR8.1, NFR6.1)
+    // Persist runs telemetry (FR8.1, FR8.3, NFR6.1)
     await query(
       `INSERT INTO runs (
         brief_id, workspace_id, tokens_in, tokens_out, cost, latency_ms,
         tools_called, circuit_broken, critic_log
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         briefId,
         workspaceId,
         question.length * 3 + 450,
         markdown.length,
-        0.0025,
+        totalCost,
         duration,
-        JSON.stringify(mode === 'world' ? ['retrieval_private', 'retrieval_web'] : ['retrieval_private']),
+        JSON.stringify(toolsCalled),
+        circuitBroken,
         JSON.stringify(criticLog),
       ]
     );

@@ -13,6 +13,7 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  Globe,
   ShieldCheck,
   Check,
   Sliders,
@@ -92,7 +93,7 @@ export default function DashboardPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationSteps, setGenerationSteps] = useState<any[]>([]);
   const [queryPrompt, setQueryPrompt] = useState('');
-  const [queryMode, setQueryMode] = useState<'home' | 'world'>('home');
+  const [briefFilter, setBriefFilter] = useState<'all' | 'home' | 'world'>('all');
   const [actionLoading, setActionLoading] = useState(false);
 
   // Connector UI States
@@ -309,7 +310,6 @@ export default function DashboardPage() {
           const data = await res.json();
           if (data.brief) {
             setBriefDetail(data);
-            setMode(data.brief.mode || 'home');
           }
         }
       } catch (err) {
@@ -323,10 +323,15 @@ export default function DashboardPage() {
   // Action Handlers
   // ----------------------------------------------------
 
-  const handleSeedBrief = async () => {
+  const handleSeedBrief = async (seedMode?: 'home' | 'world') => {
     setActionLoading(true);
+    const targetMode = seedMode || mode;
     try {
-      const res = await fetch('/api/briefs', { method: 'POST' });
+      const res = await fetch('/api/briefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: targetMode }),
+      });
       const data = await res.json();
       if (data.briefId) {
         await Promise.all([
@@ -683,6 +688,12 @@ export default function DashboardPage() {
     return computeUnifiedDiff(briefDetail.parentBrief.markdown, currentBrief.markdown);
   }, [briefDetail, currentBrief]);
 
+  // Filtered briefs for selector tabs
+  const filteredBriefs = useMemo(() => {
+    if (briefFilter === 'all') return briefs;
+    return briefs.filter((b) => (b.mode || 'home') === briefFilter);
+  }, [briefs, briefFilter]);
+
   return (
     <DashboardLayout
       user={user}
@@ -722,30 +733,46 @@ export default function DashboardPage() {
               display: 'flex',
               flexDirection: 'column',
               gap: '12px',
-              border: '1px solid rgba(16, 185, 129, 0.28)',
-              background: 'linear-gradient(to right, rgba(16, 185, 129, 0.05), transparent)',
+              border: mode === 'world' ? '1px solid rgba(6, 182, 212, 0.5)' : '1px solid rgba(16, 185, 129, 0.28)',
+              background: mode === 'world'
+                ? 'linear-gradient(to right, rgba(6, 182, 212, 0.10), transparent)'
+                : 'linear-gradient(to right, rgba(16, 185, 129, 0.05), transparent)',
+              boxShadow: mode === 'world' ? '0 0 16px rgba(6, 182, 212, 0.12)' : 'none',
+              transition: 'all 0.2s ease',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="dash-badge dash-badge-published">Critic Engine</span>
+                <span
+                  className="dash-badge"
+                  style={{
+                    background: mode === 'world' ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                    color: mode === 'world' ? '#06b6d4' : '#10b981',
+                    border: `1px solid ${mode === 'world' ? 'rgba(6, 182, 212, 0.5)' : 'rgba(16, 185, 129, 0.4)'}`,
+                    fontWeight: 700,
+                  }}
+                >
+                  {mode === 'world' ? 'World Mode (Private + Web)' : 'Home Mode (Private Only)'}
+                </span>
                 <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>
-                  Ask Ballast across indexed documents &amp; mail
+                  {mode === 'world'
+                    ? 'Dual-pass retrieval across workspace sources and snapshot-backed live web'
+                    : 'Grounded retrieval strictly within workspace sources and mail'}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <button
                   type="button"
-                  onClick={() => setQueryMode('home')}
+                  onClick={() => setMode('home')}
                   style={{
                     padding: '3px 10px',
                     borderRadius: '6px',
                     fontSize: '0.72rem',
                     fontWeight: 600,
                     border: '1px solid',
-                    borderColor: queryMode === 'home' ? '#10b981' : 'var(--card-border)',
-                    background: queryMode === 'home' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                    color: queryMode === 'home' ? '#10b981' : 'var(--text-muted)',
+                    borderColor: mode === 'home' ? '#10b981' : 'var(--card-border)',
+                    background: mode === 'home' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                    color: mode === 'home' ? '#10b981' : 'var(--text-muted)',
                     cursor: 'pointer',
                   }}
                 >
@@ -753,16 +780,16 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQueryMode('world')}
+                  onClick={() => setMode('world')}
                   style={{
                     padding: '3px 10px',
                     borderRadius: '6px',
                     fontSize: '0.72rem',
                     fontWeight: 600,
                     border: '1px solid',
-                    borderColor: queryMode === 'world' ? '#06b6d4' : 'var(--card-border)',
-                    background: queryMode === 'world' ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
-                    color: queryMode === 'world' ? '#06b6d4' : 'var(--text-muted)',
+                    borderColor: mode === 'world' ? '#06b6d4' : 'var(--card-border)',
+                    background: mode === 'world' ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
+                    color: mode === 'world' ? '#06b6d4' : 'var(--text-muted)',
                     cursor: 'pointer',
                   }}
                 >
@@ -778,17 +805,21 @@ export default function DashboardPage() {
                 onChange={(e) => setQueryPrompt(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && queryPrompt.trim() && !isGenerating) {
-                    handleEnqueueBrief(queryPrompt, queryMode);
+                    handleEnqueueBrief(queryPrompt, mode);
                   }
                 }}
-                placeholder="Ask a question grounded in your uploads (e.g. 'What are the outstanding deliverables for Q3 revamp?')..."
+                placeholder={
+                  mode === 'world'
+                    ? "Ask a World query across private docs & live web (e.g. 'What are Stripe webhook security requirements?' or enter a topic)..."
+                    : "Ask a question grounded in your uploads (e.g. 'What are the outstanding deliverables for Q3 revamp?')..."
+                }
                 disabled={isGenerating}
                 style={{
                   flex: 1,
                   padding: '10px 14px',
                   borderRadius: '8px',
                   background: 'var(--card-bg-subtle)',
-                  border: '1px solid var(--card-border)',
+                  border: mode === 'world' ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid var(--card-border)',
                   color: 'var(--text)',
                   fontSize: '0.85rem',
                   outline: 'none',
@@ -796,13 +827,121 @@ export default function DashboardPage() {
               />
               <button
                 type="button"
-                onClick={() => handleEnqueueBrief(queryPrompt, queryMode)}
+                onClick={() => handleEnqueueBrief(queryPrompt, mode)}
                 disabled={!queryPrompt.trim() || isGenerating}
                 className="dash-btn-primary"
-                style={{ padding: '8px 18px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                style={{
+                  padding: '8px 18px',
+                  fontSize: '0.82rem',
+                  whiteSpace: 'nowrap',
+                  background: mode === 'world' ? 'linear-gradient(135deg, #0891b2, #06b6d4)' : undefined,
+                  borderColor: mode === 'world' ? '#0891b2' : undefined,
+                }}
               >
-                {isGenerating ? 'Synthesizing...' : 'Generate Brief'}
+                {isGenerating ? 'Synthesizing...' : mode === 'world' ? 'Generate World Brief' : 'Generate Home Brief'}
               </button>
+            </div>
+
+            {/* Quick Suggestion Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '2px' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Try prompt:</span>
+              {mode === 'world' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('What are the official Stripe webhook signature verification requirements?')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      color: '#06b6d4',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Stripe Webhook Signatures
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('What are the GDPR Article 6 requirements for recurring card billing?')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      color: '#06b6d4',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    GDPR Article 6 Consent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('HTTP 429 Too Many Requests retry-after header standard')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(6, 182, 212, 0.12)',
+                      color: '#06b6d4',
+                      border: '1px solid rgba(6, 182, 212, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    HTTP 429 Rate Limits
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('What are the outstanding deliverables and open questions for the Q3 billing revamp?')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      color: '#10b981',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Q3 Billing Deliverables
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('What is the status of the merchant accounts configuration?')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      color: '#10b981',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Merchant Accounts Status
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQueryPrompt('What database migration scripts are ready for replica dry run?')}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      color: '#10b981',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Database Migrations
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Live Progress Stepper */}
@@ -904,15 +1043,24 @@ export default function DashboardPage() {
                   Your workspace has no published briefs yet. Generate your first brief using the prompt bar above or seed a verified sample brief to test the dual-gate pipeline.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button
-                  onClick={handleSeedBrief}
+                  onClick={() => handleSeedBrief('home')}
                   disabled={actionLoading}
                   className="dash-btn-primary"
                   style={{ padding: '8px 18px', fontSize: '0.82rem' }}
                 >
                   <Sparkles size={15} />
-                  <span>{actionLoading ? 'Seeding in Database...' : 'Seed Sample Brief (Q3 Revamp)'}</span>
+                  <span>{actionLoading ? 'Seeding...' : 'Seed Home Brief (Q3 Revamp)'}</span>
+                </button>
+                <button
+                  onClick={() => handleSeedBrief('world')}
+                  disabled={actionLoading}
+                  className="dash-btn-secondary"
+                  style={{ padding: '8px 18px', fontSize: '0.82rem', borderColor: 'rgba(6, 182, 212, 0.4)', color: '#06b6d4' }}
+                >
+                  <Globe size={15} />
+                  <span>{actionLoading ? 'Seeding...' : 'Seed World Brief (Stripe & GDPR)'}</span>
                 </button>
                 <button
                   onClick={() => setActiveSection('upload')}
@@ -926,6 +1074,150 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
+              {/* Brief Archive Switcher & Mode Filter */}
+              <div
+                className="dash-card"
+                style={{
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>
+                      Workspace Briefs ({briefs.length})
+                    </span>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setBriefFilter('all')}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid',
+                        borderColor: briefFilter === 'all' ? '#6366f1' : 'var(--card-border)',
+                        background: briefFilter === 'all' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                        color: briefFilter === 'all' ? '#a5b4fc' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      All ({briefs.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBriefFilter('home')}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid',
+                        borderColor: briefFilter === 'home' ? '#10b981' : 'var(--card-border)',
+                        background: briefFilter === 'home' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                        color: briefFilter === 'home' ? '#10b981' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Home ({briefs.filter((b) => (b.mode || 'home') === 'home').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBriefFilter('world')}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid',
+                        borderColor: briefFilter === 'world' ? '#06b6d4' : 'var(--card-border)',
+                        background: briefFilter === 'world' ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
+                        color: briefFilter === 'world' ? '#06b6d4' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      World ({briefs.filter((b) => b.mode === 'world').length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Brief Items Horizontal Selector */}
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                  {filteredBriefs.length === 0 ? (
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
+                      No {briefFilter} mode briefs generated yet. Generate one above or click Seed Brief.
+                    </div>
+                  ) : (
+                    filteredBriefs.map((b) => {
+                      const isSelected = b.id === selectedBriefId;
+                      const isWorld = b.mode === 'world';
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setSelectedBriefId(b.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            background: isSelected
+                              ? isWorld
+                                ? 'rgba(6, 182, 212, 0.15)'
+                                : 'rgba(16, 185, 129, 0.15)'
+                              : 'var(--card-bg-subtle)',
+                            border: '1px solid',
+                            borderColor: isSelected
+                              ? isWorld
+                                ? '#06b6d4'
+                                : '#10b981'
+                              : 'var(--card-border)',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            transition: 'all 0.15s ease',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              background: isWorld ? 'rgba(6, 182, 212, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                              color: isWorld ? '#06b6d4' : '#10b981',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {b.mode || 'home'}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.78rem',
+                              fontWeight: isSelected ? 600 : 400,
+                              color: isSelected ? 'var(--text)' : 'var(--text-muted)',
+                              maxWidth: '260px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {b.question}
+                          </span>
+                          {isSelected && <span style={{ fontSize: '0.75rem', color: isWorld ? '#06b6d4' : '#10b981' }}>✓</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
               {/* Brief Action Bar */}
               <div
                 className="dash-card"
@@ -942,8 +1234,16 @@ export default function DashboardPage() {
                     <span className="dash-badge dash-badge-published">
                       {currentBrief?.status || 'published'}
                     </span>
-                    <span className="dash-badge dash-badge-mode">
-                      mode: {currentBrief?.mode || 'home'}
+                    <span
+                      className="dash-badge"
+                      style={{
+                        background: currentBrief?.mode === 'world' ? 'rgba(6, 182, 212, 0.18)' : 'rgba(16, 185, 129, 0.15)',
+                        color: currentBrief?.mode === 'world' ? '#06b6d4' : '#10b981',
+                        border: `1px solid ${currentBrief?.mode === 'world' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {currentBrief?.mode === 'world' ? 'World Mode (Private + Web)' : 'Home Mode (Private Only)'}
                     </span>
                     {currentBrief?.parent_brief_id && (
                       <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#06b6d4', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -966,6 +1266,28 @@ export default function DashboardPage() {
                     <RefreshCw size={14} className={actionLoading ? 'animate-spin' : ''} />
                     <span>Regenerate</span>
                   </button>
+
+                  {currentBrief?.markdown && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const blob = new Blob([currentBrief.markdown], { type: 'text/markdown;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `brief_${currentBrief.id?.slice(0, 8) || 'export'}.md`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="dash-btn-secondary"
+                      title="Download brief in raw frozen template v1 markdown (FR6.3)"
+                    >
+                      <FileText size={14} />
+                      <span>Export Markdown</span>
+                    </button>
+                  )}
 
                   {currentBrief?.id && (
                     <a
@@ -1168,8 +1490,16 @@ export default function DashboardPage() {
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span className="dash-badge dash-badge-published">
-                              {c.source_class || 'private'} &bull; {c.citation_type || 'support'}
+                            <span
+                              className="dash-badge"
+                              style={{
+                                background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                color: c.source_class === 'web' ? '#06b6d4' : '#10b981',
+                                border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                fontWeight: 700,
+                              }}
+                            >
+                              [{c.source_class || 'private'}] &bull; {c.citation_type || 'support'}
                             </span>
                             <button
                               onClick={() => {
@@ -1192,7 +1522,16 @@ export default function DashboardPage() {
                               <span>Flag Citation</span>
                             </button>
                           </div>
-                          <blockquote style={{ fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text)', borderLeft: '2px solid #10b981', paddingLeft: '10px', margin: '4px 0' }}>
+                          <blockquote
+                            style={{
+                              fontSize: '0.85rem',
+                              fontStyle: 'italic',
+                              color: 'var(--text)',
+                              borderLeft: `2px solid ${c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
+                              paddingLeft: '10px',
+                              margin: '4px 0',
+                            }}
+                          >
                             “{c.quote}”
                           </blockquote>
                           <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>

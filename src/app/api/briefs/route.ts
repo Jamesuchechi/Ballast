@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken, COOKIE_NAME } from '@/lib/auth';
 import { query } from '@/db/client';
-import { seedCanonicalBrief } from '@/core/briefSeed';
+import { seedCanonicalBrief, seedCanonicalWorldBrief } from '@/core/briefSeed';
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,13 +37,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    let mode: 'home' | 'world' = 'home';
+    try {
+      const body = await req.json();
+      if (body?.mode === 'world') {
+        mode = 'world';
+      }
+    } catch {}
+
     // Seed a canonical verified brief in this workspace
-    const seedResult = await seedCanonicalBrief(payload.workspaceId);
+    const seedResult =
+      mode === 'world'
+        ? await seedCanonicalWorldBrief(payload.workspaceId)
+        : await seedCanonicalBrief(payload.workspaceId);
 
     return NextResponse.json({
-      message: 'Brief created successfully',
+      message: `Brief created successfully (${mode} mode)`,
       briefId: seedResult.briefId,
       pdfUri: seedResult.pdfUri,
+      mode,
     });
   } catch (err: any) {
     console.error('Create brief error:', err);
