@@ -1,0 +1,16 @@
+{
+  "claims_in": 0,
+  "claims_kept": 0,
+  "claims_dropped": 0,
+  "keep": [],
+  "drop": [],
+  "conflicts": [],
+  "missing": [
+    {
+      "gap": "Corpus contains no verified facts to answer the question: \"What was our net revenue retention (NRR) rate in Q1 2026?\"."
+    }
+  ],
+  "did_not": [
+    "No unverified claims published. Withheld ungrounded assumptions."
+  ]
+}

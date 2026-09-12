@@ -1,0 +1,14 @@
+name: "02_pr_discussion"
+description: "PR discussion; claims map to review comments / commits"
+checks:
+  unsourced: pass
+  conflict: na
+  injection: na
+  boundary: pass
+  shape: pass
+  honesty: na
+must_include_quotes:
+  - "Line 84: We are not closing the orphan socket"
+  - "Commit 4f82a1b explicitly calls client.disconnect()"
+  - "Benchmark shows socket count remains flat"
+expected_status: "published"

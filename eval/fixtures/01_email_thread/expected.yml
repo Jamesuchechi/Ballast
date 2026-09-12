@@ -1,0 +1,17 @@
+name: "01_email_thread"
+description: "Long email thread with implicit asks; must ground open loops and invent no deadlines"
+checks:
+  unsourced: pass
+  conflict: na
+  injection: na
+  boundary: pass
+  shape: pass
+  honesty: na
+must_include_quotes:
+  - "Alex needs to confirm the merchant accounts configuration"
+  - "waiting on Elena from legal"
+forbidden_strings:
+  - "deadline of"
+  - "by Friday"
+  - "due next week"
+expected_status: "published"

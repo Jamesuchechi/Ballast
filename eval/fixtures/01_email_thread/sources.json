@@ -1,0 +1,42 @@
+{
+  "mode": "home",
+  "sources": [
+    {
+      "id": "email_thread_billing_01",
+      "class": "private",
+      "connector": "gmail",
+      "body": "The new Stripe webhook handler is deployed to staging and passing integration checks.\nAlex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\nWe are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet from legal.\nDatabase migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first."
+    }
+  ],
+  "retrieved": [
+    {
+      "id": "q1_stripe",
+      "source_id": "email_thread_billing_01",
+      "source_class": "private",
+      "connector": "gmail",
+      "quote": "The new Stripe webhook handler is deployed to staging and passing integration checks."
+    },
+    {
+      "id": "q2_alex",
+      "source_id": "email_thread_billing_01",
+      "source_class": "private",
+      "connector": "gmail",
+      "quote": "Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard."
+    },
+    {
+      "id": "q3_legal",
+      "source_id": "email_thread_billing_01",
+      "source_class": "private",
+      "connector": "gmail",
+      "quote": "We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet from legal."
+    },
+    {
+      "id": "q4_db",
+      "source_id": "email_thread_billing_01",
+      "source_class": "private",
+      "connector": "gmail",
+      "quote": "Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first."
+    }
+  ],
+  "unchecked": []
+}

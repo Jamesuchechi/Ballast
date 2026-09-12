@@ -1,0 +1,37 @@
+{
+  "claims_in": 4,
+  "claims_kept": 4,
+  "claims_dropped": 0,
+  "keep": [
+    {
+      "claim": "The new Stripe webhook handler is deployed to staging and passing integration checks.",
+      "citation_ids": [
+        "q1_stripe"
+      ]
+    },
+    {
+      "claim": "Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.",
+      "citation_ids": [
+        "q2_alex"
+      ]
+    },
+    {
+      "claim": "We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro",
+      "citation_ids": [
+        "q3_legal"
+      ]
+    },
+    {
+      "claim": "Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.",
+      "citation_ids": [
+        "q4_db"
+      ]
+    }
+  ],
+  "drop": [],
+  "conflicts": [],
+  "missing": [],
+  "did_not": [
+    "No unverified claims published. Withheld ungrounded assumptions."
+  ]
+}

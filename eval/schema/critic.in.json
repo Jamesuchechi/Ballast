@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CriticInput",
+  "type": "object",
+  "required": ["question", "mode", "retrieved", "draft_brief", "unchecked"],
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "The user query triggering the brief."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["home", "world"],
+      "description": "Operating mode: home (private only) or world (live web)."
+    },
+    "retrieved": {
+      "type": "array",
+      "description": "Retrieved quotes with metadata.",
+      "items": {
+        "type": "object",
+        "required": ["id", "source_id", "source_class", "connector", "quote"],
+        "properties": {
+          "id": { "type": "string" },
+          "source_id": { "type": "string" },
+          "source_class": { "type": "string", "enum": ["private", "web"] },
+          "connector": { "type": "string", "enum": ["gmail", "github", "calendar", "upload", "web"] },
+          "quote": { "type": "string" },
+          "url": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "draft_brief": {
+      "type": "object",
+      "required": ["title", "sections"],
+      "properties": {
+        "title": { "type": "string" },
+        "sections": {
+          "type": "object",
+          "required": [
+            "answer",
+            "what_i_used",
+            "evidence",
+            "uncertain",
+            "open_loops",
+            "actions",
+            "what_i_did_not_do"
+          ],
+          "properties": {
+            "answer": { "type": "string" },
+            "what_i_used": {
+              "type": "object",
+              "properties": {
+                "private": { "type": "array", "items": { "type": "string" } },
+                "web": { "type": "array", "items": { "type": "string" } },
+                "unchecked": { "type": "array", "items": { "type": "string" } }
+              },
+              "additionalProperties": false
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["claim", "citation_ids"],
+                "properties": {
+                  "claim": { "type": "string" },
+                  "citation_ids": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              }
+            },
+            "uncertain": { "type": "array", "items": { "type": "string" } },
+            "open_loops": { "type": "array", "items": { "type": "string" } },
+            "actions": { "type": "array", "items": { "type": "string" } },
+            "what_i_did_not_do": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "unchecked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["connector", "error"],
+        "properties": {
+          "connector": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

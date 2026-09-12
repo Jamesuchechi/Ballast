@@ -1,0 +1,33 @@
+{
+  "claims_in": 2,
+  "claims_kept": 2,
+  "claims_dropped": 0,
+  "keep": [
+    {
+      "claim": "The enterprise tier general availability launch is scheduled for October 15 across all regions.",
+      "citation_ids": [
+        "q1_launch_oct"
+      ]
+    },
+    {
+      "claim": "Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.",
+      "citation_ids": [
+        "q2_launch_nov"
+      ]
+    }
+  ],
+  "drop": [],
+  "conflicts": [
+    {
+      "topic": "Discrepancy regarding date/milestone (October 15 vs November 12)",
+      "citation_ids": [
+        "q1_launch_oct",
+        "q2_launch_nov"
+      ]
+    }
+  ],
+  "missing": [],
+  "did_not": [
+    "No unverified claims published. Withheld ungrounded assumptions."
+  ]
+}

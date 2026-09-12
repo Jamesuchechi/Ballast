@@ -1,0 +1,35 @@
+{
+  "mode": "home",
+  "sources": [
+    {
+      "id": "github_pr_142",
+      "class": "private",
+      "connector": "github",
+      "body": "PR 142: Fix Redis connection leak during retry backoff.\nreviewer-maya noted: Line 84: We are not closing the orphan socket when exponential backoff triggers a reconnect.\ndev-chen pushed commit 4f82a1b calling client.disconnect() in the catch block before sleeping.\nreviewer-tom benchmarked flat socket count under simulated packet drop and approved."
+    }
+  ],
+  "retrieved": [
+    {
+      "id": "q1_maya_comment",
+      "source_id": "github_pr_142",
+      "source_class": "private",
+      "connector": "github",
+      "quote": "Line 84: We are not closing the orphan socket when exponential backoff triggers a reconnect."
+    },
+    {
+      "id": "q2_chen_commit",
+      "source_id": "github_pr_142",
+      "source_class": "private",
+      "connector": "github",
+      "quote": "Commit 4f82a1b explicitly calls client.disconnect() in the catch block before sleeping."
+    },
+    {
+      "id": "q3_tom_benchmark",
+      "source_id": "github_pr_142",
+      "source_class": "private",
+      "connector": "github",
+      "quote": "Benchmark shows socket count remains flat under simulated 50% packet drop. LGTM to merge."
+    }
+  ],
+  "unchecked": []
+}

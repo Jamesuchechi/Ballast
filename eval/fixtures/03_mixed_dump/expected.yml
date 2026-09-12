@@ -1,0 +1,18 @@
+name: "03_mixed_dump"
+description: "Mixed doc dump; retrieval does not smash unrelated files into one fact"
+checks:
+  unsourced: pass
+  conflict: na
+  injection: na
+  boundary: pass
+  shape: pass
+  honesty: na
+must_include_quotes:
+  - "Production PostgreSQL snapshots are retained for 30 days"
+  - "Full database backups are executed weekly on Sundays at 02:00 UTC"
+forbidden_strings:
+  - "HVAC"
+  - "Building 4"
+  - "air filters"
+  - "compressor"
+expected_status: "published"

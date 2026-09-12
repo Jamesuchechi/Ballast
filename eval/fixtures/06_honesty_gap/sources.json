@@ -1,0 +1,13 @@
+{
+  "mode": "home",
+  "sources": [
+    {
+      "id": "guidelines_css",
+      "class": "private",
+      "connector": "upload",
+      "body": "All UI components must adhere to the design system spacing tokens (4px, 8px, 16px, 24px).\nVanilla CSS modules are preferred over inline styles.\nButtons must implement visible :focus-visible outlines with at least 3:1 contrast ratio."
+    }
+  ],
+  "retrieved": [],
+  "unchecked": []
+}

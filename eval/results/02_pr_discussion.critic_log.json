@@ -1,0 +1,31 @@
+{
+  "claims_in": 3,
+  "claims_kept": 3,
+  "claims_dropped": 0,
+  "keep": [
+    {
+      "claim": "Line 84: We are not closing the orphan socket when exponential backoff triggers a reconnect.",
+      "citation_ids": [
+        "q1_maya_comment"
+      ]
+    },
+    {
+      "claim": "Commit 4f82a1b explicitly calls client.disconnect() in the catch block before sleeping.",
+      "citation_ids": [
+        "q2_chen_commit"
+      ]
+    },
+    {
+      "claim": "Benchmark shows socket count remains flat under simulated 50% packet drop. LGTM to merge.",
+      "citation_ids": [
+        "q3_tom_benchmark"
+      ]
+    }
+  ],
+  "drop": [],
+  "conflicts": [],
+  "missing": [],
+  "did_not": [
+    "No unverified claims published. Withheld ungrounded assumptions."
+  ]
+}

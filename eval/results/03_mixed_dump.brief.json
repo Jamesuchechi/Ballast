@@ -1,0 +1,83 @@
+{
+  "id": "brief_2121e383-a16e-4942-b1a4-7ba5f72f6d3b",
+  "workspace_id": "ws_dev",
+  "parent_brief_id": null,
+  "question": "What is our database backup retention schedule and when is the weekly backup taken?",
+  "mode": "home",
+  "status": "published",
+  "template_version": "v1",
+  "as_of": "2026-09-12T12:25:35.736Z",
+  "published_at": "2026-09-12T12:25:35.736Z",
+  "title": "Brief: What is our database backup retention schedule and when is the weekly backup taken?",
+  "markdown": "# Brief: What is our database backup retention schedule and when is the weekly backup taken?\n\nAs of: 2026-09-12T12:25:35.736Z\nMode: home\nStatus: published\n\n## Answer\n- Production PostgreSQL snapshots are retained for 30 days in cold storage.\n- Full database backups are executed weekly on Sundays at 02:00 UTC.\n- Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.\n\n## What I used\n### Private\n- facilities_hvac_memo\n- infra_db_policy\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- Claim: Production PostgreSQL snapshots are retained for 30 days in cold storage.\n  - [private] infra_db_policy — “Production PostgreSQL snapshots are retained for 30 days in cold storage.”\n- Claim: Full database backups are executed weekly on Sundays at 02:00 UTC.\n  - [private] infra_db_policy — “Full database backups are executed weekly on Sundays at 02:00 UTC.”\n- Claim: Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.\n  - [private] infra_db_policy — “Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.”\n\n## Uncertain / missing\n- None identified.\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not perform actions without verified user approval.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
+  "pdf_uri": null,
+  "error": null,
+  "sections": {
+    "answer": "- Production PostgreSQL snapshots are retained for 30 days in cold storage.\n- Full database backups are executed weekly on Sundays at 02:00 UTC.\n- Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.",
+    "what_i_used": {
+      "private": [
+        "facilities_hvac_memo",
+        "infra_db_policy"
+      ],
+      "web": [],
+      "unchecked": []
+    },
+    "evidence": [
+      {
+        "claim": "Production PostgreSQL snapshots are retained for 30 days in cold storage.",
+        "citations": [
+          {
+            "source_class": "private",
+            "citation_type": "support",
+            "quote": "Production PostgreSQL snapshots are retained for 30 days in cold storage.",
+            "source_id": "infra_db_policy",
+            "url": null,
+            "claim_span": {
+              "start": 535,
+              "end": 608
+            }
+          }
+        ]
+      },
+      {
+        "claim": "Full database backups are executed weekly on Sundays at 02:00 UTC.",
+        "citations": [
+          {
+            "source_class": "private",
+            "citation_type": "support",
+            "quote": "Full database backups are executed weekly on Sundays at 02:00 UTC.",
+            "source_id": "infra_db_policy",
+            "url": null,
+            "claim_span": {
+              "start": 726,
+              "end": 792
+            }
+          }
+        ]
+      },
+      {
+        "claim": "Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.",
+        "citations": [
+          {
+            "source_class": "private",
+            "citation_type": "support",
+            "quote": "Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.",
+            "source_id": "infra_db_policy",
+            "url": null,
+            "claim_span": {
+              "start": 903,
+              "end": 986
+            }
+          }
+        ]
+      }
+    ],
+    "uncertain": [],
+    "open_loops": [],
+    "actions": [],
+    "what_i_did_not_do": [
+      "Did not perform actions without verified user approval.",
+      "No unverified claims published. Withheld ungrounded assumptions."
+    ]
+  }
+}

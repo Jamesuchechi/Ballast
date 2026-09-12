@@ -1,0 +1,41 @@
+{
+  "mode": "home",
+  "sources": [
+    {
+      "id": "facilities_hvac_memo",
+      "class": "private",
+      "connector": "upload",
+      "body": "The air filters in Building 4 are replaced every second Tuesday of the month. The compressor unit will undergo scheduled maintenance on June 14."
+    },
+    {
+      "id": "infra_db_policy",
+      "class": "private",
+      "connector": "upload",
+      "body": "Production PostgreSQL snapshots are retained for 30 days in cold storage. Full database backups are executed weekly on Sundays at 02:00 UTC. Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window."
+    }
+  ],
+  "retrieved": [
+    {
+      "id": "q1_db_retention",
+      "source_id": "infra_db_policy",
+      "source_class": "private",
+      "connector": "upload",
+      "quote": "Production PostgreSQL snapshots are retained for 30 days in cold storage."
+    },
+    {
+      "id": "q2_db_schedule",
+      "source_id": "infra_db_policy",
+      "source_class": "private",
+      "connector": "upload",
+      "quote": "Full database backups are executed weekly on Sundays at 02:00 UTC."
+    },
+    {
+      "id": "q3_db_wal",
+      "source_id": "infra_db_policy",
+      "source_class": "private",
+      "connector": "upload",
+      "quote": "Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window."
+    }
+  ],
+  "unchecked": []
+}

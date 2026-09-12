@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BriefV1",
+  "type": "object",
+  "required": [
+    "id",
+    "workspace_id",
+    "question",
+    "mode",
+    "status",
+    "template_version",
+    "as_of",
+    "title",
+    "markdown"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "parent_brief_id": { "type": ["string", "null"] },
+    "question": { "type": "string" },
+    "mode": { "type": "string", "enum": ["home", "world"] },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "needs_review", "published", "failed"]
+    },
+    "template_version": { "type": "string", "enum": ["v1"] },
+    "as_of": { "type": "string" },
+    "published_at": { "type": ["string", "null"] },
+    "title": { "type": "string" },
+    "markdown": { "type": "string" },
+    "pdf_uri": { "type": ["string", "null"] },
+    "error": { "type": ["string", "null"] },
+    "sections": {
+      "type": "object",
+      "required": [
+        "answer",
+        "what_i_used",
+        "evidence",
+        "uncertain",
+        "open_loops",
+        "actions",
+        "what_i_did_not_do"
+      ],
+      "properties": {
+        "answer": { "type": "string" },
+        "what_i_used": {
+          "type": "object",
+          "required": ["private", "web", "unchecked"],
+          "properties": {
+            "private": { "type": "array", "items": { "type": "string" } },
+            "web": { "type": "array", "items": { "type": "string" } },
+            "unchecked": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim", "citations"],
+            "properties": {
+              "claim": { "type": "string" },
+              "citations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["source_class", "citation_type", "quote"],
+                  "properties": {
+                    "source_class": { "type": "string", "enum": ["private", "web", "system"] },
+                    "citation_type": { "type": "string", "enum": ["support", "conflict", "missing", "unchecked"] },
+                    "quote": { "type": "string" },
+                    "source_id": { "type": ["string", "null"] },
+                    "url": { "type": ["string", "null"] },
+                    "claim_span": {
+                      "type": "object",
+                      "required": ["start", "end"],
+                      "properties": {
+                        "start": { "type": "integer" },
+                        "end": { "type": "integer" }
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "uncertain": { "type": "array", "items": { "type": "string" } },
+        "open_loops": { "type": "array", "items": { "type": "string" } },
+        "actions": { "type": "array", "items": { "type": "string" } },
+        "what_i_did_not_do": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

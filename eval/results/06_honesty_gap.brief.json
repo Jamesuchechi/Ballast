@@ -1,0 +1,36 @@
+{
+  "id": "brief_c8966375-ef56-4dcc-946d-76752b72fda1",
+  "workspace_id": "ws_dev",
+  "parent_brief_id": null,
+  "question": "What was our net revenue retention (NRR) rate in Q1 2026?",
+  "mode": "home",
+  "status": "published",
+  "template_version": "v1",
+  "as_of": "2026-09-12T12:25:35.757Z",
+  "published_at": "2026-09-12T12:25:35.757Z",
+  "title": "Brief: What was our net revenue retention (NRR) rate in Q1 2026?",
+  "markdown": "# Brief: What was our net revenue retention (NRR) rate in Q1 2026?\n\nAs of: 2026-09-12T12:25:35.757Z\nMode: home\nStatus: published\n\n## Answer\nNo grounded answer is possible based on the available sources.\n\n## What I used\n### Private\n- guidelines_css\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- No grounded evidence claims published.\n\n## Uncertain / missing\n- The provided corpus does not contain facts or data required to answer: \"What was our net revenue retention (NRR) rate in Q1 2026?\".\n- Corpus contains no verified facts to answer the question: \"What was our net revenue retention (NRR) rate in Q1 2026?\".\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not extrapolate or hallucinate facts absent from the corpus.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
+  "pdf_uri": null,
+  "error": null,
+  "sections": {
+    "answer": "No grounded answer is possible based on the available sources.",
+    "what_i_used": {
+      "private": [
+        "guidelines_css"
+      ],
+      "web": [],
+      "unchecked": []
+    },
+    "evidence": [],
+    "uncertain": [
+      "The provided corpus does not contain facts or data required to answer: \"What was our net revenue retention (NRR) rate in Q1 2026?\".",
+      "Corpus contains no verified facts to answer the question: \"What was our net revenue retention (NRR) rate in Q1 2026?\"."
+    ],
+    "open_loops": [],
+    "actions": [],
+    "what_i_did_not_do": [
+      "Did not extrapolate or hallucinate facts absent from the corpus.",
+      "No unverified claims published. Withheld ungrounded assumptions."
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+What is our database backup retention schedule and when is the weekly backup taken?

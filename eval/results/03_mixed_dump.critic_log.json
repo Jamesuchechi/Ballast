@@ -1,0 +1,31 @@
+{
+  "claims_in": 3,
+  "claims_kept": 3,
+  "claims_dropped": 0,
+  "keep": [
+    {
+      "claim": "Production PostgreSQL snapshots are retained for 30 days in cold storage.",
+      "citation_ids": [
+        "q1_db_retention"
+      ]
+    },
+    {
+      "claim": "Full database backups are executed weekly on Sundays at 02:00 UTC.",
+      "citation_ids": [
+        "q2_db_schedule"
+      ]
+    },
+    {
+      "claim": "Point-in-time recovery (WAL archiving) is maintained with a 7-day retention window.",
+      "citation_ids": [
+        "q3_db_wal"
+      ]
+    }
+  ],
+  "drop": [],
+  "conflicts": [],
+  "missing": [],
+  "did_not": [
+    "No unverified claims published. Withheld ungrounded assumptions."
+  ]
+}

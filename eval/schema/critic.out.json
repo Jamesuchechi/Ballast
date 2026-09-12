@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CriticOutput",
+  "type": "object",
+  "required": ["keep", "drop", "conflicts", "missing", "did_not"],
+  "properties": {
+    "keep": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "citation_ids"],
+        "properties": {
+          "claim": { "type": "string" },
+          "citation_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "drop": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "reason"],
+        "properties": {
+          "claim": { "type": "string" },
+          "reason": {
+            "type": "string",
+            "enum": ["unsourced", "off-mode", "injection", "other"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["topic", "citation_ids"],
+        "properties": {
+          "topic": { "type": "string" },
+          "citation_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["gap"],
+        "properties": {
+          "gap": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "did_not": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
