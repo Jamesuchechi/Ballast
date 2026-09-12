@@ -2,8 +2,8 @@ import type {
   BriefMode,
   DraftBrief,
   RetrievedQuote,
-} from "./types.js";
-import { formatDelimitedSources, type SourceBlock } from "./sourceFormatter.js";
+} from "./types";
+import { formatDelimitedSources, type SourceBlock } from "./sourceFormatter";
 
 export interface WriterOptions {
   question: string;

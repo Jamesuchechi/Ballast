@@ -4,7 +4,7 @@ services:
     container_name: ballast-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5438}:5432"
     environment:
       POSTGRES_USER: ballast
       POSTGRES_PASSWORD: ballast_dev_password
@@ -13,6 +13,18 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ballast -d ballast_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ballast-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6388}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -83,14 +83,14 @@ Next.js, auth, OAuth, embeddings, PDF, billing.
 
 ### Deliverables
 
-- [ ] Repo scaffold: Next.js, Postgres, Redis, object-store stub, worker process.
-- [ ] Auth (single user). Create a workspace on signup. `workspace_members.role` exists (`owner` | `member`).
-- [ ] Tables as in `README.md`: `users`, `workspaces`, `workspace_members`, `sources`, `chunks`, `briefs`, `citations`, `actions`, `runs`, `schedules`, `flags`, `access_logs`, `oauth_tokens`.
-- [ ] Required columns present from day one: `parent_brief_id`, `source_class`, `citation_type`, `claim_span`, `critic_log`, `progress`, `stale_after`, `template_version`.
-- [ ] Hand-written brief seed → markdown (template v1) → HTML preview → PDF. **Renderer does not call models.**
-- [ ] Publish validator helper used by the seed path: reject `published` if an Evidence claim lacks a `support` row.
-- [ ] Brief list + open. Regenerate stub inserts a child row (`parent_brief_id`), does not `UPDATE` markdown in place.
-- [ ] Status machine + watchdog stub (running too long → failed).
+- [x] Repo scaffold: Next.js, Postgres, Redis, object-store stub, worker process.
+- [x] Auth (single user). Create a workspace on signup. `workspace_members.role` exists (`owner` | `member`).
+- [x] Tables as in `README.md`: `users`, `workspaces`, `workspace_members`, `sources`, `chunks`, `briefs`, `citations`, `actions`, `runs`, `schedules`, `flags`, `access_logs`, `oauth_tokens`.
+- [x] Required columns present from day one: `parent_brief_id`, `source_class`, `citation_type`, `claim_span`, `critic_log`, `progress`, `stale_after`, `template_version`.
+- [x] Hand-written brief seed → markdown (template v1) → HTML preview → PDF. **Renderer does not call models.**
+- [x] Publish validator helper used by the seed path: reject `published` if an Evidence claim lacks a `support` row.
+- [x] Brief list + open. Regenerate stub inserts a child row (`parent_brief_id`), does not `UPDATE` markdown in place.
+- [x] Status machine + watchdog stub (running too long → failed).
 
 ### Exit criterion
 
@@ -110,16 +110,16 @@ Model calls, OAuth, embeddings.
 
 ### Deliverables
 
-- [ ] Paste-text and file upload.
-- [ ] Server-side allowlist + size cap: **20 MB**; types `txt, md, pdf, png, jpg, jpeg, csv` (NFR3.4).
-- [ ] Chunk + embed into pgvector. Every chunk tagged `workspace_id` + `source_id`.
-- [ ] Retrieval ACL in SQL (`WHERE workspace_id = :ws`). Add a test that plants a foreign-workspace chunk and asserts it never returns.
-- [ ] Wire Phase 0 pipeline behind an **async job**. HTTP enqueue returns `brief_id` + `queued`.
-- [ ] `progress` steps match README canonical list. UI reads that column.
-- [ ] Persist `runs` + `critic_log` + citations with `source_class=private`.
-- [ ] Fail closed: critic/validator hard error → `failed`, no PDF, draft hidden (FR4.10).
-- [ ] Empty-evidence path still `published` (FR4.9).
-- [ ] Follow-up question creates a child brief, not a chat transcript (FR4.8).
+- [x] Paste-text and file upload.
+- [x] Server-side allowlist + size cap: **20 MB**; types `txt, md, pdf, png, jpg, jpeg, csv` (NFR3.4).
+- [x] Chunk + embed into pgvector. Every chunk tagged `workspace_id` + `source_id`.
+- [x] Retrieval ACL in SQL (`WHERE workspace_id = :ws`). Add a test that plants a foreign-workspace chunk and asserts it never returns.
+- [x] Wire Phase 0 pipeline behind an **async job**. HTTP enqueue returns `brief_id` + `queued`.
+- [x] `progress` steps match README canonical list. UI reads that column.
+- [x] Persist `runs` + `critic_log` + citations with `source_class=private`.
+- [x] Fail closed: critic/validator hard error → `failed`, no PDF, draft hidden (FR4.10).
+- [x] Empty-evidence path still `published` (FR4.9).
+- [x] Follow-up question creates a child brief, not a chat transcript (FR4.8).
 
 ### Exit criterion
 
@@ -139,14 +139,14 @@ Gmail, web search, billing UI.
 
 ### Deliverables
 
-- [ ] OAuth, encrypted token store, refresh, revoke (FR1.3).
-- [ ] Incremental sync, **default 90-day window**, window visible and adjustable.
-- [ ] UI: connection status, last synced, last error.
-- [ ] Partial failure → `unchecked` citation + “Gmail could not be checked” in *What I used*. Never omit the source quietly.
-- [ ] Ingested bodies: `connector=gmail`, `trust_boundary=untrusted_content`, same delimited context path as Phase 0.
-- [ ] `access_logs` row on sync and on per-brief retrieve.
-- [ ] Query path: “what’s on me this week” against real mail.
-- [ ] Rate-limit / provider errors surface as unchecked, not empty success (NFR4.5).
+- [x] OAuth, encrypted token store, refresh, revoke (FR1.3).
+- [x] Incremental sync, **default 90-day window**, window visible and adjustable.
+- [x] UI: connection status, last synced, last error.
+- [x] Partial failure → `unchecked` citation + “Gmail could not be checked” in *What I used*. Never omit the source quietly.
+- [x] Ingested bodies: `connector=gmail`, `trust_boundary=untrusted_content`, same delimited context path as Phase 0.
+- [x] `access_logs` row on sync and on per-brief retrieve.
+- [x] Query path: “what’s on me this week” against real mail.
+- [x] Rate-limit / provider errors surface as unchecked, not empty success (NFR4.5).
 
 ### Explicitly out of phase
 

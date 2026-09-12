@@ -5,8 +5,8 @@ import type {
   DropClaim,
   ConflictClaim,
   MissingGap,
-} from "./types.js";
-import { formatRetrievedQuotes } from "./sourceFormatter.js";
+} from "./types";
+import { formatRetrievedQuotes } from "./sourceFormatter";
 
 export interface CriticOptions {
   input: CriticInput;

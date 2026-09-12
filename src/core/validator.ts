@@ -8,7 +8,7 @@ import type {
   PublishedEvidenceItem,
   PublishedBriefSections,
   UncheckedConnector,
-} from "./types.js";
+} from "./types";
 
 const AjvClass = (Ajv as any).default || Ajv;
 const addFormatsFn = (addFormats as any).default || addFormats;

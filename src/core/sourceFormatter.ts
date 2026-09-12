@@ -1,4 +1,4 @@
-import type { RetrievedQuote } from "./types.js";
+import type { RetrievedQuote } from "./types";
 
 export interface SourceBlock {
   id: string;

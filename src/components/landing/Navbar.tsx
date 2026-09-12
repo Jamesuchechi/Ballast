@@ -75,6 +75,18 @@ export function Navbar() {
           Why Ballast
         </a>
         <Link
+          href="/app"
+          style={{
+            fontSize: "0.9rem",
+            color: "#6ee7b7",
+            textDecoration: "none",
+            fontWeight: 600,
+            transition: "color 0.15s ease",
+          }}
+        >
+          Dashboard
+        </Link>
+        <Link
           href="/login"
           style={{
             fontSize: "0.9rem",
@@ -185,6 +197,20 @@ export function Navbar() {
           >
             Why Ballast
           </a>
+          <Link
+            href="/app"
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              fontSize: "1.05rem",
+              color: "#6ee7b7",
+              textDecoration: "none",
+              fontWeight: 600,
+              padding: "10px 0",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            }}
+          >
+            Dashboard
+          </Link>
           <Link
             href="/login"
             onClick={() => setMobileMenuOpen(false)}

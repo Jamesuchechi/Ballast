@@ -8,12 +8,12 @@ import type {
   PublishedBriefSections,
   RetrievedQuote,
   UncheckedConnector,
-} from "./types.js";
-import type { SourceBlock } from "./sourceFormatter.js";
-import { runWriter } from "./writer.js";
-import { runCritic } from "./critic.js";
-import { renderBriefMarkdown } from "./renderer.js";
-import { validateForPublish } from "./validator.js";
+} from "./types";
+import type { SourceBlock } from "./sourceFormatter";
+import { runWriter } from "./writer";
+import { runCritic } from "./critic";
+import { renderBriefMarkdown } from "./renderer";
+import { validateForPublish } from "./validator";
 
 export interface GenerateBriefOptions {
   question: string;

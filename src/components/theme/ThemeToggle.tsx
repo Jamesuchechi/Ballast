@@ -32,26 +32,26 @@ export function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       style={{
-        width: "38px",
-        height: "38px",
+        width: "36px",
+        height: "36px",
         borderRadius: "50%",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(255, 255, 255, 0.12)",
+        background: isDark ? "rgba(255, 255, 255, 0.1)" : "var(--card-bg-subtle)",
         backdropFilter: "blur(8px)",
-        border: "1px solid rgba(255, 255, 255, 0.2)",
-        color: "#ffffff",
+        border: isDark ? "1px solid rgba(255, 255, 255, 0.2)" : "1px solid var(--card-border)",
+        color: isDark ? "#ffffff" : "var(--text)",
         cursor: "pointer",
         transition: "all 0.2s ease",
-        boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+        boxShadow: isDark ? "0 2px 8px rgba(0, 0, 0, 0.3)" : "0 2px 8px rgba(0, 0, 0, 0.05)",
       }}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
     >
       {isDark ? (
-        <Sun size={17} strokeWidth={2.2} style={{ transition: "transform 0.2s ease" }} />
+        <Sun size={17} strokeWidth={2.2} style={{ color: "#facc15" }} />
       ) : (
-        <Moon size={17} strokeWidth={2.2} style={{ transition: "transform 0.2s ease" }} />
+        <Moon size={17} strokeWidth={2.2} style={{ color: "#4f46e5" }} />
       )}
     </button>
   );

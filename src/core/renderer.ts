@@ -1,4 +1,4 @@
-import type { PublishedBriefSections, BriefMode, ClaimSpan } from "./types.js";
+import type { PublishedBriefSections, BriefMode, ClaimSpan } from "./types";
 
 export interface RenderInput {
   title: string;

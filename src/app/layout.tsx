@@ -17,12 +17,14 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script
+          id="theme-initializer"
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 try {
                   var stored = localStorage.getItem('ballast-theme');
-                  var theme = stored || 'dark';
+                  var theme = (stored === 'light' || stored === 'dark') ? stored : 'dark';
                   document.documentElement.classList.remove('light', 'dark');
                   document.documentElement.classList.add(theme);
                   document.documentElement.setAttribute('data-theme', theme);

@@ -1,0 +1,146 @@
+'use client';
+
+import React, { useState } from 'react';
+import { Sidebar } from './Sidebar';
+import { Topbar } from './Topbar';
+import { RightSidebar } from './RightSidebar';
+import { MobileHeader } from './MobileHeader';
+import { MobileBottomBar } from './MobileBottomBar';
+
+export interface DashboardLayoutProps {
+  children: React.ReactNode;
+  user: any;
+  workspace: any;
+  briefsCount?: number;
+  pendingActionsCount?: number;
+  sourcesCount?: number;
+  schedulesCount?: number;
+  accessLogsCount?: number;
+  flagsCount?: number;
+  telemetryAvgLatency?: number;
+  activeSection: string;
+  onSelectSection: (section: string) => void;
+  mode: 'home' | 'world';
+  onToggleMode?: () => void;
+  title?: string;
+  subtitle?: string;
+  currentBrief?: any;
+  citations?: any[];
+  runs?: any;
+  onCreateBrief: () => void;
+  actionLoading?: boolean;
+  onLogout?: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
+  isDemo?: boolean;
+}
+
+export function DashboardLayout({
+  children,
+  user,
+  workspace,
+  briefsCount,
+  pendingActionsCount,
+  sourcesCount,
+  schedulesCount,
+  accessLogsCount,
+  flagsCount,
+  telemetryAvgLatency,
+  activeSection,
+  onSelectSection,
+  mode,
+  onToggleMode,
+  title,
+  subtitle,
+  currentBrief,
+  citations = [],
+  runs,
+  onCreateBrief,
+  actionLoading,
+  onLogout,
+  theme,
+  onToggleTheme,
+  isDemo = false,
+}: DashboardLayoutProps) {
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+
+  return (
+    <div className="dash-shell">
+      {/* Mobile Top Header (<768px) */}
+      <MobileHeader
+        onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        onToggleContext={() => setIsRightSidebarOpen((prev) => !prev)}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+        onCreateBrief={onCreateBrief}
+      />
+
+      {/* Main Frame */}
+      <div className="dash-body">
+        {/* Left Sidebar (Desktop + Mobile Drawer) */}
+        <Sidebar
+          user={user}
+          workspace={workspace}
+          activeSection={activeSection}
+          onSelectSection={onSelectSection}
+          isOpenMobile={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          briefsCount={briefsCount}
+          pendingActionsCount={pendingActionsCount}
+          sourcesCount={sourcesCount}
+          schedulesCount={schedulesCount}
+          accessLogsCount={accessLogsCount}
+          flagsCount={flagsCount}
+          telemetryAvgLatency={telemetryAvgLatency}
+          onCreateBrief={onCreateBrief}
+          actionLoading={actionLoading}
+          onLogout={onLogout}
+          isDemo={isDemo}
+        />
+
+        {/* Center Main Stage */}
+        <div className="dash-stage">
+          {/* Desktop Topbar (>=768px) */}
+          <Topbar
+            title={title}
+            subtitle={subtitle}
+            mode={mode}
+            onToggleMode={onToggleMode}
+            onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
+            isRightSidebarOpen={isRightSidebarOpen}
+            onToggleRightSidebar={() => setIsRightSidebarOpen((prev) => !prev)}
+            onCreateBrief={onCreateBrief}
+            actionLoading={actionLoading}
+            theme={theme}
+            onToggleTheme={onToggleTheme}
+            isDemo={isDemo}
+          />
+
+          {/* Page Body Scroll Area */}
+          <main className="dash-scroll">
+            {children}
+          </main>
+        </div>
+
+        {/* Right Sidebar (Context Inspector) */}
+        <RightSidebar
+          isOpen={isRightSidebarOpen}
+          onClose={() => setIsRightSidebarOpen(false)}
+          brief={currentBrief}
+          citations={citations}
+          runs={runs}
+        />
+      </div>
+
+      {/* Mobile Bottom Navigation Bar (<768px) */}
+      <MobileBottomBar
+        activeSection={activeSection}
+        onSelectSection={onSelectSection}
+        onToggleContext={() => setIsRightSidebarOpen((prev) => !prev)}
+        onCreateBrief={onCreateBrief}
+        pendingActionsCount={pendingActionsCount}
+      />
+    </div>
+  );
+}
