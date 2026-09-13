@@ -1,0 +1,302 @@
+import { createHash } from 'node:crypto';
+import { query, queryOne } from '@/db/client';
+import { chunkAndEmbedText } from '@/core/embeddings';
+import { getDecryptedToken, revokeToken, getTokenStatus } from './tokenStore';
+import type {
+  SourceConnector,
+  ConnectorHealth,
+  SyncOptions,
+  SyncItem,
+  FetchedDocument,
+  SyncResult,
+} from './types';
+
+export const DEFAULT_NOTION_WINDOW_DAYS = 90;
+
+export interface NotionPagePayload {
+  id: string;
+  title: string;
+  lastEditedTime: string;
+  content: string;
+}
+
+export const SAMPLE_NOTION_PAGES: NotionPagePayload[] = [
+  {
+    id: 'notion-page-601',
+    title: 'Q3 Product & Merchant Infrastructure Spec',
+    lastEditedTime: new Date(Date.now() - 5 * 86400000).toISOString(),
+    content: `# Q3 Product Infrastructure
+Owner: Alex Chen
+Status: In Progress
+
+## Key Milestones:
+1. Migration of merchant dashboards to Stripe Connect.
+2. Compliance verification with Elena Rostova from legal team.
+3. Dry run of database migrations on PostgreSQL read replica.`,
+  },
+];
+
+export class NotionConnector implements SourceConnector {
+  readonly id = 'notion' as const;
+  readonly name = 'Notion';
+
+  async health(workspaceId: string): Promise<ConnectorHealth> {
+    const tokenStatus = await getTokenStatus(workspaceId, 'notion');
+
+    const sourceStats = await queryOne<{
+      last_synced: string | null;
+      last_error: string | null;
+    }>(
+      `SELECT MAX(synced_at) AS last_synced,
+              (SELECT last_error FROM sources WHERE workspace_id = $1 AND connector = 'notion' AND last_error IS NOT NULL ORDER BY synced_at DESC LIMIT 1) AS last_error
+       FROM sources 
+       WHERE workspace_id = $1 AND connector = 'notion'`,
+      [workspaceId]
+    );
+
+    return {
+      connected: tokenStatus.connected,
+      last_synced: sourceStats?.last_synced || null,
+      last_error: sourceStats?.last_error || null,
+      sync_window_days: DEFAULT_NOTION_WINDOW_DAYS,
+      revoked_at: tokenStatus.revoked_at,
+    };
+  }
+
+  async list_changes(options: SyncOptions): Promise<SyncItem[]> {
+    const { workspaceId, windowDays = DEFAULT_NOTION_WINDOW_DAYS, maxResults = 50 } = options;
+    const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+    const cutoffDate = new Date(Date.now() - windowDays * 86400000);
+
+    const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'notion');
+
+    if (!token && isMockAllowed) {
+      return SAMPLE_NOTION_PAGES.map((page) => {
+        const checksum = createHash('sha256').update(page.content).digest('hex');
+        return {
+          externalId: page.id,
+          checksum,
+          date: page.lastEditedTime,
+          subject: page.title,
+          snippet: page.content.slice(0, 100),
+        };
+      });
+    }
+
+    if (!token) {
+      throw new Error('Notion connector is not connected or token has been revoked');
+    }
+
+    const bearerToken = token.access_token || token.token;
+
+    const res = await fetch('https://api.notion.com/v1/search', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sort: { direction: 'descending', timestamp: 'last_edited_time' },
+        page_size: maxResults,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Notion API search error (${res.status}): ${err.slice(0, 150)}`);
+    }
+
+    const data = await res.json();
+    const items: SyncItem[] = [];
+
+    for (const result of data.results || []) {
+      const lastEdited = result.last_edited_time || new Date().toISOString();
+      if (new Date(lastEdited) < cutoffDate) continue;
+
+      let title = 'Untitled Page';
+      if (result.properties?.title?.title?.[0]?.plain_text) {
+        title = result.properties.title.title[0].plain_text;
+      } else if (result.properties?.Name?.title?.[0]?.plain_text) {
+        title = result.properties.Name.title[0].plain_text;
+      }
+
+      const id = result.id;
+      const checksum = createHash('sha256').update(`${id}:${title}:${lastEdited}`).digest('hex');
+
+      items.push({
+        externalId: id,
+        checksum,
+        date: lastEdited,
+        subject: title,
+        snippet: `Notion ${result.object}: ${title}`,
+      });
+    }
+
+    return items;
+  }
+
+  async fetch(workspaceId: string, externalId: string): Promise<FetchedDocument> {
+    const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+
+    if (externalId.startsWith('notion-page-') && isMockAllowed) {
+      const page = SAMPLE_NOTION_PAGES.find((p) => p.id === externalId);
+      if (page) {
+        const checksum = createHash('sha256').update(page.content).digest('hex');
+        return {
+          externalId: page.id,
+          content: page.content,
+          checksum,
+          date: page.lastEditedTime,
+          meta: { title: page.title },
+        };
+      }
+    }
+
+    const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'notion');
+    if (!token) {
+      throw new Error('Notion connector is not connected or token has been revoked');
+    }
+
+    const bearerToken = token.access_token || token.token;
+
+    // Fetch page blocks
+    const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${externalId}/children?page_size=100`, {
+      headers: {
+        Authorization: `Bearer ${bearerToken}`,
+        'Notion-Version': '2022-06-28',
+      },
+    });
+
+    let textBlocks: string[] = [];
+    if (blocksRes.ok) {
+      const blocksData = await blocksRes.json();
+      for (const block of blocksData.results || []) {
+        const type = block.type;
+        const textArr = block[type]?.rich_text || [];
+        const line = textArr.map((t: any) => t.plain_text).join('');
+        if (line) textBlocks.push(line);
+      }
+    }
+
+    const content = `Notion Document ID: ${externalId}\n\n${textBlocks.join('\n\n') || 'Content empty'}`;
+    const checksum = createHash('sha256').update(content).digest('hex');
+
+    return {
+      externalId,
+      content,
+      checksum,
+      date: new Date().toISOString(),
+      meta: { externalId },
+    };
+  }
+
+  async sync(options: SyncOptions): Promise<SyncResult> {
+    const startTime = Date.now();
+    const { workspaceId, windowDays = DEFAULT_NOTION_WINDOW_DAYS } = options;
+
+    try {
+      const items = await this.list_changes(options);
+      let syncedCount = 0;
+      let unchangedCount = 0;
+      const syncWindowStart = new Date(Date.now() - windowDays * 86400000).toISOString();
+
+      for (const item of items) {
+        const existing = await queryOne<{ id: string }>(
+          `SELECT id FROM sources 
+           WHERE workspace_id = $1 AND connector = 'notion' AND checksum = $2`,
+          [workspaceId, item.checksum]
+        );
+
+        if (existing) {
+          await query(
+            `UPDATE sources 
+             SET synced_at = NOW(), sync_window_start = $2 
+             WHERE id = $1`,
+            [existing.id, syncWindowStart]
+          );
+          unchangedCount++;
+        } else {
+          const doc = await this.fetch(workspaceId, item.externalId);
+
+          const insertRes = await query<{ id: string }>(
+            `INSERT INTO sources (
+              workspace_id, connector, external_id, checksum, trust_boundary,
+              sync_window_start, synced_at, meta
+            ) VALUES ($1, 'notion', $2, $3, 'untrusted_content', $4, NOW(), $5::jsonb)
+            RETURNING id`,
+            [
+              workspaceId,
+              doc.externalId,
+              doc.checksum,
+              syncWindowStart,
+              JSON.stringify(doc.meta),
+            ]
+          );
+
+          const sourceId = insertRes[0].id;
+          await chunkAndEmbedText({
+            workspaceId,
+            sourceId,
+            text: doc.content,
+            sourceName: doc.meta.title || doc.externalId,
+          });
+
+          syncedCount++;
+        }
+      }
+
+      await query(
+        `INSERT INTO access_logs (
+          workspace_id, source_id, brief_id, action
+        ) VALUES ($1, null, null, $2)`,
+        [
+          workspaceId,
+          `notion_sync: window=${windowDays}d synced=${syncedCount} unchanged=${unchangedCount}`,
+        ]
+      );
+
+      return {
+        syncedCount,
+        unchangedCount,
+        windowDays,
+        durationMs: Date.now() - startTime,
+        error: null,
+      };
+    } catch (err: any) {
+      const errorMessage = err.message || 'Notion sync failed';
+
+      await query(
+        `UPDATE sources SET last_error = $2 WHERE workspace_id = $1 AND connector = 'notion'`,
+        [workspaceId, errorMessage]
+      );
+
+      await query(
+        `INSERT INTO access_logs (
+          workspace_id, source_id, brief_id, action
+        ) VALUES ($1, null, null, $2)`,
+        [workspaceId, `notion_sync_error: ${errorMessage}`]
+      );
+
+      return {
+        syncedCount: 0,
+        unchangedCount: 0,
+        windowDays,
+        durationMs: Date.now() - startTime,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async revoke(workspaceId: string): Promise<void> {
+    await revokeToken(workspaceId, 'notion');
+    await query(
+      `INSERT INTO access_logs (
+        workspace_id, source_id, brief_id, action
+      ) VALUES ($1, null, null, 'notion_revoked')`,
+      [workspaceId]
+    );
+  }
+}
+
+export const notionConnector = new NotionConnector();

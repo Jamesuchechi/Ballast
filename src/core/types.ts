@@ -2,7 +2,15 @@ export type SourceClass = "private" | "web" | "system";
 
 export type CitationType = "support" | "conflict" | "missing" | "unchecked";
 
-export type ConnectorType = "gmail" | "github" | "calendar" | "upload" | "web";
+export type ConnectorType =
+  | "gmail"
+  | "github"
+  | "calendar"
+  | "drive"
+  | "slack"
+  | "notion"
+  | "upload"
+  | "web";
 
 export type BriefMode = "home" | "world";
 

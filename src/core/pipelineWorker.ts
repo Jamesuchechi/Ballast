@@ -3,6 +3,7 @@ import { retrievePrivateChunks, retrieveWebChunks } from './retrieval';
 import { toolRouter, DEFAULT_BRIEF_COST_CAP } from './toolRouter';
 import { runWriter } from './writer';
 import { runCritic } from './critic';
+import { llmCall } from './llm';
 import { renderBriefMarkdown } from './renderer';
 import { validateForPublish } from './validator';
 import { renderAndStorePdf } from './pdfRenderer';
@@ -168,6 +169,7 @@ export async function processQueuedBrief(
       mode,
       sources: allSources,
       retrieved: allQuotes,
+      llmCall: (prompt, sysPrompt) => llmCall(prompt, sysPrompt, { role: 'writer' }),
     });
 
     // Check for any unchecked / partially failed connectors in this workspace (FR2.6, NFR4.5)
@@ -196,7 +198,10 @@ export async function processQueuedBrief(
       unchecked: uncheckedList,
     };
 
-    const criticOut = await runCritic({ input: criticInput });
+    const criticOut = await runCritic({
+      input: criticInput,
+      llmCall: (prompt, sysPrompt) => llmCall(prompt, sysPrompt, { role: 'critic' }),
+    });
 
     const criticLog: CriticLog = {
       claims_in: draft.sections.evidence.length,

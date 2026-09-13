@@ -1,6 +1,6 @@
 # Brief: What is our database backup retention schedule and when is the weekly backup taken?
 
-As of: 2026-09-12T23:56:49.145Z
+As of: 2026-09-13T09:16:09.086Z
 Mode: home
 Status: published
 

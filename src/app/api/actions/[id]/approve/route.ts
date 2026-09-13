@@ -1,42 +1,85 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
-import { queryOne } from '@/db/client';
+import { getAuthSession } from '@/lib/auth';
+import { queryOne, query } from '@/db/client';
+import { executeAction, ActionRecord } from '@/core/actionExecutor';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
-    let workspaceId: string | null = payload?.workspaceId || null;
-    const userId: string | null = payload?.userId || null;
-
-    if (!workspaceId) {
-      const defaultWs = await queryOne<{ id: string }>(
-        `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-      );
-      if (!defaultWs) {
-        return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-      }
-      workspaceId = defaultWs.id;
+    const session = await getAuthSession(req, true);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized or no workspace found' }, { status: 401 });
     }
 
     const { id } = await params;
+    const workspaceId = session.workspaceId;
+    const userId = session.userId;
 
-    const action = await queryOne(
-      `UPDATE actions 
-       SET approved_at = NOW(), approved_by = $1
-       WHERE id = $2 AND workspace_id = $3
-       RETURNING *`,
-      [userId, id, workspaceId]
+    // 1. Fetch action with workspace plan
+    const action = await queryOne<ActionRecord>(
+      `SELECT a.*, w.plan
+       FROM actions a
+       JOIN workspaces w ON w.id = a.workspace_id
+       WHERE a.id = $1 AND a.workspace_id = $2`,
+      [id, workspaceId]
     );
 
     if (!action) {
       return NextResponse.json({ error: 'Action draft not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ action, message: 'Action draft approved successfully' });
+    // 2. Entitlement Gate (TODO.md Phase 5: "Free/Pro: server returns 403 on propose/execute")
+    if (action.plan !== 'operator') {
+      return NextResponse.json(
+        {
+          error: `Operator plan required to approve and execute external actions. Current workspace plan is '${action.plan || 'free'}'.`,
+          code: 'operator_plan_required',
+          plan: action.plan,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 3. Mark approved in DB
+    const approvedAction = await queryOne<ActionRecord>(
+      `UPDATE actions 
+       SET approved_at = NOW(), approved_by = $1, error = NULL
+       WHERE id = $2 AND workspace_id = $3
+       RETURNING *`,
+      [userId, id, workspaceId]
+    );
+
+    if (!approvedAction) {
+      return NextResponse.json({ error: 'Failed to update action approval' }, { status: 500 });
+    }
+
+    // 4. Execute the action through the actionExecutor
+    try {
+      const executedAction = await executeAction(id);
+      return NextResponse.json({
+        success: true,
+        action: executedAction,
+        message: executedAction.type === 'email_draft'
+          ? 'Email draft approved and dispatched via Gmail API'
+          : 'Action approved and executed successfully',
+      });
+    } catch (execErr: any) {
+      // Re-fetch action with populated error
+      const actionWithError = await queryOne<ActionRecord>(
+        `SELECT * FROM actions WHERE id = $1`,
+        [id]
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          action: actionWithError || approvedAction,
+          error: execErr.message || 'Execution failed on external provider',
+        },
+        { status: 502 }
+      );
+    }
   } catch (err: any) {
     console.error('Approve action error:', err);
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });

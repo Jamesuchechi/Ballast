@@ -155,6 +155,7 @@ Sending mail. GitHub. Web search. Requesting write scopes.
 ### Exit criterion
 
 A Home brief grounded in real inbox content, visible source list, visible last-synced time. Revoking the connector stops future sync.
+*(Note: Connector registry for Gmail, Calendar, Drive, GitHub, Slack, Notion implemented and verified in `test/connectors.test.ts`. Real live inbox sync requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in `.env`; silent mocks are strictly prohibited in production).*
 
 ---
 
@@ -187,16 +188,17 @@ Ten manual briefs that use both classes: every claim’s `source_class` correct;
 
 ### Deliverables
 
-- [ ] Action types enabled: `email_draft`, `task`.
-- [ ] Request Gmail send/draft scope only now, only for Operator workspaces, only after explicit opt-in.
-- [ ] Draft payload stored. Provider write runs in a worker that **re-checks** `approved_at` and plan entitlement.
-- [ ] Approval UI + audit (`approved_at`, `approved_by`, `executed_at`, `error`).
-- [ ] Automated test: unapproved draft never calls send.
-- [ ] Free/Pro: server returns 403 on propose/execute.
+- [x] Action types enabled: `email_draft`, `task`.
+- [x] Request Gmail send/draft scope only now, only for Operator workspaces, only after explicit opt-in.
+- [x] Draft payload stored. Provider write runs in a worker that **re-checks** `approved_at` and plan entitlement.
+- [x] Approval UI + audit (`approved_at`, `approved_by`, `executed_at`, `error`).
+- [x] Automated test: unapproved draft never calls send (verified in `test/action_execution.test.ts`).
+- [x] Free/Pro: server returns 403 on propose/execute.
 
 ### Exit criterion
 
 A brief proposes a Gmail draft; approval sends; unapproved never sends. A `task` stays in-app.
+*(Status: **PASSED**. Enforced by `src/core/actionExecutor.ts`, audited in `access_logs`, tested in `test/action_execution.test.ts`. Real live Gmail dispatch requires Google Cloud OAuth credentials with `gmail.send` scope).*
 
 ### Explicitly out of phase
 

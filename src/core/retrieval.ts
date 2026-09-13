@@ -37,7 +37,7 @@ export async function retrievePrivateChunks(
   const { workspaceId, queryText, limit = 8, briefId } = options;
 
   // 1. Generate query embedding vector
-  const queryVector = generateEmbedding(queryText);
+  const queryVector = await generateEmbedding(queryText);
   const vectorStr = formatVectorForPg(queryVector);
 
   // 2. Query pgvector for private sources only (s.connector != 'web')
@@ -116,7 +116,7 @@ export async function retrieveWebChunks(
 ): Promise<RetrievalResult> {
   const { workspaceId, queryText, limit = 6, briefId } = options;
 
-  const queryVector = generateEmbedding(queryText);
+  const queryVector = await generateEmbedding(queryText);
   const vectorStr = formatVectorForPg(queryVector);
 
   const rows = await query<RawChunkRow>(

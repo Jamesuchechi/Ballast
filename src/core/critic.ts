@@ -7,6 +7,7 @@ import type {
   MissingGap,
 } from "./types";
 import { formatRetrievedQuotes } from "./sourceFormatter";
+import { extractJsonFromLlm } from "./llm";
 
 export interface CriticOptions {
   input: CriticInput;
@@ -76,17 +77,34 @@ ${JSON.stringify(input.unchecked, null, 2)}`;
 
     try {
       const response = await llmCall(userPrompt, systemPrompt);
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as CriticOutput;
+      const parsed = extractJsonFromLlm<CriticOutput>(response);
+
+      if (parsed && Array.isArray(parsed.keep) && Array.isArray(parsed.drop)) {
+        parsed.conflicts = parsed.conflicts || [];
+        parsed.missing = parsed.missing || [];
+        parsed.did_not = parsed.did_not || [];
+        return parsed;
       }
-    } catch {
-      // Fall through to deterministic critic evaluation
+      throw new Error(`Invalid CriticOutput structure from LLM: ${response.slice(0, 200)}`);
+    } catch (err: any) {
+      const isExplicitMock = process.env.EVAL_USE_MOCK === "true" || process.env.NODE_ENV === "test";
+      if (!isExplicitMock) {
+        throw new Error(`[Critic Error] Live LLM verification failed: ${err.message}`);
+      }
+      console.warn(`[Critic Fallback] LLM verification failed in test/eval environment (${err.message}). Using deterministic critic.`);
     }
   }
 
+  // Deterministic critic evaluation: ALLOWED ONLY behind explicit EVAL_USE_MOCK=true or NODE_ENV=test
+  const isMockAllowed = process.env.EVAL_USE_MOCK === "true" || process.env.NODE_ENV === "test";
+  if (!isMockAllowed) {
+    throw new Error(
+      "[Critic Error] llmCall was not provided and EVAL_USE_MOCK is false. Silent mock fallback is prohibited in production."
+    );
+  }
+
   // Deterministic critic evaluation engine (used in test harness & CI)
-  return evaluateCriticDeterministic(input);
+  return evaluateCriticDeterministicForEval(input);
 }
 
 /**
@@ -94,7 +112,7 @@ ${JSON.stringify(input.unchecked, null, 2)}`;
  * Verifies exact quotes, checks injections, detects date/number conflicts,
  * and handles honesty gap cases.
  */
-export function evaluateCriticDeterministic(input: CriticInput): CriticOutput {
+export function evaluateCriticDeterministicForEval(input: CriticInput): CriticOutput {
   const keep: KeepClaim[] = [];
   const drop: DropClaim[] = [];
   const conflicts: ConflictClaim[] = [];
@@ -230,3 +248,5 @@ export function evaluateCriticDeterministic(input: CriticInput): CriticOutput {
     did_not: didNot,
   };
 }
+
+export const evaluateCriticDeterministic = evaluateCriticDeterministicForEval;

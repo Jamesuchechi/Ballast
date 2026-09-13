@@ -103,6 +103,8 @@ export async function storeEncryptedToken(
   }
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Retrieves and decrypts the active OAuth token for a workspace connector.
  * Returns null if token does not exist or has been revoked (FR1.3).
@@ -111,6 +113,10 @@ export async function getDecryptedToken<T = Record<string, any>>(
   workspaceId: string,
   connector: string
 ): Promise<T | null> {
+  if (!UUID_REGEX.test(workspaceId)) {
+    return null;
+  }
+
   const row = await queryOne<StoredOAuthTokenRow>(
     `SELECT * FROM oauth_tokens 
      WHERE workspace_id = $1 AND connector = $2 AND revoked_at IS NULL 
@@ -157,6 +163,10 @@ export async function getTokenStatus(
   created_at?: string;
   revoked_at?: string;
 }> {
+  if (!UUID_REGEX.test(workspaceId)) {
+    return { connected: false, revoked: false, scopes: [] };
+  }
+
   const row = await queryOne<StoredOAuthTokenRow>(
     `SELECT * FROM oauth_tokens 
      WHERE workspace_id = $1 AND connector = $2 

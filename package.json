@@ -13,7 +13,9 @@
     "test": "tsx eval/runner.ts && tsx eval/scorecard.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:reembed": "tsx src/db/reembed.ts",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",
@@ -21,7 +23,10 @@
     "@types/react-dom": "^19.3.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
+    "bullmq": "^6.3.4",
     "dotenv": "^16.4.7",
+    "googleapis": "^180.0.0",
+    "ioredis": "^6.0.0",
     "lucide-react": "^1.45.0",
     "next": "^16.3.5",
     "pg": "^8.23.0",

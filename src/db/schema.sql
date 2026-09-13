@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 CREATE TABLE IF NOT EXISTS sources (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  connector TEXT NOT NULL CHECK (connector IN ('upload', 'gmail', 'github', 'calendar', 'web')),
+  connector TEXT NOT NULL CHECK (connector IN ('upload', 'gmail', 'github', 'calendar', 'drive', 'slack', 'notion', 'web')),
   external_id TEXT NOT NULL,
   checksum TEXT NOT NULL,
   trust_boundary TEXT NOT NULL DEFAULT 'untrusted_content',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db/client';
-import { processQueuedBrief } from '@/core/pipelineWorker';
+import { enqueueBriefJob } from '@/queue/briefQueue';
 import { getAuthSession } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
@@ -44,12 +44,8 @@ export async function POST(req: NextRequest) {
 
     const briefId = rows[0].id;
 
-    // 2. Dispatch async background worker execution (non-blocking, NFR3.1)
-    setTimeout(() => {
-      processQueuedBrief(briefId).catch((workerErr) => {
-        console.error(`[BACKGROUND WORKER ERROR for brief ${briefId}]:`, workerErr);
-      });
-    }, 10);
+    // 2. Dispatch job into persistent BullMQ queue backed by Redis / Upstash (NFR3.1)
+    await enqueueBriefJob(briefId, { workspaceId });
 
     // 3. Return immediately with status='queued'
     return NextResponse.json(

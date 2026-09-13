@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { IntegrationsMarketplace, type ConnectorItem } from '@/components/dashboard/IntegrationsMarketplace';
 
 function computeUnifiedDiff(oldText: string, newText: string) {
   if (!oldText && !newText) return [];
@@ -96,21 +97,22 @@ export default function DashboardPage() {
   const [briefFilter, setBriefFilter] = useState<'all' | 'home' | 'world'>('all');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Connector UI States
-  const [gmailStatus, setGmailStatus] = useState<{
-    connected: boolean;
-    last_synced: string | null;
-    last_error: string | null;
-    sync_window_days: number;
-    revoked_at?: string | null;
-  }>({
-    connected: false,
-    last_synced: null,
-    last_error: null,
-    sync_window_days: 90,
-  });
-  const [isSyncingGmail, setIsSyncingGmail] = useState(false);
+  // Connector UI States (Marketplace driven by Phase B registry)
+  const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
+  const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [syncWindowDays, setSyncWindowDays] = useState(90);
+  const [initialError, setInitialError] = useState<string | null>(null);
+  const [initialMessage, setInitialMessage] = useState<string | null>(null);
+
+  const gmailStatus = useMemo(() => {
+    const gm = connectors.find((c) => c.id === 'gmail');
+    return gm?.health || {
+      connected: false,
+      last_synced: null,
+      last_error: null,
+      sync_window_days: 90,
+    };
+  }, [connectors]);
 
   // Modal / Form States
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -240,22 +242,25 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchGmailStatus = async () => {
+  const fetchConnectors = async () => {
     try {
-      const res = await fetch('/api/connectors/gmail/status');
+      const res = await fetch('/api/connectors');
       if (res.ok) {
         const data = await res.json();
-        if (data.health) {
-          setGmailStatus(data.health);
-          if (data.health.sync_window_days) {
-            setSyncWindowDays(data.health.sync_window_days);
+        if (Array.isArray(data.connectors)) {
+          setConnectors(data.connectors);
+          const gm = data.connectors.find((c: any) => c.id === 'gmail');
+          if (gm?.health?.sync_window_days) {
+            setSyncWindowDays(gm.health.sync_window_days);
           }
         }
       }
     } catch (e) {
-      console.warn('Failed to fetch Gmail status:', e);
+      console.warn('Failed to fetch connectors:', e);
     }
   };
+
+  const fetchGmailStatus = fetchConnectors;
 
   // ----------------------------------------------------
   // Lifecycle Initializer
@@ -286,13 +291,22 @@ export default function DashboardPage() {
           fetchSchedules(),
           fetchFlags(),
           fetchTelemetry(),
-          fetchGmailStatus(),
+          fetchConnectors(),
         ]);
       } catch (err) {
         console.warn('Dashboard init fallback:', err);
         setIsDemo(true);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      const msg = params.get('message');
+      if (err) setInitialError(err);
+      if (msg) setInitialMessage(msg);
+    }
+
     init();
   }, []);
 
@@ -510,17 +524,18 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`/api/actions/${actionId}/approve`, { method: 'POST' });
       const data = await res.json();
-      if (res.ok) {
-        await Promise.all([fetchActions(), fetchAccessLogs()]);
-        if (selectedBriefId) {
-          const bRes = await fetch(`/api/briefs/${selectedBriefId}`);
-          if (bRes.ok) {
-            const bData = await bRes.json();
-            setBriefDetail(bData);
-          }
+      await Promise.all([fetchActions(), fetchAccessLogs()]);
+      if (selectedBriefId) {
+        const bRes = await fetch(`/api/briefs/${selectedBriefId}`);
+        if (bRes.ok) {
+          const bData = await bRes.json();
+          setBriefDetail(bData);
         }
-      } else {
+      }
+      if (!res.ok) {
         alert(data.error || 'Failed to approve action');
+      } else if (data.success === false) {
+        alert(`Action approved, but external dispatch encountered an error: ${data.error}`);
       }
     } catch (err: any) {
       alert('Approval error: ' + err.message);
@@ -642,41 +657,70 @@ export default function DashboardPage() {
     }
   };
 
-  const handleConnectGmail = () => {
-    window.location.href = '/api/connectors/gmail/auth';
+  const handleConnectConnector = (connector: ConnectorItem) => {
+    window.location.href = `/api/connectors/${connector.id}/auth`;
   };
 
-  const handleSyncGmail = async () => {
-    setIsSyncingGmail(true);
+  const handleSyncConnector = async (connector: ConnectorItem) => {
+    setSyncingConnectors((prev) => ({ ...prev, [connector.id]: true }));
     try {
-      const res = await fetch('/api/connectors/gmail/sync', {
+      const res = await fetch(`/api/connectors/${connector.id}/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ windowDays: syncWindowDays }),
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Gmail sync failed');
+        alert(data.error || `${connector.name} sync failed`);
       } else {
-        await Promise.all([fetchGmailStatus(), fetchSources(), fetchAccessLogs()]);
+        await Promise.all([fetchConnectors(), fetchSources(), fetchAccessLogs()]);
       }
     } catch (e: any) {
-      alert('Sync error: ' + e.message);
+      alert(`Sync error: ${e.message}`);
     } finally {
-      setIsSyncingGmail(false);
+      setSyncingConnectors((prev) => ({ ...prev, [connector.id]: false }));
     }
   };
 
-  const handleRevokeGmail = async () => {
-    if (!confirm('Revoke Gmail access? Future sync will stop and tokens will be revoked.')) return;
+  const handleRevokeConnector = async (connector: ConnectorItem) => {
+    if (!confirm(`Revoke ${connector.name} access? Future sync will stop and credentials will be removed.`)) return;
     try {
-      const res = await fetch('/api/connectors/gmail/revoke', { method: 'POST' });
+      const res = await fetch(`/api/connectors/${connector.id}/revoke`, { method: 'POST' });
       if (res.ok) {
-        await Promise.all([fetchGmailStatus(), fetchAccessLogs()]);
+        await Promise.all([fetchConnectors(), fetchSources(), fetchAccessLogs()]);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Revoke failed');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Revoke failed:', e);
     }
+  };
+
+  const handleSaveToken = async (connectorId: string, token: string) => {
+    const res = await fetch(`/api/connectors/${connectorId}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save token');
+    }
+    await Promise.all([fetchConnectors(), fetchSources(), fetchAccessLogs()]);
+  };
+
+  // Backwards compatible aliases
+  const handleConnectGmail = () => {
+    window.location.href = '/api/connectors/gmail/auth';
+  };
+  const handleSyncGmail = async () => {
+    const gm = connectors.find((c) => c.id === 'gmail');
+    if (gm) await handleSyncConnector(gm);
+  };
+  const handleRevokeGmail = async () => {
+    const gm = connectors.find((c) => c.id === 'gmail');
+    if (gm) await handleRevokeConnector(gm);
   };
 
   // Current brief helper
@@ -700,7 +744,7 @@ export default function DashboardPage() {
       workspace={workspace}
       briefsCount={briefs.length}
       pendingActionsCount={workspaceActions.filter((a) => !a.approved_at).length}
-      sourcesCount={uploadedFiles.length}
+      sourcesCount={uploadedFiles.length + connectors.filter((c) => c.health.connected).length}
       schedulesCount={schedules.filter((s) => s.enabled).length}
       accessLogsCount={accessLogs.length}
       flagsCount={flags.filter((f) => f.status !== 'resolved').length}
@@ -1562,20 +1606,31 @@ export default function DashboardPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {briefDetail.actions.map((act: any) => {
                         const isApproved = !!act.approved_at;
+                        const isExecuted = !!act.executed_at;
+                        const hasError = !!act.error;
                         return (
                           <div key={act.id} className="dash-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span className="dash-badge dash-badge-running">{act.type}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span className="dash-badge dash-badge-running">{act.type}</span>
+                                {isExecuted && <span className="dash-badge dash-badge-published">Executed</span>}
+                                {hasError && <span className="dash-badge dash-badge-failed">Error</span>}
+                              </div>
                               <button
                                 onClick={() => handleApproveAction(act.id)}
                                 disabled={isApproved}
                                 className={isApproved ? 'dash-btn-secondary' : 'dash-btn-primary'}
                                 style={{ padding: '4px 12px', fontSize: '0.72rem' }}
                               >
-                                {isApproved ? 'Approved ✓' : 'Approve Draft'}
+                                {isExecuted ? 'Executed ✓' : isApproved ? 'Approved ✓' : 'Approve Draft'}
                               </button>
                             </div>
                             <pre className="dash-code-box">{JSON.stringify(act.payload, null, 2)}</pre>
+                            {hasError && (
+                              <div style={{ fontSize: '0.72rem', color: '#ef4444', padding: '4px 8px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '4px' }}>
+                                <strong>Error:</strong> {act.error}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1791,125 +1846,21 @@ export default function DashboardPage() {
       )}
 
       {/* ======================================================== */}
-      {/* SECTION: CONNECTED SOURCES                               */}
+      {/* SECTION: CONNECTED SOURCES (INTEGRATIONS MARKETPLACE)    */}
       {/* ======================================================== */}
       {activeSection === 'sources' && (
-        <div style={{ maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span className="dash-badge dash-badge-published">FR2 Connectors</span>
-              <span className="dash-badge dash-badge-mode">Untrusted Boundaries</span>
-            </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Connected Data Sources &amp; Connectors</h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Ballast retrieves evidence strictly from connected sources. OAuth tokens are encrypted at rest with AES-256-GCM.
-            </p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-            {/* Uploads Card */}
-            <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                    UP
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>Manual Uploads</h3>
-                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>20 MB cap &bull; pgvector</span>
-                  </div>
-                </div>
-                <span className="dash-badge dash-badge-published">
-                  {uploadedFiles.filter((u) => u.connector === 'upload').length} active
-                </span>
-              </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                Direct ingestion for markdown, PDF, plain text, and pasted threads.
-              </p>
-              <button
-                onClick={() => setActiveSection('upload')}
-                className="dash-btn-secondary"
-                style={{ width: '100%', justifyContent: 'center', padding: '6px 12px', fontSize: '0.76rem' }}
-              >
-                Manage Uploads
-              </button>
-            </div>
-
-            {/* Gmail Connector Card */}
-            <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                    GM
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>Gmail Connector</h3>
-                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>Read-only scope &bull; 90d window</span>
-                  </div>
-                </div>
-                <span className={gmailStatus.connected ? 'dash-badge dash-badge-published' : 'dash-badge dash-badge-mode'}>
-                  {gmailStatus.connected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                Syncs email threads over the past {syncWindowDays} days. Content boundary: untrusted.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px' }}>
-                {gmailStatus.connected ? (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={handleSyncGmail}
-                      disabled={isSyncingGmail}
-                      className="dash-btn-primary"
-                      style={{ flex: 1, justifyContent: 'center', padding: '6px 12px', fontSize: '0.76rem' }}
-                    >
-                      <RefreshCw size={13} className={isSyncingGmail ? 'animate-spin' : ''} />
-                      <span>{isSyncingGmail ? 'Syncing...' : 'Sync Mail'}</span>
-                    </button>
-                    <button
-                      onClick={handleRevokeGmail}
-                      className="dash-btn-secondary"
-                      style={{ padding: '6px 12px', fontSize: '0.76rem', color: '#ef4444' }}
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleConnectGmail}
-                    className="dash-btn-primary"
-                    style={{ width: '100%', justifyContent: 'center', padding: '6px 12px', fontSize: '0.76rem' }}
-                  >
-                    Connect Gmail
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Web Snapshots Card */}
-            <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                    WEB
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>Web Snapshots</h3>
-                    <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>World mode &bull; SHA-256</span>
-                  </div>
-                </div>
-                <span className="dash-badge dash-badge-mode">Active</span>
-              </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                Fetches external documentation and web links with cached snapshots and raw uri citations.
-              </p>
-              <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
-                Active in World Mode
-              </div>
-            </div>
-          </div>
-        </div>
+        <IntegrationsMarketplace
+          connectors={connectors}
+          uploadedCount={uploadedFiles.filter((u) => u.connector === 'upload').length}
+          syncingConnectors={syncingConnectors}
+          onConnect={handleConnectConnector}
+          onSync={handleSyncConnector}
+          onRevoke={handleRevokeConnector}
+          onSaveToken={handleSaveToken}
+          onNavigateUploads={() => setActiveSection('upload')}
+          initialError={initialError}
+          initialMessage={initialMessage}
+        />
       )}
 
       {/* ======================================================== */}
@@ -2136,11 +2087,15 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {workspaceActions.map((act: any) => {
                 const isApproved = !!act.approved_at;
+                const isExecuted = !!act.executed_at;
+                const hasError = !!act.error;
                 return (
-                  <div key={act.id} className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div key={act.id} className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: hasError ? '1px solid rgba(239, 68, 68, 0.35)' : undefined }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className="dash-badge dash-badge-running">{act.type}</span>
+                        {isExecuted && <span className="dash-badge dash-badge-published">Executed</span>}
+                        {hasError && <span className="dash-badge dash-badge-failed">Error</span>}
                         {act.brief_question && (
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             from: {act.brief_question}
@@ -2153,13 +2108,19 @@ export default function DashboardPage() {
                         className={isApproved ? 'dash-btn-secondary' : 'dash-btn-primary'}
                         style={{ padding: '6px 14px', fontSize: '0.75rem' }}
                       >
-                        {isApproved ? 'Approved ✓' : 'Approve Draft'}
+                        {isExecuted ? 'Executed ✓' : isApproved ? 'Approved ✓' : 'Approve Draft'}
                       </button>
                     </div>
                     <pre className="dash-code-box">{JSON.stringify(act.payload, null, 2)}</pre>
+                    {hasError && (
+                      <div style={{ fontSize: '0.74rem', color: '#ef4444', padding: '6px 10px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <strong>Provider Execution Error:</strong> {act.error}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
                       <span>Created: {new Date(act.created_at).toLocaleString()}</span>
                       {act.approved_at && <span>Approved: {new Date(act.approved_at).toLocaleString()}</span>}
+                      {act.executed_at && <span style={{ color: '#10b981' }}>Executed: {new Date(act.executed_at).toLocaleString()}</span>}
                     </div>
                   </div>
                 );

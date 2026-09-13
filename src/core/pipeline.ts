@@ -12,6 +12,7 @@ import type {
 import type { SourceBlock } from "./sourceFormatter";
 import { runWriter } from "./writer";
 import { runCritic } from "./critic";
+import { llmCall as defaultLlmCall } from "./llm";
 import { renderBriefMarkdown } from "./renderer";
 import { validateForPublish } from "./validator";
 
@@ -47,11 +48,26 @@ export async function generateBrief(
     unchecked = [],
     workspaceId = "ws_dev",
     parentBriefId = null,
-    llmCall,
+    llmCall: explicitLlmCall,
   } = options;
 
   const briefId = `brief_${randomUUID()}`;
   const asOf = new Date().toISOString();
+
+  const isMockAllowed =
+    process.env.EVAL_USE_MOCK === "true" || process.env.NODE_ENV === "test";
+
+  const writerLlm =
+    explicitLlmCall ??
+    (!isMockAllowed
+      ? (prompt: string, sys: string) => defaultLlmCall(prompt, sys, { role: "writer" })
+      : undefined);
+
+  const criticLlm =
+    explicitLlmCall ??
+    (!isMockAllowed
+      ? (prompt: string, sys: string) => defaultLlmCall(prompt, sys, { role: "critic" })
+      : undefined);
 
   // 1. Run Writer (internal draft, never directly published)
   const draft = await runWriter({
@@ -59,7 +75,7 @@ export async function generateBrief(
     mode,
     sources,
     retrieved,
-    llmCall,
+    llmCall: writerLlm,
   });
 
   // 2. Prepare Critic Input
@@ -74,7 +90,7 @@ export async function generateBrief(
   // 3. Run Critic
   const criticOut = await runCritic({
     input: criticInput,
-    llmCall,
+    llmCall: criticLlm,
   });
 
   // Build critic_log

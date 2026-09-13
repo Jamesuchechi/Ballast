@@ -1,6 +1,6 @@
 # Brief: What were our server infrastructure costs for Q2?
 
-As of: 2026-09-12T23:56:49.174Z
+As of: 2026-09-13T09:16:09.099Z
 Mode: home
 Status: published
 

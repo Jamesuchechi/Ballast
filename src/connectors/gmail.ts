@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { google } from 'googleapis';
 import { query, queryOne } from '@/db/client';
 import { chunkAndEmbedText } from '@/core/embeddings';
-import { getDecryptedToken, revokeToken, getTokenStatus } from './tokenStore';
+import { getDecryptedToken, revokeToken, getTokenStatus, storeEncryptedToken } from './tokenStore';
 import type {
   SourceConnector,
   ConnectorHealth,
@@ -27,9 +28,8 @@ export function formatEmailContent(m: GmailMessagePayload): string {
 }
 
 /**
- * Built-in representative mock messages used for offline evaluation,
- * local CI runs, and testing realistic inbox threads without requiring
- * external Google cloud credentials.
+ * Built-in representative mock messages used strictly for offline evaluation,
+ * local CI runs, and testing when EVAL_USE_MOCK=true or NODE_ENV=test.
  */
 export const SAMPLE_GMAIL_MESSAGES: GmailMessagePayload[] = [
   {
@@ -68,6 +68,71 @@ DevOps recommended running on the read replica first before applying to producti
   },
 ];
 
+/**
+ * Helper to recursively extract plain text or stripped HTML from a Gmail message payload.
+ */
+function extractEmailBody(payload: any): string {
+  if (!payload) return '';
+  if (payload.body?.data) {
+    return Buffer.from(payload.body.data, 'base64url').toString('utf8');
+  }
+  if (payload.parts && Array.isArray(payload.parts)) {
+    const textPart = payload.parts.find((p: any) => p.mimeType === 'text/plain');
+    if (textPart?.body?.data) {
+      return Buffer.from(textPart.body.data, 'base64url').toString('utf8');
+    }
+    const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
+    if (htmlPart?.body?.data) {
+      const html = Buffer.from(htmlPart.body.data, 'base64url').toString('utf8');
+      return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    for (const part of payload.parts) {
+      const nested = extractEmailBody(part);
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
+
+/**
+ * Initializes authenticated Google OAuth2 client using decrypted tokens.
+ * Handles automatic token refresh and encrypted re-persistence in PostgreSQL.
+ */
+export async function getAuthenticatedGmailClient(workspaceId: string) {
+  const token = await getDecryptedToken<Record<string, any>>(workspaceId, 'gmail');
+  if (!token || !token.access_token) {
+    throw new Error('Gmail connector is not connected or token has been revoked (FR1.3)');
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/connectors/gmail/callback';
+
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  oauth2Client.setCredentials({
+    access_token: token.access_token,
+    refresh_token: token.refresh_token,
+    expiry_date: token.expiry_date,
+    token_type: token.token_type || 'Bearer',
+    scope: Array.isArray(token.scopes) ? token.scopes.join(' ') : token.scope,
+  });
+
+  oauth2Client.on('tokens', async (refreshedTokens) => {
+    try {
+      const updated = { ...token, ...refreshedTokens };
+      await storeEncryptedToken(workspaceId, 'gmail', updated, token.scopes || []);
+    } catch (e) {
+      console.error(`[GMAIL TOKEN REFRESH ERROR for workspace ${workspaceId}]:`, e);
+    }
+  });
+
+  return {
+    gmail: google.gmail({ version: 'v1', auth: oauth2Client }),
+    token,
+    oauth2Client,
+  };
+}
+
 export class GmailConnector implements SourceConnector {
   readonly id = 'gmail' as const;
   readonly name = 'Gmail';
@@ -100,9 +165,10 @@ export class GmailConnector implements SourceConnector {
 
   /**
    * Lists changes within the configured sync window (default 90 days) (FR2.1).
+   * Makes real API calls to Google Gmail messages.list.
    */
   async list_changes(options: SyncOptions): Promise<SyncItem[]> {
-    const { workspaceId, windowDays = DEFAULT_SYNC_WINDOW_DAYS, simulateRateLimit, simulateError } = options;
+    const { workspaceId, windowDays = DEFAULT_SYNC_WINDOW_DAYS, simulateRateLimit, simulateError, maxResults = 50 } = options;
 
     if (simulateRateLimit) {
       throw new Error('Gmail API rate limit exceeded (HTTP 429)');
@@ -112,54 +178,143 @@ export class GmailConnector implements SourceConnector {
       throw new Error('Gmail API service temporarily unavailable (HTTP 503)');
     }
 
-    const token = await getDecryptedToken(workspaceId, 'gmail');
-    if (!token) {
+    const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+    const cutoffDate = new Date(Date.now() - windowDays * 86400000);
+
+    // If explicit mock mode and no active real token exists, return sample fixtures
+    const existingToken = await getDecryptedToken(workspaceId, 'gmail');
+    if (!existingToken && isMockAllowed) {
+      const messages = SAMPLE_GMAIL_MESSAGES.filter(
+        (m) => new Date(m.date) >= cutoffDate
+      );
+      return messages.map((m) => {
+        const content = formatEmailContent(m);
+        const checksum = createHash('sha256').update(content).digest('hex');
+        return {
+          externalId: m.id,
+          checksum,
+          date: m.date,
+          subject: m.subject,
+          snippet: m.body.slice(0, 100),
+        };
+      });
+    }
+
+    if (!existingToken) {
       throw new Error('Gmail connector is not connected or token has been revoked (FR1.3)');
     }
 
-    const cutoffDate = new Date(Date.now() - windowDays * 86400000);
+    // Live Gmail API Call
+    const { gmail } = await getAuthenticatedGmailClient(workspaceId);
+    const afterEpochSeconds = Math.floor(cutoffDate.getTime() / 1000);
+    const queryStr = `after:${afterEpochSeconds}`;
 
-    // If live access token is present and valid, live fetch would execute here.
-    // For deterministic offline testing and fallback, filter sample messages.
-    const messages = SAMPLE_GMAIL_MESSAGES.filter(
-      (m) => new Date(m.date) >= cutoffDate
-    );
-
-    return messages.map((m) => {
-      const content = formatEmailContent(m);
-      const checksum = createHash('sha256').update(content).digest('hex');
-      return {
-        externalId: m.id,
-        checksum,
-        date: m.date,
-        subject: m.subject,
-        snippet: m.body.slice(0, 100),
-      };
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: queryStr,
+      maxResults,
     });
+
+    const messages = listRes.data.messages || [];
+    const items: SyncItem[] = [];
+
+    for (const msg of messages) {
+      if (!msg.id) continue;
+      // Fetch headers and snippet
+      try {
+        const detail = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'metadata',
+          metadataHeaders: ['Subject', 'Date', 'From'],
+        });
+
+        const headers = detail.data.payload?.headers || [];
+        const subject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'No Subject';
+        const dateStr = headers.find((h) => h.name?.toLowerCase() === 'date')?.value || new Date().toISOString();
+        const snippet = detail.data.snippet || '';
+
+        // Temporary initial checksum from metadata; full content checksum finalized on fetch
+        const checksum = createHash('sha256').update(`${msg.id}:${subject}:${dateStr}:${snippet}`).digest('hex');
+
+        items.push({
+          externalId: msg.id,
+          checksum,
+          date: new Date(dateStr).toISOString(),
+          subject,
+          snippet,
+        });
+      } catch (err: any) {
+        console.warn(`[GMAIL LIST_CHANGES] Failed fetching metadata for message ${msg.id}:`, err.message);
+      }
+    }
+
+    return items;
   }
 
   /**
-   * Fetches full email document content.
+   * Fetches full email document content from Gmail API.
    */
   async fetch(workspaceId: string, externalId: string): Promise<FetchedDocument> {
-    const msg = SAMPLE_GMAIL_MESSAGES.find((m) => m.id === externalId);
-    if (!msg) {
-      throw new Error(`Gmail message ${externalId} not found`);
+    const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+
+    if (externalId.startsWith('gmail-msg-') && isMockAllowed) {
+      const msg = SAMPLE_GMAIL_MESSAGES.find((m) => m.id === externalId);
+      if (msg) {
+        const content = formatEmailContent(msg);
+        const checksum = createHash('sha256').update(content).digest('hex');
+        return {
+          externalId: msg.id,
+          content,
+          checksum,
+          date: msg.date,
+          meta: {
+            subject: msg.subject,
+            from: msg.from,
+            threadId: msg.threadId,
+            date: msg.date,
+          },
+        };
+      }
     }
 
-    const content = formatEmailContent(msg);
+    const { gmail } = await getAuthenticatedGmailClient(workspaceId);
+    const msgRes = await gmail.users.messages.get({
+      userId: 'me',
+      id: externalId,
+      format: 'full',
+    });
+
+    const data = msgRes.data;
+    const headers = data.payload?.headers || [];
+    const subject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'No Subject';
+    const from = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || 'Unknown Sender';
+    const rawDate = headers.find((h) => h.name?.toLowerCase() === 'date')?.value || new Date().toISOString();
+    const date = new Date(rawDate).toISOString();
+    const body = extractEmailBody(data.payload) || data.snippet || '';
+
+    const payload: GmailMessagePayload = {
+      id: externalId,
+      threadId: data.threadId || externalId,
+      subject,
+      from,
+      date,
+      body,
+    };
+
+    const content = formatEmailContent(payload);
     const checksum = createHash('sha256').update(content).digest('hex');
 
     return {
-      externalId: msg.id,
+      externalId,
       content,
       checksum,
-      date: msg.date,
+      date,
       meta: {
-        subject: msg.subject,
-        from: msg.from,
-        threadId: msg.threadId,
-        date: msg.date,
+        subject,
+        from,
+        threadId: payload.threadId,
+        date,
       },
     };
   }
@@ -186,7 +341,6 @@ export class GmailConnector implements SourceConnector {
         );
 
         if (existing) {
-          // Unchanged payload: update synced_at without creating duplicate row
           await query(
             `UPDATE sources 
              SET synced_at = NOW(), sync_window_start = $2 
@@ -195,7 +349,7 @@ export class GmailConnector implements SourceConnector {
           );
           unchangedCount++;
         } else {
-          // Fetch document content
+          // Fetch document content from live API or sample
           const doc = await this.fetch(workspaceId, item.externalId);
 
           // Store with trust_boundary='untrusted_content' (FR3.5, NFR1.1)
