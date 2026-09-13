@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { getConnectorDefinition } from '@/connectors/registry';
 import { storeEncryptedToken } from '@/connectors/tokenStore';
+import { getConnectorRedirectUri } from '@/lib/url';
 import type { ConnectorType } from '@/core/types';
 
 export async function GET(
@@ -40,8 +41,7 @@ export async function GET(
       return NextResponse.redirect(new URL(`/app?section=sources&connected=${id}`, req.url));
     }
 
-    const origin = req.nextUrl.origin;
-    const redirectUri = `${origin}/api/connectors/${id}/callback`;
+    const redirectUri = getConnectorRedirectUri(id, req);
 
     // 1. Google Ecosystem (Gmail, Calendar, Drive)
     if (id === 'gmail' || id === 'calendar' || id === 'drive') {

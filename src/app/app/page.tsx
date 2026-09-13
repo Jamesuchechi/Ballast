@@ -33,6 +33,8 @@ import {
   AlertCircle,
   Inbox,
   ShieldAlert,
+  Mail,
+  HardDrive,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -143,6 +145,11 @@ export default function DashboardPage() {
   const [flagNote, setFlagNote] = useState('');
   const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
 
+  // Source Inspection & Filter States
+  const [sourceFilterConnector, setSourceFilterConnector] = useState<string>('all');
+  const [inspectingSource, setInspectingSource] = useState<{ source: any; chunks: any[] } | null>(null);
+  const [isLoadingInspection, setIsLoadingInspection] = useState(false);
+
   // ----------------------------------------------------
   // Data Fetching Functions
   // ----------------------------------------------------
@@ -176,23 +183,68 @@ export default function DashboardPage() {
         const data = await res.json();
         if (data.sources) {
           setUploadedFiles(
-            data.sources.map((s: any) => ({
-              id: s.id,
-              name: s.external_id || 'Document',
-              size: `${s.chunk_count || 0} chunk(s)`,
-              type: s.connector === 'upload' ? (s.meta?.mime || 'document') : s.connector,
-              connector: s.connector,
-              trust_boundary: s.trust_boundary,
-              checksum: s.checksum,
-              status: 'indexed',
-              date: new Date(s.created_at).toISOString().split('T')[0],
-              raw: s,
-            }))
+            data.sources.map((s: any) => {
+              let displayName = s.meta?.name || s.meta?.summary || s.meta?.subject;
+              if (!displayName) {
+                if (s.connector === 'gmail') {
+                  displayName = s.meta?.from ? `Email from ${s.meta.from}` : (s.external_id || 'Gmail Message');
+                } else if (s.connector === 'calendar') {
+                  displayName = s.meta?.organizer ? `Meeting (${s.meta.organizer})` : 'Calendar Event';
+                } else if (s.connector === 'drive') {
+                  displayName = 'Google Drive Document';
+                } else {
+                  displayName = s.external_id || 'Document';
+                }
+              }
+
+              let subtitle = '';
+              if (s.connector === 'gmail') {
+                subtitle = s.meta?.from ? `From: ${s.meta.from}` : '';
+              } else if (s.connector === 'calendar') {
+                const when = s.meta?.start ? new Date(s.meta.start).toLocaleString() : '';
+                subtitle = s.meta?.organizer ? `${when} • Org: ${s.meta.organizer}` : when;
+              } else if (s.connector === 'drive') {
+                subtitle = s.meta?.mimeType || 'Drive File';
+              } else if (s.connector === 'upload') {
+                subtitle = s.meta?.mime || 'Uploaded File';
+              }
+
+              return {
+                id: s.id,
+                name: displayName,
+                subtitle,
+                size: `${s.chunk_count || 0} chunk(s)`,
+                type: s.connector === 'upload' ? (s.meta?.mime || 'document') : s.connector,
+                connector: s.connector,
+                trust_boundary: s.trust_boundary,
+                checksum: s.checksum,
+                status: 'indexed',
+                date: s.meta?.date || s.meta?.start || new Date(s.created_at).toISOString().split('T')[0],
+                raw: s,
+              };
+            })
           );
         }
       }
     } catch (err) {
       console.warn('Could not fetch sources:', err);
+    }
+  };
+
+  const handleInspectSource = async (sourceId: string) => {
+    setIsLoadingInspection(true);
+    try {
+      const res = await fetch(`/api/sources?id=${encodeURIComponent(sourceId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setInspectingSource(data);
+      } else {
+        alert('Could not load source details');
+      }
+    } catch (err: any) {
+      alert(`Inspection error: ${err.message}`);
+    } finally {
+      setIsLoadingInspection(false);
     }
   };
 
@@ -734,6 +786,257 @@ export default function DashboardPage() {
     if (briefFilter === 'all') return briefs;
     return briefs.filter((b) => (b.mode || 'home') === briefFilter);
   }, [briefs, briefFilter]);
+
+  const renderSourcesTable = (title: string, description?: string) => {
+    const filtered = uploadedFiles.filter((f) => {
+      if (sourceFilterConnector === 'all') return true;
+      return f.connector === sourceFilterConnector;
+    });
+
+    const gmailCount = uploadedFiles.filter((f) => f.connector === 'gmail').length;
+    const calCount = uploadedFiles.filter((f) => f.connector === 'calendar').length;
+    const driveCount = uploadedFiles.filter((f) => f.connector === 'drive').length;
+    const uploadCount = uploadedFiles.filter((f) => f.connector === 'upload').length;
+
+    return (
+      <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>
+              {title} ({uploadedFiles.length})
+            </h3>
+            {description && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {description}
+              </p>
+            )}
+          </div>
+
+          {/* Filter Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSourceFilterConnector('all')}
+              style={{
+                fontSize: '0.75rem',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--card-border)',
+                background: sourceFilterConnector === 'all' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                color: sourceFilterConnector === 'all' ? '#ffffff' : 'var(--text)',
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              All ({uploadedFiles.length})
+            </button>
+            {gmailCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('gmail')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'gmail' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'gmail' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <Mail size={12} color={sourceFilterConnector === 'gmail' ? '#fff' : '#ef4444'} />
+                Gmail ({gmailCount})
+              </button>
+            )}
+            {calCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('calendar')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'calendar' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'calendar' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <Calendar size={12} color={sourceFilterConnector === 'calendar' ? '#fff' : '#3b82f6'} />
+                Calendar ({calCount})
+              </button>
+            )}
+            {driveCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('drive')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'drive' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'drive' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <HardDrive size={12} color={sourceFilterConnector === 'drive' ? '#fff' : '#10b981'} />
+                Drive ({driveCount})
+              </button>
+            )}
+            {uploadCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('upload')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'upload' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'upload' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <FileText size={12} color={sourceFilterConnector === 'upload' ? '#fff' : 'var(--text-muted)'} />
+                Uploads ({uploadCount})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)' }}>
+            <FileText size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
+            <p style={{ fontSize: '0.85rem' }}>No indexed items matching this filter.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>Source Item / Subject</th>
+                  <th>Chunks</th>
+                  <th>Connector</th>
+                  <th>Trust Boundary</th>
+                  <th>Ingested</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((file) => (
+                  <tr key={file.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            background: 'var(--card-bg-subtle)',
+                            border: '1px solid var(--card-border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {file.connector === 'gmail' && <Mail size={14} color="#ef4444" />}
+                          {file.connector === 'calendar' && <Calendar size={14} color="#3b82f6" />}
+                          {file.connector === 'drive' && <HardDrive size={14} color="#10b981" />}
+                          {file.connector === 'upload' && <FileText size={14} color="var(--text-muted)" />}
+                          {file.connector === 'github' && <GitBranch size={14} color="#8b5cf6" />}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontWeight: 500,
+                              color: 'var(--text)',
+                              fontSize: '0.84rem',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '320px',
+                            }}
+                          >
+                            {file.name}
+                          </div>
+                          {file.subtitle && (
+                            <div
+                              style={{
+                                fontSize: '0.72rem',
+                                color: 'var(--text-muted)',
+                                marginTop: '2px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '320px',
+                              }}
+                            >
+                              {file.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                      {file.size}
+                    </td>
+                    <td>
+                      <span className="dash-badge dash-badge-mode" style={{ textTransform: 'capitalize' }}>
+                        {file.connector}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className="dash-badge dash-badge-mode"
+                        style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Lock size={10} />
+                        untrusted_content
+                      </span>
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                      {file.date}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          onClick={() => handleInspectSource(file.id)}
+                          className="dash-icon-btn"
+                          title="Inspect Ingested Chunks & Metadata"
+                        >
+                          <Eye size={14} color="var(--text)" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSource(file.id)}
+                          className="dash-icon-btn"
+                          title="Delete source and chunks from database"
+                        >
+                          <Trash2 size={14} color="var(--text-muted)" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (isLoadingAuth || !user || !workspace) {
     return (
@@ -1829,60 +2132,10 @@ export default function DashboardPage() {
           </div>
 
           {/* Uploaded Documents List */}
-          <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>
-                Indexed Workspace Documents ({uploadedFiles.length})
-              </h3>
-            </div>
-
-            {uploadedFiles.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
-                <FileText size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
-                <p style={{ fontSize: '0.85rem' }}>No documents uploaded yet in this workspace.</p>
-                <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Use the dropzone above or paste raw notes to index evidence.</p>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dash-table">
-                  <thead>
-                    <tr>
-                      <th>Filename</th>
-                      <th>Size / Chunks</th>
-                      <th>Connector</th>
-                      <th>Status</th>
-                      <th>Ingested</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uploadedFiles.map((file) => (
-                      <tr key={file.id}>
-                        <td style={{ fontWeight: 500 }}>{file.name}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{file.size}</td>
-                        <td>
-                          <span className="dash-badge dash-badge-mode">{file.connector}</span>
-                        </td>
-                        <td>
-                          <span className="dash-badge dash-badge-published">{file.status}</span>
-                        </td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{file.date}</td>
-                        <td>
-                          <button
-                            onClick={() => handleDeleteSource(file.id)}
-                            className="dash-icon-btn"
-                            title="Delete source and chunks from database"
-                          >
-                            <Trash2 size={14} color="var(--text-muted)" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          {renderSourcesTable(
+            'Indexed Workspace Documents',
+            'Grounded private documents, notes, emails, and meetings available for verification.'
+          )}
         </div>
       )}
 
@@ -1890,18 +2143,26 @@ export default function DashboardPage() {
       {/* SECTION: CONNECTED SOURCES (INTEGRATIONS MARKETPLACE)    */}
       {/* ======================================================== */}
       {activeSection === 'sources' && (
-        <IntegrationsMarketplace
-          connectors={connectors}
-          uploadedCount={uploadedFiles.filter((u) => u.connector === 'upload').length}
-          syncingConnectors={syncingConnectors}
-          onConnect={handleConnectConnector}
-          onSync={handleSyncConnector}
-          onRevoke={handleRevokeConnector}
-          onSaveToken={handleSaveToken}
-          onNavigateUploads={() => setActiveSection('upload')}
-          initialError={initialError}
-          initialMessage={initialMessage}
-        />
+        <div style={{ maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <IntegrationsMarketplace
+            connectors={connectors}
+            uploadedCount={uploadedFiles.filter((u) => u.connector === 'upload').length}
+            syncingConnectors={syncingConnectors}
+            onConnect={handleConnectConnector}
+            onSync={handleSyncConnector}
+            onRevoke={handleRevokeConnector}
+            onSaveToken={handleSaveToken}
+            onNavigateUploads={() => setActiveSection('upload')}
+            initialError={initialError}
+            initialMessage={initialMessage}
+          />
+
+          {/* Live Evidence Stream from Connected Sources */}
+          {renderSourcesTable(
+            'Synced Live Knowledge & Evidence',
+            'Real-time items synced from your connected accounts (Gmail, Google Calendar, Google Drive).'
+          )}
+        </div>
       )}
 
       {/* ======================================================== */}
@@ -2798,6 +3059,215 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: INSPECT SOURCE & CHUNKS                           */}
+      {/* ======================================================== */}
+      {inspectingSource && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              width: '100%',
+              maxWidth: '720px',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              padding: '24px',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid var(--card-border)',
+                paddingBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'var(--card-bg-subtle)',
+                    border: '1px solid var(--card-border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {inspectingSource.source.connector === 'gmail' && <Mail size={16} color="#ef4444" />}
+                  {inspectingSource.source.connector === 'calendar' && <Calendar size={16} color="#3b82f6" />}
+                  {inspectingSource.source.connector === 'drive' && <HardDrive size={16} color="#10b981" />}
+                  {inspectingSource.source.connector === 'upload' && <FileText size={16} color="var(--text-muted)" />}
+                  {inspectingSource.source.connector === 'github' && <GitBranch size={16} color="#8b5cf6" />}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+                    {inspectingSource.source.meta?.name ||
+                      inspectingSource.source.meta?.summary ||
+                      inspectingSource.source.meta?.subject ||
+                      inspectingSource.source.external_id ||
+                      'Source Details'}
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                    <span className="dash-badge dash-badge-mode" style={{ textTransform: 'capitalize' }}>
+                      {inspectingSource.source.connector}
+                    </span>
+                    <span
+                      className="dash-badge dash-badge-mode"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    >
+                      <Lock size={10} />
+                      {inspectingSource.source.trust_boundary}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {inspectingSource.chunks.length} chunk(s)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectingSource(null)}
+                className="dash-icon-btn"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Metadata grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '10px',
+                padding: '12px',
+                borderRadius: '8px',
+                background: 'var(--card-bg-subtle)',
+                border: '1px solid var(--card-border)',
+                fontSize: '0.78rem',
+              }}
+            >
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>External ID: </span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                  {inspectingSource.source.external_id}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Checksum (SHA-256): </span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                  {inspectingSource.source.checksum?.slice(0, 16)}...
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Ingested: </span>
+                <span style={{ color: 'var(--text)' }}>
+                  {new Date(inspectingSource.source.created_at).toLocaleString()}
+                </span>
+              </div>
+              {inspectingSource.source.meta?.from && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Sender: </span>
+                  <span style={{ color: 'var(--text)' }}>{inspectingSource.source.meta.from}</span>
+                </div>
+              )}
+              {inspectingSource.source.meta?.organizer && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Organizer: </span>
+                  <span style={{ color: 'var(--text)' }}>{inspectingSource.source.meta.organizer}</span>
+                </div>
+              )}
+              {inspectingSource.source.meta?.mimeType && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>MIME: </span>
+                  <span style={{ color: 'var(--text)' }}>{inspectingSource.source.meta.mimeType}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Ingested Grounding Chunks */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>
+                Ingested Grounding Chunks (Passed to Retriever &amp; Critic)
+              </h4>
+              {inspectingSource.chunks.length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No chunks generated for this source.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {inspectingSource.chunks.map((chunk, idx) => (
+                    <div
+                      key={chunk.id || idx}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '6px',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--card-border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span className="dash-badge dash-badge-published" style={{ fontSize: '0.68rem' }}>
+                          Chunk #{chunk.ordinal ?? idx}
+                        </span>
+                        <span
+                          style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+                        >
+                          {chunk.text?.length || 0} characters
+                        </span>
+                      </div>
+                      <pre
+                        style={{
+                          margin: 0,
+                          fontSize: '0.78rem',
+                          fontFamily: 'var(--font-mono)',
+                          color: 'var(--text)',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          lineHeight: 1.5,
+                          maxHeight: '180px',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {chunk.text}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px' }}>
+              <button
+                onClick={() => setInspectingSource(null)}
+                className="dash-btn-secondary"
+                style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

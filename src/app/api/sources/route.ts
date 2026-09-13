@@ -11,6 +11,44 @@ export async function GET(req: NextRequest) {
     }
     const workspaceId = payload.workspaceId;
 
+    const singleId = req.nextUrl.searchParams.get('id');
+    if (singleId) {
+      const source = await queryOne(
+        `SELECT 
+           s.id, 
+           s.external_id, 
+           s.connector, 
+           s.checksum, 
+           s.trust_boundary, 
+           s.sync_window_start,
+           s.synced_at,
+           s.last_error,
+           s.created_at, 
+           s.meta,
+           COUNT(c.id)::int as chunk_count
+         FROM sources s
+         LEFT JOIN chunks c ON c.source_id = s.id
+         WHERE s.id = $1 AND s.workspace_id = $2
+         GROUP BY s.id`,
+        [singleId, workspaceId]
+      );
+
+      if (!source) {
+        return NextResponse.json({ error: 'Source not found' }, { status: 404 });
+      }
+
+      const chunks = await query(
+        `SELECT id, ordinal, text, created_at
+         FROM chunks
+         WHERE source_id = $1 AND workspace_id = $2
+         ORDER BY ordinal ASC
+         LIMIT 100`,
+        [singleId, workspaceId]
+      );
+
+      return NextResponse.json({ source, chunks });
+    }
+
     const rows = await query(
       `SELECT 
          s.id, 

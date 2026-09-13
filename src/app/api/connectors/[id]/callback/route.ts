@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConnectorDefinition } from '@/connectors/registry';
 import { storeEncryptedToken } from '@/connectors/tokenStore';
+import { getConnectorRedirectUri } from '@/lib/url';
 import type { ConnectorType } from '@/core/types';
 
 export async function GET(
@@ -29,8 +30,7 @@ export async function GET(
       return NextResponse.json({ error: 'Missing OAuth authorization code or workspace state' }, { status: 400 });
     }
 
-    const origin = req.nextUrl.origin;
-    const redirectUri = `${origin}/api/connectors/${id}/callback`;
+    const redirectUri = getConnectorRedirectUri(id, req);
     let tokenData: Record<string, any> | null = null;
 
     // 1. Google (Gmail, Calendar, Drive)

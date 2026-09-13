@@ -67,3 +67,14 @@ export function getCanonicalAppUrl(): string {
   return process.env.NEXT_APP_URL || 'http://localhost:3000';
 }
 
+/**
+ * Returns the connector callback URL for any connector (gmail, calendar, drive, github, etc.)
+ */
+export function getConnectorRedirectUri(connectorId: string, req?: NextRequest): string {
+  if (connectorId === 'gmail' && process.env.GOOGLE_REDIRECT_URI && !process.env.GOOGLE_REDIRECT_URI.includes('localhost')) {
+    return process.env.GOOGLE_REDIRECT_URI;
+  }
+  const base = req?.nextUrl?.origin || getCanonicalAppUrl();
+  return `${base}/api/connectors/${connectorId}/callback`;
+}
+

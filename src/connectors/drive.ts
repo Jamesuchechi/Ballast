@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import { query, queryOne } from '@/db/client';
 import { chunkAndEmbedText } from '@/core/embeddings';
 import { getDecryptedToken, revokeToken, getTokenStatus, storeEncryptedToken } from './tokenStore';
+import { getConnectorRedirectUri } from '@/lib/url';
 import type {
   SourceConnector,
   ConnectorHealth,
@@ -51,9 +52,7 @@ export async function getAuthenticatedDriveClient(workspaceId: string) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI ||
-    `${(process.env.NEXT_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')).replace(/\/$/, '')}/api/connectors/google/callback`;
+  const redirectUri = getConnectorRedirectUri('drive');
 
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   oauth2Client.setCredentials({
