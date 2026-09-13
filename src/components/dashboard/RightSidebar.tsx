@@ -4,6 +4,7 @@ import React from 'react';
 import {
   X,
   ShieldCheck,
+  ShieldAlert,
   Layers,
   FileCheck,
   Lock,
@@ -59,8 +60,8 @@ export function RightSidebar({
               <Lock size={12} color="#10b981" />
               Trust Boundary
             </span>
-            <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: '9999px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-              untrusted_content
+            <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: '9999px', background: brief ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)', color: brief ? '#34d399' : 'var(--text-muted)', border: brief ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--card-border)' }}>
+              {brief ? 'untrusted_content' : 'standby'}
             </span>
           </div>
           <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
@@ -68,7 +69,7 @@ export function RightSidebar({
           </p>
           <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid var(--card-border)' }}>
             <span>Connector:</span>
-            <span style={{ color: 'var(--text)', fontWeight: 600 }}>upload / private</span>
+            <span style={{ color: 'var(--text)', fontWeight: 600 }}>{brief ? (brief.mode === 'world' ? 'web + private' : 'upload / private') : 'None'}</span>
           </div>
         </div>
 
@@ -159,7 +160,7 @@ export function RightSidebar({
         </div>
 
         {/* Telemetry & Critic Run */}
-        {runs && (
+        {runs ? (
           <div className="dash-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -167,29 +168,51 @@ export function RightSidebar({
                 Run Telemetry
               </span>
               <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#10b981', fontWeight: 700 }}>
-                ${Number(runs.cost || 0.0042).toFixed(4)}
+                ${Number(runs.cost || 0).toFixed(4)}
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)' }}>
               <div style={{ padding: '8px', borderRadius: '6px', background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
                 <span style={{ color: 'var(--text-subtle)', fontSize: '0.62rem', display: 'block' }}>LATENCY</span>
-                <span style={{ color: 'var(--text)', fontWeight: 700, fontSize: '0.85rem' }}>{runs.latency_ms || 940} ms</span>
+                <span style={{ color: 'var(--text)', fontWeight: 700, fontSize: '0.85rem' }}>{runs.latency_ms ?? 0} ms</span>
               </div>
               <div style={{ padding: '8px', borderRadius: '6px', background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
                 <span style={{ color: 'var(--text-subtle)', fontSize: '0.62rem', display: 'block' }}>TOKENS IN/OUT</span>
                 <span style={{ color: 'var(--text)', fontWeight: 700, fontSize: '0.85rem' }}>
-                  {runs.tokens_in || 1840} / {runs.tokens_out || 412}
+                  {runs.tokens_in ?? 0} / {runs.tokens_out ?? 0}
                 </span>
               </div>
             </div>
 
             <div style={{ paddingTop: '8px', borderTop: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>Circuit Breaker:</span>
-              <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <ShieldCheck size={14} /> Armed &amp; Healthy
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontFamily: 'var(--font-mono)',
+                  color: runs.circuit_broken ? '#ef4444' : '#10b981',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {runs.circuit_broken ? (
+                  <>
+                    <ShieldAlert size={14} /> Tripped
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={14} /> Armed (Clean)
+                  </>
+                )}
               </span>
             </div>
+          </div>
+        ) : (
+          <div style={{ padding: '16px', borderRadius: '8px', border: '1px dashed var(--card-border)', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            No run telemetry recorded yet.
           </div>
         )}
       </div>

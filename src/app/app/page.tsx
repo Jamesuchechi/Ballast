@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -68,10 +68,12 @@ function computeUnifiedDiff(oldText: string, newText: string) {
 export default function DashboardPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const queryInputRef = useRef<HTMLInputElement>(null);
 
   // User & Workspace State
   const [user, setUser] = useState<any>(null);
   const [workspace, setWorkspace] = useState<any>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
   const [mode, setMode] = useState<'home' | 'world'>('home');
   const [activeSection, setActiveSection] = useState('briefs');
@@ -113,6 +115,18 @@ export default function DashboardPage() {
       sync_window_days: 90,
     };
   }, [connectors]);
+
+  // Dynamic Workspace Storage Used Computation
+  const storageLabel = useMemo(() => {
+    const bytes = uploadedFiles.reduce((acc, f) => {
+      const size = f.raw?.meta?.size || 0;
+      return acc + (typeof size === 'number' ? size : 0);
+    }, 0);
+    if (bytes === 0) return undefined;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }, [uploadedFiles]);
 
   // Modal / Form States
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -270,16 +284,20 @@ export default function DashboardPage() {
     async function init() {
       try {
         const meRes = await fetch('/api/auth/me');
+        if (!meRes.ok) {
+          router.replace('/login?from=' + encodeURIComponent(window.location.pathname));
+          return;
+        }
         const meData = await meRes.json();
 
-        if (meData.user) {
+        if (meData.user && meData.workspace) {
           setUser(meData.user);
           setWorkspace(meData.workspace);
           setIsDemo(false);
+          setIsLoadingAuth(false);
         } else {
-          setIsDemo(true);
-          setUser({ name: 'Guest Explorer', email: 'guest@ballast.local' });
-          setWorkspace({ name: 'Default Workspace', plan: 'free' });
+          router.replace('/login?from=' + encodeURIComponent(window.location.pathname));
+          return;
         }
 
         // Fetch live database records across all domains
@@ -294,8 +312,8 @@ export default function DashboardPage() {
           fetchConnectors(),
         ]);
       } catch (err) {
-        console.warn('Dashboard init fallback:', err);
-        setIsDemo(true);
+        console.warn('Dashboard auth check failed:', err);
+        router.replace('/login?from=' + encodeURIComponent(window.location.pathname));
       }
     }
 
@@ -337,33 +355,12 @@ export default function DashboardPage() {
   // Action Handlers
   // ----------------------------------------------------
 
-  const handleSeedBrief = async (seedMode?: 'home' | 'world') => {
-    setActionLoading(true);
-    const targetMode = seedMode || mode;
-    try {
-      const res = await fetch('/api/briefs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: targetMode }),
-      });
-      const data = await res.json();
-      if (data.briefId) {
-        await Promise.all([
-          fetchBriefs(),
-          fetchSources(),
-          fetchAccessLogs(),
-          fetchActions(),
-          fetchTelemetry(),
-        ]);
-        setSelectedBriefId(data.briefId);
-      } else {
-        alert(data.error || 'Failed to seed brief');
-      }
-    } catch (err: any) {
-      alert('Error seeding brief: ' + err.message);
-    } finally {
-      setActionLoading(false);
-    }
+  const handleOpenCreateBrief = () => {
+    setActiveSection('briefs');
+    setTimeout(() => {
+      queryInputRef.current?.focus();
+      queryInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   };
 
   const handleEnqueueBrief = async (question: string, briefMode: 'home' | 'world' = 'home') => {
@@ -738,6 +735,38 @@ export default function DashboardPage() {
     return briefs.filter((b) => (b.mode || 'home') === briefFilter);
   }, [briefs, briefFilter]);
 
+  if (isLoadingAuth || !user || !workspace) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg)',
+          color: 'var(--text)',
+          fontFamily: 'var(--font-mono)',
+          gap: '16px',
+        }}
+      >
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            border: '3px solid rgba(16, 185, 129, 0.2)',
+            borderTopColor: '#10b981',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+          Authenticating Ballast session...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DashboardLayout
       user={user}
@@ -749,6 +778,7 @@ export default function DashboardPage() {
       accessLogsCount={accessLogs.length}
       flagsCount={flags.filter((f) => f.status !== 'resolved').length}
       telemetryAvgLatency={telemetry?.telemetry?.avg_latency_ms}
+      storageCount={storageLabel}
       activeSection={activeSection}
       onSelectSection={setActiveSection}
       mode={mode}
@@ -758,7 +788,7 @@ export default function DashboardPage() {
       currentBrief={currentBrief}
       citations={briefDetail?.citations || []}
       runs={briefDetail?.runs}
-      onCreateBrief={handleSeedBrief}
+      onCreateBrief={handleOpenCreateBrief}
       actionLoading={actionLoading}
       theme={theme}
       onToggleTheme={toggleTheme}
@@ -844,6 +874,7 @@ export default function DashboardPage() {
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <input
+                ref={queryInputRef}
                 type="text"
                 value={queryPrompt}
                 onChange={(e) => setQueryPrompt(e.target.value)}
@@ -1083,28 +1114,38 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)' }}>No Briefs in Workspace</h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '460px', margin: '6px auto 0' }}>
-                  Your workspace has no published briefs yet. Generate your first brief using the prompt bar above or seed a verified sample brief to test the dual-gate pipeline.
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '480px', margin: '6px auto 0' }}>
+                  Your workspace has no published briefs yet. Connect a source, upload documents, or run a suggested question through the dual-gate pipeline.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button
-                  onClick={() => handleSeedBrief('home')}
-                  disabled={actionLoading}
+                  onClick={() => {
+                    const q = 'What are the key open deliverables and action items across workspace sources?';
+                    setMode('home');
+                    setQueryPrompt(q);
+                    handleEnqueueBrief(q, 'home');
+                  }}
+                  disabled={isGenerating}
                   className="dash-btn-primary"
                   style={{ padding: '8px 18px', fontSize: '0.82rem' }}
                 >
                   <Sparkles size={15} />
-                  <span>{actionLoading ? 'Seeding...' : 'Seed Home Brief (Q3 Revamp)'}</span>
+                  <span>{isGenerating ? 'Queuing...' : 'Ask Workspace Sources (Home)'}</span>
                 </button>
                 <button
-                  onClick={() => handleSeedBrief('world')}
-                  disabled={actionLoading}
+                  onClick={() => {
+                    const q = 'What are the key compliance and security requirements for recurring billing?';
+                    setMode('world');
+                    setQueryPrompt(q);
+                    handleEnqueueBrief(q, 'world');
+                  }}
+                  disabled={isGenerating}
                   className="dash-btn-secondary"
                   style={{ padding: '8px 18px', fontSize: '0.82rem', borderColor: 'rgba(6, 182, 212, 0.4)', color: '#06b6d4' }}
                 >
                   <Globe size={15} />
-                  <span>{actionLoading ? 'Seeding...' : 'Seed World Brief (Stripe & GDPR)'}</span>
+                  <span>{isGenerating ? 'Queuing...' : 'Ask Web & Sources (World)'}</span>
                 </button>
                 <button
                   onClick={() => setActiveSection('upload')}
@@ -1195,7 +1236,7 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
                   {filteredBriefs.length === 0 ? (
                     <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
-                      No {briefFilter} mode briefs generated yet. Generate one above or click Seed Brief.
+                      No {briefFilter} mode briefs generated yet. Enter a question in the prompt bar above to enqueue a run.
                     </div>
                   ) : (
                     filteredBriefs.map((b) => {

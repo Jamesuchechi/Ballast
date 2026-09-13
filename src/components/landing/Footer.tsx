@@ -21,7 +21,7 @@ export function Footer() {
         <h2
           style={{
             fontSize: "clamp(1.9rem, 5vw, 4.4rem)",
-            fontWeight: 600,
+            fontWeight: 700,
             letterSpacing: "-0.03em",
             marginBottom: "16px",
             color: "var(--text)",
@@ -50,19 +50,20 @@ export function Footer() {
             background: "var(--btn-cta-bg)",
             color: "var(--btn-cta-text)",
             fontSize: "1rem",
-            fontWeight: 600,
+            fontWeight: 700,
             padding: "14px 32px",
-            borderRadius: "9999px",
+            borderRadius: "8px",
             textDecoration: "none",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
+            minHeight: "48px",
             boxShadow: "var(--btn-cta-shadow)",
             transition: "all 0.2s ease",
           }}
         >
-          Start with Ballast Free
+          <span>Start with Ballast Free</span>
           <ArrowRight size={16} strokeWidth={2.5} />
         </Link>
       </section>
@@ -72,10 +73,11 @@ export function Footer() {
         style={{
           borderTop: "1px solid var(--card-border)",
           padding: "32px 16px",
-          fontSize: "0.85rem",
+          fontSize: "0.82rem",
           color: "var(--text-subtle)",
           background: "var(--footer-bg)",
           transition: "background-color 0.25s ease, border-color 0.25s ease",
+          fontFamily: "var(--font-mono)",
         }}
       >
         <div
@@ -90,7 +92,7 @@ export function Footer() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Anchor size={18} color="var(--accent)" />
+            <Anchor size={16} color="var(--accent)" />
             <span>Ballast OS © 2026. If it cannot cite, it does not state.</span>
           </div>
 

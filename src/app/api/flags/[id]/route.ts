@@ -9,17 +9,10 @@ export async function PATCH(
   try {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const payload = token ? verifyToken(token) : null;
-    let workspaceId: string | null = payload?.workspaceId || null;
-
-    if (!workspaceId) {
-      const defaultWs = await queryOne<{ id: string }>(
-        `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-      );
-      if (!defaultWs) {
-        return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-      }
-      workspaceId = defaultWs.id;
+    if (!payload || !payload.workspaceId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const workspaceId = payload.workspaceId;
 
     const { id } = await params;
     const body = await req.json();

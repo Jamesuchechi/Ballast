@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bgGrad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050608"/>
+      <stop offset="50%" stop-color="#140f09"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bgGrad4)"/>
+
+  <!-- Grid -->
+  <g opacity="0.08" stroke="#f59e0b" stroke-width="1">
+    <pattern id="grid4" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40"/>
+    </pattern>
+    <rect width="1600" height="900" fill="url(#grid4)"/>
+  </g>
+
+  <!-- Ambient Glow -->
+  <circle cx="800" cy="450" r="350" fill="#f59e0b" opacity="0.1"/>
+
+  <!-- Window Frame -->
+  <rect x="80" y="70" width="1440" height="760" rx="16" fill="#0d0f15" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+  <!-- Top Bar -->
+  <rect x="80" y="70" width="1440" height="54" rx="16" fill="#121520"/>
+  <rect x="80" y="108" width="1440" height="16" fill="#121520"/>
+  <line x1="80" y1="124" x2="1520" y2="124" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Window Dots -->
+  <circle cx="120" cy="97" r="6" fill="#ef4444"/>
+  <circle cx="140" cy="97" r="6" fill="#f59e0b"/>
+  <circle cx="160" cy="97" r="6" fill="#10b981"/>
+
+  <!-- Title -->
+  <text x="190" y="102" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600">
+    BALLAST OS // MODULE 04: REAL-TIME CONFLICT SURFACING (NO SILENT COIN FLIPS)
+  </text>
+  <rect x="1290" y="85" width="190" height="26" rx="6" fill="rgba(245,158,11,0.15)" stroke="#f59e0b" stroke-width="1"/>
+  <text x="1308" y="102" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+    ⚠ CONFLICT DETECTED
+  </text>
+
+  <!-- Side by Side Conflict Grid -->
+  <g transform="translate(120, 160)">
+    <!-- Top Warning Header -->
+    <rect width="1320" height="80" rx="10" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="32" y="38" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="700">
+      DISCREPANCY ALERT // CONFLICTING EVIDENCE DETECTED BETWEEN RECORDS
+    </text>
+    <text x="32" y="62" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="16" font-weight="600">
+      Subject: Q3 General Availability Launch Target Date
+    </text>
+
+    <!-- Side A: Roadmap Document -->
+    <g transform="translate(0, 105)">
+      <rect width="640" height="470" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <rect x="28" y="24" width="120" height="24" rx="4" fill="rgba(6,182,212,0.15)"/>
+      <text x="38" y="41" fill="#06b6d4" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+        SOURCE A
+      </text>
+      <text x="160" y="41" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="16" font-weight="700">
+        Engineering Roadmap (Q3_2026.md)
+      </text>
+
+      <g transform="translate(28, 70)">
+        <rect width="584" height="110" rx="8" fill="#1b202e" stroke="rgba(6,182,212,0.3)" stroke-width="1"/>
+        <text x="20" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">TARGET RELEASE DATE</text>
+        <text x="20" y="75" fill="#06b6d4" font-family="-apple-system, sans-serif" font-size="28" font-weight="800">
+          October 15, 2026
+        </text>
+        <text x="20" y="98" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+          Stated by: Product Operations &bull; Updated 4d ago
+        </text>
+      </g>
+
+      <g transform="translate(28, 200)">
+        <text x="0" y="24" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="600">VERBATIM EXCERPT:</text>
+        <rect y="36" width="584" height="90" rx="6" fill="#090a0f" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+        <text x="16" y="68" fill="#cbd5e1" font-family="'JetBrains Mono', monospace" font-size="13">
+          “Core billing and webhook handler merge gate unlocks
+        </text>
+        <text x="16" y="94" fill="#cbd5e1" font-family="'JetBrains Mono', monospace" font-size="13">
+          general availability rollout on October 15.”
+        </text>
+      </g>
+
+      <g transform="translate(28, 350)">
+        <text x="0" y="20" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Ingested from:</text>
+        <text x="120" y="20" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="12">Google Drive doc:doc_roadmap_q3</text>
+        <text x="0" y="45" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Confidence:</text>
+        <text x="120" y="45" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12">1.0 (Exact Grounded Statement)</text>
+      </g>
+    </g>
+
+    <!-- Side B: Executive Sync Notes -->
+    <g transform="translate(680, 105)">
+      <rect width="640" height="470" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <rect x="28" y="24" width="120" height="24" rx="4" fill="rgba(245,158,11,0.15)"/>
+      <text x="38" y="41" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+        SOURCE B
+      </text>
+      <text x="160" y="41" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="16" font-weight="700">
+        Executive Sync Minutes (Exec_Sync_0910.txt)
+      </text>
+
+      <g transform="translate(28, 70)">
+        <rect width="584" height="110" rx="8" fill="#241d15" stroke="rgba(245,158,11,0.3)" stroke-width="1"/>
+        <text x="20" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">AUDIT-ADJUSTED TARGET DATE</text>
+        <text x="20" y="75" fill="#f59e0b" font-family="-apple-system, sans-serif" font-size="28" font-weight="800">
+          November 12, 2026
+        </text>
+        <text x="20" y="98" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+          Stated by: VP of Security &bull; Updated 2d ago
+        </text>
+      </g>
+
+      <g transform="translate(28, 200)">
+        <text x="0" y="24" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="600">VERBATIM EXCERPT:</text>
+        <rect y="36" width="584" height="90" rx="6" fill="#090a0f" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+        <text x="16" y="68" fill="#cbd5e1" font-family="'JetBrains Mono', monospace" font-size="13">
+          “SOC2 Type II auditor availability shifts customer
+        </text>
+        <text x="16" y="94" fill="#cbd5e1" font-family="'JetBrains Mono', monospace" font-size="13">
+          launch gate from mid-October to November 12.”
+        </text>
+      </g>
+
+      <g transform="translate(28, 350)">
+        <text x="0" y="20" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Ingested from:</text>
+        <text x="120" y="20" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="12">Slack #exec-sync note_19042</text>
+        <text x="0" y="45" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Confidence:</text>
+        <text x="120" y="45" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12">1.0 (Exact Grounded Statement)</text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -4,9 +4,9 @@ import { getAuthSession } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getAuthSession(req, true);
+    const session = await getAuthSession(req);
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized or no workspace found' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const workspaceId = session.workspaceId;
 

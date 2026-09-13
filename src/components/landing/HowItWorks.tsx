@@ -4,18 +4,18 @@ import React from "react";
 
 const steps = [
   {
-    num: "01",
-    title: "Connect & Retrieve",
-    desc: "Sync read-only windows from Gmail (90d default), GitHub PRs, and manual documents. Ingested text is isolated into XML data boundaries, never blended with instructions.",
+    num: "01 // RETRIEVE",
+    title: "Connect & Ingest",
+    desc: "Sync read-only windows from Gmail (90d default), GitHub PRs, and uploaded files. Ingested payloads are isolated into untrusted data blocks within XML boundaries, never blended into prompt instructions.",
   },
   {
-    num: "02",
-    title: "The Critic Gate",
-    desc: "A separate, swappable Critic function checks every proposed claim against retrieved quotes. Unsourced assertions are dropped, not footnoted. Discrepancies become first-class conflicts.",
+    num: "02 // THE CRITIC GATE",
+    title: "Dual-Gate Audit",
+    desc: "A separate, swappable Critic function validates every proposed sentence against retrieved quote spans. Unsourced assertions are dropped entirely—never footnoted or guessed. Contradictions become first-class conflict citations.",
   },
   {
-    num: "03",
-    title: "Ship & Propose",
+    num: "03 // SHIP & PROPOSE",
+    title: "Citable Brief & Actions",
     desc: "Receive a dated brief formatted in the frozen 8-section template with markdown and PDF export. Action drafts are proposed, but nothing sends or writes without explicit operator sign-off.",
   },
 ];
@@ -34,13 +34,13 @@ export function HowItWorks() {
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
         <div
           style={{
-            fontSize: "0.8rem",
+            fontSize: "0.78rem",
             fontFamily: "var(--font-mono)",
             color: "var(--accent-text)",
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.1em",
             marginBottom: "12px",
-            fontWeight: 600,
+            fontWeight: 700,
           }}
         >
           The Architecture
@@ -48,7 +48,7 @@ export function HowItWorks() {
         <h2
           style={{
             fontSize: "clamp(1.85rem, 4vw, 3.2rem)",
-            fontWeight: 600,
+            fontWeight: 700,
             letterSpacing: "-0.03em",
             color: "var(--text)",
           }}
@@ -60,7 +60,7 @@ export function HowItWorks() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
           gap: "20px",
         }}
       >
@@ -70,20 +70,23 @@ export function HowItWorks() {
             style={{
               background: "var(--card-bg)",
               border: "1px solid var(--card-border)",
-              borderRadius: "16px",
+              borderRadius: "14px",
               padding: "28px 24px",
               position: "relative",
               boxShadow: "var(--card-shadow)",
-              transition: "all 0.2s ease",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              transition: "border-color 0.2s ease, transform 0.2s ease",
             }}
           >
             <div
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "0.85rem",
+                fontSize: "0.82rem",
                 color: "var(--accent-text)",
-                marginBottom: "14px",
-                fontWeight: 600,
+                fontWeight: 700,
+                letterSpacing: "0.05em",
               }}
             >
               {step.num}
@@ -91,8 +94,7 @@ export function HowItWorks() {
             <h3
               style={{
                 fontSize: "1.25rem",
-                fontWeight: 600,
-                marginBottom: "12px",
+                fontWeight: 700,
                 letterSpacing: "-0.01em",
                 color: "var(--text)",
               }}
@@ -103,7 +105,7 @@ export function HowItWorks() {
               style={{
                 color: "var(--text-muted)",
                 fontSize: "0.92rem",
-                lineHeight: 1.6,
+                lineHeight: 1.65,
               }}
             >
               {step.desc}

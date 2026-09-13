@@ -281,8 +281,9 @@ export class WebConnector implements SourceConnector {
       console.warn('[WEB] Live web fetch error, falling back to corpus:', e);
     }
 
-    // 2. If live search returned fewer than maxResults, supplement from sample corpus
-    if (matchedPages.length < maxResults) {
+    // 2. If live search returned fewer than maxResults, supplement from sample corpus ONLY in dev/eval/test
+    const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+    if (matchedPages.length < maxResults && isMockAllowed) {
       const corpusMatches = SAMPLE_WEB_CORPUS.filter((page) => {
         const words = normalizedQuery.split(/\W+/).filter((w) => w.length > 3);
         if (words.length === 0) return true;

@@ -183,6 +183,102 @@ export async function authenticateUser(email: string, password: string): Promise
   };
 }
 
+export async function findOrCreateGoogleUser(params: {
+  email: string;
+  name?: string;
+  googleId?: string;
+}): Promise<{ user: User; workspace: Workspace; token: string }> {
+  const email = params.email.toLowerCase().trim();
+  const name = params.name || null;
+
+  // 1. Check if user already exists
+  let user = await queryOne<User>(
+    `SELECT id, email, name, created_at FROM users WHERE email = $1`,
+    [email]
+  );
+
+  let workspace: Workspace | null = null;
+
+  if (user) {
+    // Existing user: retrieve their primary workspace
+    const memberRow = await queryOne<{
+      workspace_id: string;
+      name: string;
+      plan: string;
+      role: string;
+      created_at: string;
+    }>(
+      `SELECT w.id as workspace_id, w.name, w.plan, wm.role, w.created_at
+       FROM workspace_members wm
+       JOIN workspaces w ON w.id = wm.workspace_id
+       WHERE wm.user_id = $1
+       ORDER BY (wm.role = 'owner') DESC, w.created_at ASC
+       LIMIT 1`,
+      [user.id]
+    );
+
+    if (memberRow) {
+      workspace = {
+        id: memberRow.workspace_id,
+        name: memberRow.name,
+        plan: memberRow.plan,
+        role: memberRow.role,
+        created_at: memberRow.created_at,
+      };
+    } else {
+      // User exists but has no workspace: create one
+      const wName = `${user.name || user.email.split('@')[0]}'s Workspace`;
+      const createdWs = await queryOne<Workspace>(
+        `INSERT INTO workspaces (name, plan) VALUES ($1, 'free') RETURNING id, name, plan, created_at`,
+        [wName]
+      );
+      if (!createdWs) throw new Error('Failed to create workspace for user');
+      await query(
+        `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
+        [createdWs.id, user.id]
+      );
+      createdWs.role = 'owner';
+      workspace = createdWs;
+    }
+  } else {
+    // 2. Create new user
+    const dummyPasswordHash = hashPassword('google_oauth_' + crypto.randomUUID());
+    user = await queryOne<User>(
+      `INSERT INTO users (email, password_hash, name)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, name, created_at`,
+      [email, dummyPasswordHash, name]
+    );
+    if (!user) throw new Error('Failed to create Google user');
+
+    // 3. Create initial workspace
+    const wName = `${name || email.split('@')[0]}'s Workspace`;
+    const createdWs = await queryOne<Workspace>(
+      `INSERT INTO workspaces (name, plan) VALUES ($1, 'free') RETURNING id, name, plan, created_at`,
+      [wName]
+    );
+    if (!createdWs) throw new Error('Failed to create workspace');
+    await query(
+      `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')`,
+      [createdWs.id, user.id]
+    );
+    createdWs.role = 'owner';
+    workspace = createdWs;
+  }
+
+  // 4. Generate 30-day session token
+  const exp = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+  const token = signToken({
+    userId: user.id,
+    workspaceId: workspace.id,
+    email: user.email,
+    role: workspace.role || 'owner',
+    exp,
+  });
+
+  return { user, workspace, token };
+}
+
 export interface RequestWithCookies {
   cookies: {
     get: (name: string) => { value: string } | undefined;
@@ -197,28 +293,13 @@ export interface RequestWithCookies {
  */
 export async function getAuthSession(
   req: RequestWithCookies,
-  fallbackToDefault = false
+  _fallbackToDefault = false
 ): Promise<SessionPayload | null> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (token) {
     const payload = verifyToken(token);
     if (payload) {
       return payload;
-    }
-  }
-
-  if (fallbackToDefault) {
-    const defaultWs = await queryOne<{ id: string }>(
-      `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-    );
-    if (defaultWs) {
-      return {
-        userId: '00000000-0000-0000-0000-000000000000',
-        workspaceId: defaultWs.id,
-        email: 'guest@ballast.local',
-        role: 'member',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      };
     }
   }
 

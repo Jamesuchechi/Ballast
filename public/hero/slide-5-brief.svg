@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bgGrad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050608"/>
+      <stop offset="50%" stop-color="#0a1216"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bgGrad5)"/>
+
+  <!-- Grid -->
+  <g opacity="0.08" stroke="#10b981" stroke-width="1">
+    <pattern id="grid5" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40"/>
+    </pattern>
+    <rect width="1600" height="900" fill="url(#grid5)"/>
+  </g>
+
+  <!-- Ambient Glow -->
+  <circle cx="800" cy="450" r="350" fill="#10b981" opacity="0.1"/>
+
+  <!-- Window Frame -->
+  <rect x="80" y="70" width="1440" height="760" rx="16" fill="#0d0f15" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+  <!-- Top Bar -->
+  <rect x="80" y="70" width="1440" height="54" rx="16" fill="#121520"/>
+  <rect x="80" y="108" width="1440" height="16" fill="#121520"/>
+  <line x1="80" y1="124" x2="1520" y2="124" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Window Dots -->
+  <circle cx="120" cy="97" r="6" fill="#ef4444"/>
+  <circle cx="140" cy="97" r="6" fill="#f59e0b"/>
+  <circle cx="160" cy="97" r="6" fill="#10b981"/>
+
+  <!-- Title -->
+  <text x="190" y="102" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600">
+    BALLAST OS // MODULE 05: FROZEN 8-SECTION CANONICAL BRIEF
+  </text>
+  <rect x="1310" y="85" width="170" height="26" rx="6" fill="rgba(16,185,129,0.15)" stroke="#10b981" stroke-width="1"/>
+  <text x="1335" y="102" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+    ● BRIEF PUBLISHED
+  </text>
+
+  <!-- Main Brief Document Surface -->
+  <g transform="translate(120, 155)">
+    <!-- Document Container with Paper Texture / Slate Border -->
+    <rect width="1320" height="610" rx="12" fill="#121520" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+    <!-- Document Header -->
+    <g transform="translate(36, 30)">
+      <rect width="1248" height="60" rx="8" fill="#181c2b"/>
+      <text x="24" y="36" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="20" font-weight="700">
+        Brief: Q3 Engineering Deliverables, Stripe Webhook &amp; Blockers
+      </text>
+      <text x="960" y="36" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="13">
+        2026-09-12 UTC • Version 1.0
+      </text>
+    </g>
+
+    <!-- 4 Structured Sections Grid -->
+    <g transform="translate(36, 110)">
+      <!-- Section 1: Executive Answer -->
+      <g>
+        <rect width="608" height="230" rx="10" fill="#181c2b" stroke="rgba(16,185,129,0.25)" stroke-width="1"/>
+        <text x="24" y="34" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700">
+          ## 1. EXECUTIVE ANSWER
+        </text>
+        <g transform="translate(24, 60)">
+          <circle cx="6" cy="6" r="3" fill="#10b981"/>
+          <text x="18" y="10" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="14" font-weight="500">
+            Stripe webhook handler deployed to staging and passing integration tests.
+          </text>
+
+          <circle cx="6" cy="36" r="3" fill="#10b981"/>
+          <text x="18" y="40" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="14" font-weight="500">
+            Production Redis socket connection leak fixed in PR #142.
+          </text>
+
+          <circle cx="6" cy="66" r="3" fill="#f59e0b"/>
+          <text x="18" y="70" fill="#fcd34d" font-family="-apple-system, sans-serif" font-size="14" font-weight="600">
+            Active conflict surfaced between Product Roadmap (Oct 15) and Exec Sync (Nov 12).
+          </text>
+
+          <circle cx="6" cy="96" r="3" fill="#10b981"/>
+          <text x="18" y="100" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="14" font-weight="500">
+            Alex is pending merchant authorization; staging payments live in test mode.
+          </text>
+        </g>
+      </g>
+
+      <!-- Section 2: Grounded Key Evidence -->
+      <g transform="translate(640, 0)">
+        <rect width="608" height="230" rx="10" fill="#181c2b" stroke="rgba(6,182,212,0.25)" stroke-width="1"/>
+        <text x="24" y="34" fill="#06b6d4" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700">
+          ## 2. KEY EVIDENCE &amp; GROUNDED CITATIONS
+        </text>
+        <g transform="translate(24, 55)">
+          <rect width="560" height="42" rx="6" fill="#10131d"/>
+          <text x="14" y="26" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="12">
+            [CITE: gmail:thread_01] “Handler deployed to staging and passing tests...”
+          </text>
+
+          <rect y="52" width="560" height="42" rx="6" fill="#10131d"/>
+          <text x="14" y="78" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="12">
+            [CITE: github:pr_142] “Explicitly calls client.disconnect() on backoff...”
+          </text>
+
+          <rect y="104" width="560" height="42" rx="6" fill="#10131d"/>
+          <text x="14" y="130" fill="#fcd34d" font-family="'JetBrains Mono', monospace" font-size="12">
+            [CONFLICT: doc_roadmap vs notes_exec] Oct 15 roadmap vs Nov 12 SOC2 audit
+          </text>
+        </g>
+      </g>
+
+      <!-- Section 3: Uncertain / Missing -->
+      <g transform="translate(0, 250)">
+        <rect width="608" height="200" rx="10" fill="#181c2b" stroke="rgba(245,158,11,0.25)" stroke-width="1"/>
+        <text x="24" y="34" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700">
+          ## 3. UNCERTAIN / MISSING IN RECORDS
+        </text>
+        <g transform="translate(24, 60)">
+          <circle cx="6" cy="6" r="3" fill="#f59e0b"/>
+          <text x="18" y="10" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="14">
+            No promised completion date from legal for revised consumer terms.
+          </text>
+          <circle cx="6" cy="36" r="3" fill="#f59e0b"/>
+          <text x="18" y="40" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="14">
+            Total marketing spend for Q4 unconfirmed in finance archives.
+          </text>
+        </g>
+      </g>
+
+      <!-- Section 4: Mandatory What I Did Not Do -->
+      <g transform="translate(640, 250)">
+        <rect width="608" height="200" rx="10" fill="#181c2b" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+        <text x="24" y="34" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700">
+          ## 4. WHAT I DID NOT DO (MANDATORY AUDIT)
+        </text>
+        <g transform="translate(24, 60)">
+          <circle cx="6" cy="6" r="3" fill="#64748b"/>
+          <text x="18" y="10" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="14">
+            Did not invent estimated legal completion deadlines absent from records.
+          </text>
+          <circle cx="6" cy="36" r="3" fill="#64748b"/>
+          <text x="18" y="40" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="14">
+            Withheld unapproved draft actions until operator signs off.
+          </text>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

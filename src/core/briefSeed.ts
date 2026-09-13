@@ -12,7 +12,17 @@ export interface SeedBriefResult {
   markdown: string;
 }
 
+function assertDevOrTestFixture() {
+  const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+  if (!isMockAllowed) {
+    throw new Error(
+      '[briefSeed] Seeding briefs is strictly permitted in dev/eval/test environments (EVAL_USE_MOCK=true or NODE_ENV=test). Live runtime fabrication of briefs is prohibited.'
+    );
+  }
+}
+
 export async function seedCanonicalBrief(workspaceId: string): Promise<SeedBriefResult> {
+  assertDevOrTestFixture();
   const briefId = crypto.randomUUID();
   const sourceId = crypto.randomUUID();
   const title = 'Q3 Billing Revamp Status & Outstanding Deliverables';
@@ -237,6 +247,7 @@ export async function seedCanonicalBrief(workspaceId: string): Promise<SeedBrief
 }
 
 export async function seedCanonicalWorldBrief(workspaceId: string): Promise<SeedBriefResult> {
+  assertDevOrTestFixture();
   const briefId = crypto.randomUUID();
   const privateSourceId = crypto.randomUUID();
   const webSourceId = crypto.randomUUID();

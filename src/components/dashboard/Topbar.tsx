@@ -124,7 +124,7 @@ export function Topbar({
           </Link>
         )}
 
-        {/* Create / Seed Brief button */}
+        {/* Create Brief button */}
         <button
           onClick={onCreateBrief}
           disabled={actionLoading}
@@ -134,10 +134,10 @@ export function Topbar({
             background: mode === 'world' ? 'linear-gradient(135deg, #0891b2, #06b6d4)' : undefined,
             borderColor: mode === 'world' ? '#0891b2' : undefined,
           }}
-          title={`Seed a verified canonical brief for ${mode} mode`}
+          title={`Ask a question to generate a ${mode} brief`}
         >
           <PlusCircle size={15} />
-          <span>Seed {mode === 'world' ? 'World' : 'Home'} Brief</span>
+          <span>New {mode === 'world' ? 'World' : 'Home'} Brief</span>
         </button>
 
         {/* Right Sidebar Context Inspector Toggle */}

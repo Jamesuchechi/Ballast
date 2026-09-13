@@ -4,12 +4,10 @@ import React, { useState } from "react";
 import {
   ShieldCheck,
   FileText,
-  AlertTriangle,
   GitPullRequest,
   Mail,
   CheckCircle2,
   XCircle,
-  ExternalLink,
   Lock,
 } from "lucide-react";
 
@@ -112,9 +110,9 @@ export function MockupView() {
         >
           {/* Window control dots */}
           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ff5f56" }} />
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ffbd2e" }} />
-            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#27c93f" }} />
+            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }} />
+            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f59e0b" }} />
+            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981" }} />
             <span
               className="desktop-only"
               style={{ marginLeft: "12px", fontSize: "0.78rem", color: "var(--text-subtle)", fontFamily: "var(--font-mono)" }}
@@ -142,7 +140,7 @@ export function MockupView() {
               whiteSpace: "nowrap",
             }}
           >
-            <Lock size={11} color="#22c55e" style={{ flexShrink: 0 }} />
+            <Lock size={11} color="#10b981" style={{ flexShrink: 0 }} />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               app.ballast.os/briefs/b-8429
             </span>
@@ -154,14 +152,14 @@ export function MockupView() {
               onClick={() => setSelectedMode("home")}
               style={{
                 background: selectedMode === "home" ? "var(--accent)" : "transparent",
-                color: selectedMode === "home" ? "#ffffff" : "var(--text-subtle)",
+                color: selectedMode === "home" ? "#022c22" : "var(--text-subtle)",
                 border: "none",
                 fontSize: "clamp(0.68rem, 1.8vw, 0.72rem)",
                 fontFamily: "var(--font-mono)",
-                padding: "3px 8px",
+                padding: "4px 8px",
                 borderRadius: "4px",
                 cursor: "pointer",
-                fontWeight: 600,
+                fontWeight: 700,
                 transition: "all 0.15s ease",
               }}
             >
@@ -171,14 +169,14 @@ export function MockupView() {
               onClick={() => setSelectedMode("world")}
               style={{
                 background: selectedMode === "world" ? "var(--accent)" : "transparent",
-                color: selectedMode === "world" ? "#ffffff" : "var(--text-subtle)",
+                color: selectedMode === "world" ? "#022c22" : "var(--text-subtle)",
                 border: "none",
                 fontSize: "clamp(0.68rem, 1.8vw, 0.72rem)",
                 fontFamily: "var(--font-mono)",
-                padding: "3px 8px",
+                padding: "4px 8px",
                 borderRadius: "4px",
                 cursor: "pointer",
-                fontWeight: 600,
+                fontWeight: 700,
                 transition: "all 0.15s ease",
               }}
             >
@@ -223,10 +221,10 @@ export function MockupView() {
                 borderRadius: "6px",
                 fontSize: "0.8rem",
                 cursor: "pointer",
-                fontWeight: 500,
+                fontWeight: 600,
                 flexShrink: 0,
                 whiteSpace: "nowrap",
-                boxShadow: activeTab === "brief" ? "0 2px 8px rgba(99, 102, 241, 0.15)" : "none",
+                boxShadow: activeTab === "brief" ? "0 2px 8px rgba(16, 185, 129, 0.2)" : "none",
                 transition: "all 0.15s ease",
               }}
             >
@@ -247,16 +245,16 @@ export function MockupView() {
                 borderRadius: "6px",
                 fontSize: "0.8rem",
                 cursor: "pointer",
-                fontWeight: 500,
+                fontWeight: 600,
                 flexShrink: 0,
                 whiteSpace: "nowrap",
-                boxShadow: activeTab === "critic" ? "0 2px 8px rgba(99, 102, 241, 0.15)" : "none",
+                boxShadow: activeTab === "critic" ? "0 2px 8px rgba(16, 185, 129, 0.2)" : "none",
                 transition: "all 0.15s ease",
               }}
             >
-              <ShieldCheck size={14} color="#22c55e" />
+              <ShieldCheck size={14} color="#10b981" />
               <span>Critic Gate</span>
-              <span style={{ fontSize: "0.66rem", background: "rgba(34, 197, 94, 0.2)", color: "#16a34a", padding: "1px 5px", borderRadius: "999px", fontWeight: 600 }}>
+              <span style={{ fontSize: "0.66rem", background: "rgba(16, 185, 129, 0.2)", color: "var(--accent-text)", padding: "1px 5px", borderRadius: "999px", fontWeight: 700 }}>
                 Active
               </span>
             </button>
@@ -274,10 +272,10 @@ export function MockupView() {
                 borderRadius: "6px",
                 fontSize: "0.8rem",
                 cursor: "pointer",
-                fontWeight: 500,
+                fontWeight: 600,
                 flexShrink: 0,
                 whiteSpace: "nowrap",
-                boxShadow: activeTab === "sources" ? "0 2px 8px rgba(99, 102, 241, 0.15)" : "none",
+                boxShadow: activeTab === "sources" ? "0 2px 8px rgba(16, 185, 129, 0.2)" : "none",
                 transition: "all 0.15s ease",
               }}
             >
@@ -292,14 +290,14 @@ export function MockupView() {
             </span>
             <div
               style={{
-                background: "rgba(34, 197, 94, 0.15)",
-                color: "#16a34a",
-                border: "1px solid rgba(34, 197, 94, 0.3)",
+                background: "rgba(16, 185, 129, 0.15)",
+                color: "var(--accent-text)",
+                border: "1px solid rgba(16, 185, 129, 0.3)",
                 fontSize: "0.7rem",
                 fontFamily: "var(--font-mono)",
                 padding: "2px 6px",
                 borderRadius: "4px",
-                fontWeight: 600,
+                fontWeight: 700,
               }}
             >
               ● PUBLISHED
@@ -322,7 +320,7 @@ export function MockupView() {
 
               {/* Section 1: Answer */}
               <div style={{ marginBottom: "28px" }}>
-                <div style={{ fontSize: "0.78rem", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--accent-text)", marginBottom: "10px", fontWeight: 600 }}>
+                <div style={{ fontSize: "0.78rem", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--accent-text)", marginBottom: "10px", fontWeight: 700 }}>
                   ## Answer
                 </div>
                 <div
@@ -353,7 +351,7 @@ export function MockupView() {
 
               {/* Section 2: Interactive Evidence Claims */}
               <div style={{ marginBottom: "28px" }}>
-                <div style={{ fontSize: "0.78rem", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--accent-text)", marginBottom: "10px", fontWeight: 600 }}>
+                <div style={{ fontSize: "0.78rem", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--accent-text)", marginBottom: "10px", fontWeight: 700 }}>
                   ## Evidence (Click claim to inspect grounded quote)
                 </div>
 
@@ -371,19 +369,19 @@ export function MockupView() {
                           padding: "16px 20px",
                           cursor: "pointer",
                           transition: "all 0.15s ease",
-                          boxShadow: isSelected ? "0 4px 16px rgba(99, 102, 241, 0.12)" : "none",
+                          boxShadow: isSelected ? "0 4px 16px rgba(16, 185, 129, 0.15)" : "none",
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
                           <span
                             style={{
-                              background: item.status === "conflict" ? "rgba(245, 158, 11, 0.15)" : "rgba(99, 102, 241, 0.15)",
+                              background: item.status === "conflict" ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
                               color: item.status === "conflict" ? "#d97706" : "var(--accent-text)",
                               fontSize: "0.72rem",
                               fontFamily: "var(--font-mono)",
                               padding: "2px 8px",
                               borderRadius: "4px",
-                              fontWeight: 600,
+                              fontWeight: 700,
                             }}
                           >
                             [{item.type}] {item.source}
@@ -416,7 +414,7 @@ export function MockupView() {
               </div>
 
               {/* Section 3: Uncertain & What I Did Not Do */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "16px" }}>
                 <div
                   style={{
                     background: "rgba(245, 158, 11, 0.08)",
@@ -425,7 +423,7 @@ export function MockupView() {
                     padding: "16px 20px",
                   }}
                 >
-                  <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "#d97706", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", fontWeight: 600 }}>
+                  <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "#d97706", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", fontWeight: 700 }}>
                     ## Uncertain / missing
                   </div>
                   <div style={{ fontSize: "0.85rem", color: "var(--text)", lineHeight: "1.5" }}>
@@ -442,7 +440,7 @@ export function MockupView() {
                     padding: "16px 20px",
                   }}
                 >
-                  <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", fontWeight: 600 }}>
+                  <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px", fontWeight: 700 }}>
                     ## What I did not do (Mandatory)
                   </div>
                   <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: "1.5" }}>
@@ -465,9 +463,9 @@ export function MockupView() {
                 </p>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-                <div style={{ background: "var(--card-bg)", border: "1px solid rgba(34, 197, 94, 0.35)", borderRadius: "10px", padding: "18px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#16a34a", fontWeight: 600, marginBottom: "12px", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "16px", marginBottom: "24px" }}>
+                <div style={{ background: "var(--card-bg)", border: "1px solid rgba(16, 185, 129, 0.35)", borderRadius: "10px", padding: "18px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--accent-text)", fontWeight: 700, marginBottom: "12px", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
                     <CheckCircle2 size={16} />
                     <span>KEPT CLAIMS (Grounded)</span>
                   </div>
@@ -479,7 +477,7 @@ export function MockupView() {
                 </div>
 
                 <div style={{ background: "var(--card-bg)", border: "1px solid rgba(239, 68, 68, 0.35)", borderRadius: "10px", padding: "18px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#dc2626", fontWeight: 600, marginBottom: "12px", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#dc2626", fontWeight: 700, marginBottom: "12px", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
                     <XCircle size={16} />
                     <span>DROPPED (Unsourced / Injection)</span>
                   </div>
@@ -509,7 +507,7 @@ export function MockupView() {
               </div>
 
               <div style={{ display: "grid", gap: "12px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--card-bg)", border: "1px solid var(--card-border)", padding: "16px 20px", borderRadius: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--card-bg)", border: "1px solid var(--card-border)", padding: "16px 20px", borderRadius: "10px", flexWrap: "wrap", gap: "10px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                     <Mail size={20} color="var(--accent)" />
                     <div>
@@ -519,12 +517,12 @@ export function MockupView() {
                       </div>
                     </div>
                   </div>
-                  <span style={{ fontSize: "0.75rem", color: "#16a34a", background: "rgba(34, 197, 94, 0.15)", padding: "3px 10px", borderRadius: "4px", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--accent-text)", background: "rgba(16, 185, 129, 0.15)", padding: "3px 10px", borderRadius: "4px", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
                     Healthy (synced 8m ago)
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--card-bg)", border: "1px solid var(--card-border)", padding: "16px 20px", borderRadius: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--card-bg)", border: "1px solid var(--card-border)", padding: "16px 20px", borderRadius: "10px", flexWrap: "wrap", gap: "10px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
                     <GitPullRequest size={20} color="var(--accent)" />
                     <div>
@@ -534,7 +532,7 @@ export function MockupView() {
                       </div>
                     </div>
                   </div>
-                  <span style={{ fontSize: "0.75rem", color: "#16a34a", background: "rgba(34, 197, 94, 0.15)", padding: "3px 10px", borderRadius: "4px", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--accent-text)", background: "rgba(16, 185, 129, 0.15)", padding: "3px 10px", borderRadius: "4px", fontFamily: "var(--font-mono)", fontWeight: 700 }}>
                     Healthy (synced 12m ago)
                   </span>
                 </div>

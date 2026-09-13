@@ -4,29 +4,29 @@ import React from "react";
 
 const rows = [
   {
-    feature: "Output",
-    them: "Ephemeral conversation",
-    ballast: "Versioned brief with a frozen skeleton",
+    feature: "Output Format",
+    them: "Ephemeral, rambling chat transcript",
+    ballast: "Versioned brief with a frozen 8-section skeleton",
   },
   {
-    feature: "Memory",
-    them: "Generic or implicit hallucinations",
+    feature: "Memory & Ingest",
+    them: "Implicit, unbounded hallucinations",
     ballast: "Connected sources, strictly labeled private vs. web",
   },
   {
-    feature: "Confidence",
-    them: "Sounds sure even when guessing",
-    ballast: "Forced Uncertain / missing & What I did not do",
+    feature: "Hallucinations",
+    them: "Sounds sure even when inventing facts",
+    ballast: "Critic gate suppresses any claim lacking exact quote citations",
   },
   {
-    feature: "Disagreement",
-    them: "Silently resolves or flips a coin",
+    feature: "Contradictions",
+    them: "Silently picks a winner or flips a coin",
     ballast: "First-class conflict citations naming both sides",
   },
   {
-    feature: "Writes / Actions",
-    them: "Often eager or ungrounded",
-    ballast: "Drafts only; zero execution without approval",
+    feature: "External Writes",
+    them: "Often eager or ungrounded executions",
+    ballast: "Drafts only; zero execution without explicit operator approval",
   },
   {
     feature: "Follow-ups",
@@ -41,7 +41,7 @@ export function ComparisonTable() {
       id="comparison"
       style={{
         padding: "60px 16px 100px",
-        maxWidth: "1040px",
+        maxWidth: "1080px",
         margin: "0 auto",
         overflow: "hidden",
         width: "100%",
@@ -50,13 +50,13 @@ export function ComparisonTable() {
       <div style={{ textAlign: "center", marginBottom: "36px" }}>
         <div
           style={{
-            fontSize: "0.8rem",
+            fontSize: "0.78rem",
             fontFamily: "var(--font-mono)",
             color: "var(--accent-text)",
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
+            letterSpacing: "0.1em",
             marginBottom: "12px",
-            fontWeight: 600,
+            fontWeight: 700,
           }}
         >
           The Difference
@@ -64,7 +64,7 @@ export function ComparisonTable() {
         <h2
           style={{
             fontSize: "clamp(1.85rem, 4vw, 3.2rem)",
-            fontWeight: 600,
+            fontWeight: 700,
             letterSpacing: "-0.03em",
             color: "var(--text)",
           }}
@@ -99,7 +99,7 @@ export function ComparisonTable() {
                   textAlign: "left",
                   background: "var(--table-header-bg)",
                   fontFamily: "var(--font-mono)",
-                  fontSize: "0.8rem",
+                  fontSize: "0.78rem",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
                   color: "var(--text-muted)",
@@ -114,7 +114,7 @@ export function ComparisonTable() {
                   textAlign: "left",
                   background: "var(--table-header-bg)",
                   fontFamily: "var(--font-mono)",
-                  fontSize: "0.8rem",
+                  fontSize: "0.78rem",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
                   color: "var(--text-muted)",
@@ -129,12 +129,12 @@ export function ComparisonTable() {
                   textAlign: "left",
                   background: "var(--table-ballast-col)",
                   fontFamily: "var(--font-mono)",
-                  fontSize: "0.8rem",
+                  fontSize: "0.78rem",
                   textTransform: "uppercase",
                   letterSpacing: "0.08em",
                   color: "var(--accent-text)",
                   borderBottom: "1px solid var(--table-border)",
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 Ballast Briefing OS
@@ -175,7 +175,7 @@ export function ComparisonTable() {
                   style={{
                     padding: "18px 24px",
                     color: "var(--table-ballast-text)",
-                    fontWeight: 500,
+                    fontWeight: 600,
                     background: "var(--table-ballast-col)",
                     borderBottom:
                       idx === rows.length - 1
@@ -257,7 +257,7 @@ export function ComparisonTable() {
             <div
               style={{
                 background: "var(--table-ballast-col)",
-                border: "1px solid rgba(99, 102, 241, 0.25)",
+                border: "1px solid rgba(16, 185, 129, 0.28)",
                 borderRadius: "8px",
                 padding: "12px 14px",
               }}
@@ -270,12 +270,12 @@ export function ComparisonTable() {
                   letterSpacing: "0.08em",
                   marginBottom: "4px",
                   fontFamily: "var(--font-mono)",
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 ✓ Ballast Briefing OS
               </div>
-              <div style={{ fontSize: "0.9rem", color: "var(--table-ballast-text)", fontWeight: 500, lineHeight: 1.5 }}>
+              <div style={{ fontSize: "0.9rem", color: "var(--table-ballast-text)", fontWeight: 600, lineHeight: 1.5 }}>
                 {row.ballast}
               </div>
             </div>

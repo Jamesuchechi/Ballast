@@ -40,6 +40,7 @@ export interface SidebarProps {
   accessLogsCount?: number;
   flagsCount?: number;
   telemetryAvgLatency?: number;
+  storageCount?: string | number;
   onCreateBrief?: () => void;
   actionLoading?: boolean;
   onLogout?: () => void;
@@ -72,6 +73,7 @@ export function Sidebar({
   accessLogsCount = 0,
   flagsCount = 0,
   telemetryAvgLatency,
+  storageCount,
   onCreateBrief,
   actionLoading = false,
   onLogout,
@@ -92,9 +94,9 @@ export function Sidebar({
           id: 'upload',
           label: 'Upload & Ingest',
           icon: UploadCloud,
-          count: '20 MB',
-          badgeColor: 'rgba(16, 185, 129, 0.12)',
-          badgeText: '#34d399',
+          count: storageCount,
+          badgeColor: storageCount ? 'rgba(16, 185, 129, 0.12)' : undefined,
+          badgeText: storageCount ? '#34d399' : undefined,
         },
         {
           id: 'actions',

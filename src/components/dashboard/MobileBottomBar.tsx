@@ -22,7 +22,7 @@ export function MobileBottomBar({
   onSelectSection,
   onToggleContext,
   onCreateBrief,
-  pendingActionsCount = 1,
+  pendingActionsCount = 0,
 }: MobileBottomBarProps) {
   return (
     <nav className="dash-bottom-bar">
@@ -70,7 +70,7 @@ export function MobileBottomBar({
         onClick={onCreateBrief}
         className="dash-bottom-fab"
         aria-label="Create New Brief"
-        title="Seed New Brief"
+        title="Create New Brief"
       >
         <Plus size={24} strokeWidth={2.8} />
       </button>

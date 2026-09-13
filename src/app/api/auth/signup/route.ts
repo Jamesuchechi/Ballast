@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUserWithWorkspace, COOKIE_NAME } from '@/lib/auth';
-import { seedCanonicalBrief } from '@/core/briefSeed';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,13 +26,6 @@ export async function POST(req: NextRequest) {
       name,
       workspaceName,
     });
-
-    // Seed canonical brief into the new workspace so the user starts with immediate value
-    try {
-      await seedCanonicalBrief(workspace.id);
-    } catch (seedErr) {
-      console.warn('Initial brief seed warning:', seedErr);
-    }
 
     const response = NextResponse.json({
       user,

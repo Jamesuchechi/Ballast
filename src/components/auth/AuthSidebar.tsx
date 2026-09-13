@@ -41,53 +41,25 @@ export function AuthSidebar({
         color: "#ffffff",
         overflow: "hidden",
         backgroundColor: "#050608",
+        backgroundImage:
+          "radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px)",
+        backgroundSize: "28px 28px",
         minHeight: "100%",
       }}
     >
-      {/* Cinematic background image */}
+      {/* Subtle emerald ambient glow */}
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          backgroundImage: "url('/hero-bg.jpg')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          animation: "heroZoom 24s ease-in-out infinite alternate",
-          zIndex: 0,
-        }}
-      />
-
-      {/* Vignette and dark overlays */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.7) 50%, #000000 100%)",
-          zIndex: 1,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse at 30% 40%, transparent 20%, #000000 95%)",
-          zIndex: 1,
-        }}
-      />
-
-      {/* Film grain texture */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          opacity: 0.06,
-          mixBlendMode: "overlay",
-          backgroundImage:
-            'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'160\' height=\'160\'><filter id=\'n\'><feTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'2\'/></filter><rect width=\'100%\' height=\'100%\' filter=\'url(%23n)\' opacity=\'0.5\'/></svg>")',
+          top: "20%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "360px",
+          height: "360px",
+          background: "radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%)",
+          filter: "blur(60px)",
           pointerEvents: "none",
-          zIndex: 2,
+          zIndex: 0,
         }}
       />
 
@@ -110,11 +82,25 @@ export function AuthSidebar({
             color: "#ffffff",
             textDecoration: "none",
             fontSize: "1.2rem",
-            fontWeight: 600,
+            fontWeight: 700,
             letterSpacing: "-0.02em",
           }}
         >
-          <Anchor size={22} color="#ffffff" strokeWidth={2.4} />
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              background: "rgba(16, 185, 129, 0.15)",
+              border: "1px solid rgba(16, 185, 129, 0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#10b981",
+            }}
+          >
+            <Anchor size={18} strokeWidth={2.4} />
+          </div>
           <span>Ballast</span>
         </Link>
       </div>
@@ -132,12 +118,11 @@ export function AuthSidebar({
           <h1
             style={{
               fontSize: "clamp(2.4rem, 3.8vw, 3.4rem)",
-              fontWeight: 600,
+              fontWeight: 800,
               letterSpacing: "-0.03em",
               lineHeight: 1.05,
               color: "#ffffff",
               marginBottom: "16px",
-              textShadow: "0 4px 20px rgba(0, 0, 0, 0.6)",
             }}
           >
             {headline}
@@ -145,8 +130,8 @@ export function AuthSidebar({
           <p
             style={{
               fontSize: "1.05rem",
-              color: "rgba(255, 255, 255, 0.7)",
-              fontWeight: 300,
+              color: "#94a3b8",
+              fontWeight: 400,
               lineHeight: 1.6,
             }}
           >
@@ -165,7 +150,7 @@ export function AuthSidebar({
                   alignItems: "center",
                   gap: "12px",
                   fontSize: "0.92rem",
-                  color: "rgba(255, 255, 255, 0.85)",
+                  color: "#cbd5e1",
                 }}
               >
                 <div
@@ -173,16 +158,15 @@ export function AuthSidebar({
                     width: "32px",
                     height: "32px",
                     borderRadius: "8px",
-                    background: "rgba(255, 255, 255, 0.1)",
-                    border: "1px solid rgba(255, 255, 255, 0.15)",
-                    backdropFilter: "blur(8px)",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.25)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
                   }}
                 >
-                  <Icon size={16} color="#a5b4fc" />
+                  <Icon size={16} color="#10b981" />
                 </div>
                 <span>{f.label}</span>
               </div>
@@ -200,7 +184,7 @@ export function AuthSidebar({
           alignItems: "center",
           justifyContent: "space-between",
           fontSize: "0.8rem",
-          color: "rgba(255, 255, 255, 0.5)",
+          color: "#64748b",
           flexWrap: "wrap",
           gap: "12px",
         }}
@@ -212,11 +196,11 @@ export function AuthSidebar({
               width: "7px",
               height: "7px",
               borderRadius: "50%",
-              backgroundColor: "#22c55e",
-              boxShadow: "0 0 8px #22c55e",
+              backgroundColor: "#10b981",
+              boxShadow: "0 0 8px #10b981",
             }}
           />
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "#10b981" }}>
             Critic gate operational
           </span>
         </div>

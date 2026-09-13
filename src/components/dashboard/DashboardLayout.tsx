@@ -18,6 +18,7 @@ export interface DashboardLayoutProps {
   accessLogsCount?: number;
   flagsCount?: number;
   telemetryAvgLatency?: number;
+  storageCount?: string | number;
   activeSection: string;
   onSelectSection: (section: string) => void;
   mode: 'home' | 'world';
@@ -46,6 +47,7 @@ export function DashboardLayout({
   accessLogsCount,
   flagsCount,
   telemetryAvgLatency,
+  storageCount,
   activeSection,
   onSelectSection,
   mode,
@@ -93,6 +95,7 @@ export function DashboardLayout({
           accessLogsCount={accessLogsCount}
           flagsCount={flagsCount}
           telemetryAvgLatency={telemetryAvgLatency}
+          storageCount={storageCount}
           onCreateBrief={onCreateBrief}
           actionLoading={actionLoading}
           onLogout={onLogout}

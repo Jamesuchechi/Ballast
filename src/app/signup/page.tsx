@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Mail, Lock, Anchor, ArrowLeft, ArrowRight, ShieldCheck, FileText, Sparkles } from "lucide-react";
@@ -16,6 +16,19 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const msg = params.get("message");
+      const err = params.get("error");
+      if (msg) {
+        setError(msg);
+      } else if (err) {
+        setError(`Sign up failed: ${err.replace(/_/g, " ")}`);
+      }
+    }
+  }, []);
+
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Full name is required";
@@ -26,6 +39,16 @@ export default function SignupPage() {
     else if (password.length < 8) errs.password = "Password must be at least 8 characters";
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const handleGoogleSignIn = () => {
+    setSubmitting(true);
+    setError("");
+    const fromPath =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("from") || "/app"
+        : "/app";
+    window.location.href = `/api/auth/google?from=${encodeURIComponent(fromPath)}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +67,11 @@ export default function SignupPage() {
       if (!res.ok) {
         throw new Error(data.error || "Failed to create account");
       }
-      router.push("/app");
+      const fromPath =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("from") || "/app"
+          : "/app";
+      router.push(fromPath);
     } catch (err: any) {
       setError(err?.message || "Something went wrong. Please try again.");
     } finally {
@@ -165,10 +192,8 @@ export default function SignupPage() {
           {/* Google Sign-in Button */}
           <button
             type="button"
-            onClick={() => {
-              setSubmitting(true);
-              setTimeout(() => router.push("/app"), 600);
-            }}
+            onClick={handleGoogleSignIn}
+            disabled={submitting}
             style={{
               width: "100%",
               height: "44px",

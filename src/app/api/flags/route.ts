@@ -6,17 +6,10 @@ export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const payload = token ? verifyToken(token) : null;
-    let workspaceId: string | null = payload?.workspaceId || null;
-
-    if (!workspaceId) {
-      const defaultWs = await queryOne<{ id: string }>(
-        `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-      );
-      if (!defaultWs) {
-        return NextResponse.json({ flags: [] });
-      }
-      workspaceId = defaultWs.id;
+    if (!payload || !payload.workspaceId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const workspaceId = payload.workspaceId;
 
     const flags = await query(
       `SELECT 
@@ -49,17 +42,10 @@ export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get(COOKIE_NAME)?.value;
     const payload = token ? verifyToken(token) : null;
-    let workspaceId: string | null = payload?.workspaceId || null;
-
-    if (!workspaceId) {
-      const defaultWs = await queryOne<{ id: string }>(
-        `SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1`
-      );
-      if (!defaultWs) {
-        return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
-      }
-      workspaceId = defaultWs.id;
+    if (!payload || !payload.workspaceId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const workspaceId = payload.workspaceId;
 
     const body = await req.json();
     const { brief_id, citation_id, claim_text, kind = 'unsupported', note } = body;

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bgGrad7" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050608"/>
+      <stop offset="50%" stop-color="#081014"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bgGrad7)"/>
+
+  <!-- Grid -->
+  <g opacity="0.08" stroke="#10b981" stroke-width="1">
+    <pattern id="grid7" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40"/>
+    </pattern>
+    <rect width="1600" height="900" fill="url(#grid7)"/>
+  </g>
+
+  <!-- Ambient Glow -->
+  <circle cx="800" cy="450" r="350" fill="#10b981" opacity="0.1"/>
+
+  <!-- Window Frame -->
+  <rect x="80" y="70" width="1440" height="760" rx="16" fill="#0d0f15" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+  <!-- Top Bar -->
+  <rect x="80" y="70" width="1440" height="54" rx="16" fill="#121520"/>
+  <rect x="80" y="108" width="1440" height="16" fill="#121520"/>
+  <line x1="80" y1="124" x2="1520" y2="124" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Window Dots -->
+  <circle cx="120" cy="97" r="6" fill="#ef4444"/>
+  <circle cx="140" cy="97" r="6" fill="#f59e0b"/>
+  <circle cx="160" cy="97" r="6" fill="#10b981"/>
+
+  <!-- Title -->
+  <text x="190" y="102" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600">
+    BALLAST OS // MODULE 07: RUNTIME TELEMETRY, TOKEN ECONOMICS &amp; CIRCUIT BREAKER
+  </text>
+  <rect x="1270" y="85" width="210" height="26" rx="6" fill="rgba(16,185,129,0.15)" stroke="#10b981" stroke-width="1"/>
+  <text x="1295" y="102" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+    ● METRICS RECORDED
+  </text>
+
+  <!-- 4 Big Gauges -->
+  <g transform="translate(120, 160)">
+    <g transform="translate(0, 0)">
+      <rect width="310" height="180" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="24" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">PIPELINE LATENCY</text>
+      <text x="24" y="90" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="44" font-weight="800">380 ms</text>
+      <text x="24" y="125" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="13">↓ 42 ms vs baseline</text>
+      <text x="24" y="150" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">Critic evaluation + DB commit</text>
+    </g>
+
+    <g transform="translate(335, 0)">
+      <rect width="310" height="180" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="24" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">TOKEN ALLOCATION</text>
+      <text x="24" y="90" fill="#06b6d4" font-family="-apple-system, sans-serif" font-size="44" font-weight="800">1,420 / 312</text>
+      <text x="24" y="125" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="13">Tokens In / Out</text>
+      <text x="24" y="150" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">Exact prompt + completion log</text>
+    </g>
+
+    <g transform="translate(670, 0)">
+      <rect width="310" height="180" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="24" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">EXACT INVOCATION COST</text>
+      <text x="24" y="90" fill="#10b981" font-family="-apple-system, sans-serif" font-size="44" font-weight="800">$0.0028</text>
+      <text x="24" y="125" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="13">Micro-dollar accounting</text>
+      <text x="24" y="150" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">Runs table ledger logged</text>
+    </g>
+
+    <g transform="translate(1005, 0)">
+      <rect width="315" height="180" rx="12" fill="#141722" stroke="rgba(16,185,129,0.3)" stroke-width="1.5"/>
+      <text x="24" y="36" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">CIRCUIT BREAKER</text>
+      <text x="24" y="90" fill="#10b981" font-family="-apple-system, sans-serif" font-size="44" font-weight="800">ARMED</text>
+      <text x="24" y="125" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="13">● CLEAN (0 Trips)</text>
+      <text x="24" y="150" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="11">Auto-failsafe watchdog active</text>
+    </g>
+
+    <!-- Lower Execution Stream Table -->
+    <g transform="translate(0, 210)">
+      <rect width="1320" height="370" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="28" y="38" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="18" font-weight="700">
+        Postgres `runs` Row Telemetry Stream
+      </text>
+      <text x="28" y="60" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+        ZERO SEED/DEMO VALUES &bull; HONEST RUNTIME DATA AUDIT
+      </text>
+
+      <rect x="28" y="80" width="1264" height="260" rx="8" fill="#090a0f" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+      <g transform="translate(48, 115)">
+        <text x="0" y="0" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="14">
+          {
+        </text>
+        <text x="24" y="24" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "run_id": "run_b8429_exec_01",
+        </text>
+        <text x="24" y="48" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "workspace_id": "ws_acme_eng_prod",
+        </text>
+        <text x="24" y="72" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "mode": "home",
+        </text>
+        <text x="24" y="96" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "latency_ms": 380,
+        </text>
+        <text x="24" y="120" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "tokens_in": 1420, "tokens_out": 312,
+        </text>
+        <text x="24" y="144" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14">
+          "cost": 0.0028,
+        </text>
+        <text x="24" y="168" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="14">
+          "circuit_broken": false, "status": "completed"
+        </text>
+        <text x="0" y="192" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="14">
+          }
+        </text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bgGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050608"/>
+      <stop offset="50%" stop-color="#0a1216"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bgGrad3)"/>
+
+  <!-- Grid -->
+  <g opacity="0.08" stroke="#10b981" stroke-width="1">
+    <pattern id="grid3" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40"/>
+    </pattern>
+    <rect width="1600" height="900" fill="url(#grid3)"/>
+  </g>
+
+  <!-- Ambient Glow -->
+  <circle cx="800" cy="450" r="350" fill="#10b981" opacity="0.1"/>
+
+  <!-- Window Frame -->
+  <rect x="80" y="70" width="1440" height="760" rx="16" fill="#0d0f15" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+  <!-- Top Bar -->
+  <rect x="80" y="70" width="1440" height="54" rx="16" fill="#121520"/>
+  <rect x="80" y="108" width="1440" height="16" fill="#121520"/>
+  <line x1="80" y1="124" x2="1520" y2="124" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Window Dots -->
+  <circle cx="120" cy="97" r="6" fill="#ef4444"/>
+  <circle cx="140" cy="97" r="6" fill="#f59e0b"/>
+  <circle cx="160" cy="97" r="6" fill="#10b981"/>
+
+  <!-- Title -->
+  <text x="190" y="102" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600">
+    BALLAST OS // MODULE 03: GROUNDED CITATION &amp; EVIDENCE INSPECTOR
+  </text>
+  <rect x="1310" y="85" width="170" height="26" rx="6" fill="rgba(16,185,129,0.15)" stroke="#10b981" stroke-width="1"/>
+  <text x="1328" y="102" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+    ● 100% EVIDENCE MATCH
+  </text>
+
+  <!-- Main Split Layout -->
+  <g transform="translate(120, 160)">
+    <!-- Left: Selected Claim In Brief -->
+    <rect width="640" height="600" rx="12" fill="#141722" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+    <text x="32" y="44" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="18" font-weight="700">
+      Published Brief Claim
+    </text>
+    <text x="32" y="68" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12">
+      STATEMENT #4 • VERIFIED &amp; CITABLE
+    </text>
+
+    <rect x="32" y="100" width="576" height="150" rx="8" fill="#1a2230" stroke="#10b981" stroke-width="1.5"/>
+    <text x="56" y="145" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="18" font-weight="600">
+      "Production Redis connection leak fixed in PR #142
+    </text>
+    <text x="56" y="175" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="18" font-weight="600">
+      by terminating orphan sockets upon retry backoff."
+    </text>
+    <rect x="56" y="200" width="140" height="24" rx="4" fill="rgba(16,185,129,0.2)"/>
+    <text x="68" y="217" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700">
+      [CITE: github:pr_142]
+    </text>
+
+    <!-- Connector Line representation -->
+    <path d="M 608 175 C 680 175, 760 260, 840 260" stroke="#10b981" stroke-width="2.5" fill="none" stroke-dasharray="6,4"/>
+
+    <g transform="translate(32, 280)">
+      <rect width="576" height="290" rx="8" fill="#11131a" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+      <text x="24" y="36" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="700">
+        CITATION VERIFICATION METADATA
+      </text>
+      <text x="24" y="70" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Connector Protocol:</text>
+      <text x="220" y="70" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="12">GitHub REST API v3 (Read-Only)</text>
+
+      <text x="24" y="105" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Commit Hash:</text>
+      <text x="220" y="105" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12">4f82a1b920c78e12</text>
+
+      <text x="24" y="140" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Author / Committer:</text>
+      <text x="220" y="140" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="12">Chen &lt;dev-chen@acme.com&gt;</text>
+
+      <text x="24" y="175" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Merge State:</text>
+      <text x="220" y="175" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="12">Merged into main (CI: green)</text>
+
+      <text x="24" y="210" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Ingest Timestamp:</text>
+      <text x="220" y="210" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">2026-09-12 16:18:42 UTC</text>
+
+      <text x="24" y="245" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="12">Span Hash:</text>
+      <text x="220" y="245" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">sha256:8b2a...39f1 (verified)</text>
+    </g>
+  </g>
+
+  <!-- Right: Ingested Source Document with Highlighted Excerpt -->
+  <g transform="translate(800, 160)">
+    <rect width="640" height="600" rx="12" fill="#141722" stroke="rgba(16,185,129,0.3)" stroke-width="1.5"/>
+    <text x="32" y="44" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="18" font-weight="700">
+      Verbatim Ingested Source
+    </text>
+    <text x="32" y="68" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="12">
+      TARGET SPAN // PROVENANCE GROUND TRUTH
+    </text>
+
+    <!-- Source Snippet Frame -->
+    <rect x="32" y="100" width="576" height="470" rx="8" fill="#090a0f" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+    
+    <!-- Code file bar -->
+    <rect x="32" y="100" width="576" height="36" rx="8" fill="#191c28"/>
+    <text x="52" y="124" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+      src/services/redis_pool.ts • Commit 4f82a1b
+    </text>
+
+    <g transform="translate(52, 160)">
+      <text x="0" y="20" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        138  async function reconnectWithBackoff(attempt: number) {
+      </text>
+      <text x="0" y="45" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        139    try {
+      </text>
+      <text x="0" y="70" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        140      await client.connect();
+      </text>
+      <text x="0" y="95" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        141    } catch (err) {
+      </text>
+
+      <!-- Highlighted Target Box -->
+      <rect x="-10" y="108" width="556" height="52" rx="6" fill="rgba(16,185,129,0.18)" stroke="#10b981" stroke-width="1.5"/>
+      <text x="0" y="128" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="700">
+        142      // Explicitly disconnect orphan socket before sleeping
+      </text>
+      <text x="0" y="150" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="700">
+        143      await client.disconnect();
+      </text>
+
+      <text x="0" y="185" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        144      const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+      </text>
+      <text x="0" y="210" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        145      await sleep(delay);
+      </text>
+      <text x="0" y="235" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        146      return reconnectWithBackoff(attempt + 1);
+      </text>
+      <text x="0" y="260" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        147    }
+      </text>
+      <text x="0" y="285" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">
+        148  }
+      </text>
+    </g>
+  </g>
+</svg>

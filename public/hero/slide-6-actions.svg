@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bgGrad6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050608"/>
+      <stop offset="50%" stop-color="#141008"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bgGrad6)"/>
+
+  <!-- Grid -->
+  <g opacity="0.08" stroke="#f59e0b" stroke-width="1">
+    <pattern id="grid6" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40"/>
+    </pattern>
+    <rect width="1600" height="900" fill="url(#grid6)"/>
+  </g>
+
+  <!-- Ambient Glow -->
+  <circle cx="800" cy="450" r="350" fill="#f59e0b" opacity="0.1"/>
+
+  <!-- Window Frame -->
+  <rect x="80" y="70" width="1440" height="760" rx="16" fill="#0d0f15" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+  <!-- Top Bar -->
+  <rect x="80" y="70" width="1440" height="54" rx="16" fill="#121520"/>
+  <rect x="80" y="108" width="1440" height="16" fill="#121520"/>
+  <line x1="80" y1="124" x2="1520" y2="124" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <!-- Window Dots -->
+  <circle cx="120" cy="97" r="6" fill="#ef4444"/>
+  <circle cx="140" cy="97" r="6" fill="#f59e0b"/>
+  <circle cx="160" cy="97" r="6" fill="#10b981"/>
+
+  <!-- Title -->
+  <text x="190" y="102" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="600">
+    BALLAST OS // MODULE 06: HUMAN-GATED ACTION DISPATCHER (ZERO UNGROUNDED WRITES)
+  </text>
+  <rect x="1270" y="85" width="210" height="26" rx="6" fill="rgba(245,158,11,0.15)" stroke="#f59e0b" stroke-width="1"/>
+  <text x="1288" y="102" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="700">
+    🔒 OPERATOR GATE ACTIVE
+  </text>
+
+  <!-- Action Cards Split -->
+  <g transform="translate(120, 160)">
+    <!-- Draft 1: Email Action -->
+    <rect width="640" height="600" rx="12" fill="#141722" stroke="rgba(245,158,11,0.3)" stroke-width="1.5"/>
+    <rect x="32" y="28" width="160" height="24" rx="4" fill="rgba(245,158,11,0.2)"/>
+    <text x="44" y="45" fill="#f59e0b" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700">
+      PROPOSAL // EMAIL DRAFT
+    </text>
+    <text x="210" y="45" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+      Target API: Google Workspace Gmail
+    </text>
+
+    <!-- Email Card -->
+    <g transform="translate(32, 75)">
+      <rect width="576" height="380" rx="8" fill="#090a0f" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="24" y="40" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">To:</text>
+      <text x="70" y="40" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="13">Sarah Nguyen &lt;sarah.nguyen@acme.com&gt;</text>
+
+      <text x="24" y="75" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">Subject:</text>
+      <text x="96" y="75" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="13">Re: Stripe Webhook Migration Sign-off</text>
+
+      <line x1="24" y1="95" x2="552" y2="95" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+      <text x="24" y="130" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15" line-height="1.5">
+        Hi Sarah,
+      </text>
+      <text x="24" y="165" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        Automated integration checks for the Stripe webhook handler (PR #142)
+      </text>
+      <text x="24" y="195" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        are now green on staging.
+      </text>
+      <text x="24" y="235" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        Before rolling to production, could you confirm merchant authorization
+      </text>
+      <text x="24" y="265" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        has cleared the compliance desk?
+      </text>
+      <text x="24" y="305" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        Best, Ballast Autonomous Briefing Engine
+      </text>
+    </g>
+
+    <!-- Action Buttons -->
+    <g transform="translate(32, 480)">
+      <rect width="270" height="52" rx="8" fill="#10b981"/>
+      <text x="65" y="32" fill="#022c22" font-family="-apple-system, sans-serif" font-size="15" font-weight="700">
+        ✓ Approve &amp; Send
+      </text>
+
+      <rect x="290" width="160" height="52" rx="8" fill="#1f181c" stroke="#ef4444" stroke-width="1"/>
+      <text x="335" y="32" fill="#f87171" font-family="-apple-system, sans-serif" font-size="15" font-weight="600">
+        ✕ Discard
+      </text>
+    </g>
+  </g>
+
+  <!-- Draft 2: GitHub Issue Draft -->
+  <g transform="translate(800, 160)">
+    <rect width="640" height="600" rx="12" fill="#141722" stroke="rgba(6,182,212,0.3)" stroke-width="1.5"/>
+    <rect x="32" y="28" width="180" height="24" rx="4" fill="rgba(6,182,212,0.2)"/>
+    <text x="44" y="45" fill="#06b6d4" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700">
+      PROPOSAL // GITHUB ISSUE
+    </text>
+    <text x="230" y="45" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="12">
+      Target: acme-inc/backend
+    </text>
+
+    <g transform="translate(32, 75)">
+      <rect width="576" height="380" rx="8" fill="#090a0f" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+      <text x="24" y="40" fill="#64748b" font-family="'JetBrains Mono', monospace" font-size="13">Title:</text>
+      <text x="80" y="40" fill="#ffffff" font-family="'JetBrains Mono', monospace" font-size="13">[Audit Conflict] Align Q3 launch schedule</text>
+
+      <line x1="24" y1="65" x2="552" y2="65" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+
+      <text x="24" y="105" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="15">
+        ## Discrepancy Summary
+      </text>
+      <text x="24" y="140" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="14">
+        A scheduling conflict was identified during brief generation:
+      </text>
+      <text x="24" y="180" fill="#fcd34d" font-family="'JetBrains Mono', monospace" font-size="13">
+        • doc_roadmap.md targets: October 15, 2026
+      </text>
+      <text x="24" y="210" fill="#fcd34d" font-family="'JetBrains Mono', monospace" font-size="13">
+        • exec_sync_0910.txt targets: November 12, 2026
+      </text>
+      <text x="24" y="260" fill="#cbd5e1" font-family="-apple-system, sans-serif" font-size="14">
+        Labels: `scheduling-conflict`, `soc2-audit`, `needs-alignment`
+      </text>
+    </g>
+
+    <g transform="translate(32, 480)">
+      <rect width="270" height="52" rx="8" fill="#06b6d4"/>
+      <text x="55" y="32" fill="#042f2e" font-family="-apple-system, sans-serif" font-size="15" font-weight="700">
+        ✓ Create Issue on GitHub
+      </text>
+
+      <rect x="290" width="160" height="52" rx="8" fill="#1f181c" stroke="#ef4444" stroke-width="1"/>
+      <text x="335" y="32" fill="#f87171" font-family="-apple-system, sans-serif" font-size="15" font-weight="600">
+        ✕ Discard
+      </text>
+    </g>
+  </g>
+</svg>
