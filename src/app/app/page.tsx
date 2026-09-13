@@ -1101,15 +1101,19 @@ export default function DashboardPage() {
       {/* SECTION: BRIEFS ARCHIVE                                   */}
       {/* ======================================================== */}
       {activeSection === 'briefs' && (
-        <div style={{ maxWidth: '980px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ maxWidth: '980px', width: '100%', boxSizing: 'border-box', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Query Bar for Grounded Ingestion */}
           <div
-            className="dash-card"
+            className="dash-card dash-query-card"
             style={{
-              padding: '16px 20px',
+              padding: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: '12px',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
+              overflow: 'hidden',
               border: mode === 'world' ? '1px solid rgba(6, 182, 212, 0.5)' : '1px solid rgba(16, 185, 129, 0.28)',
               background: mode === 'world'
                 ? 'linear-gradient(to right, rgba(6, 182, 212, 0.10), transparent)'
@@ -1119,7 +1123,7 @@ export default function DashboardPage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 }}>
                 <span
                   className="dash-badge"
                   style={{
@@ -1127,17 +1131,18 @@ export default function DashboardPage() {
                     color: mode === 'world' ? '#06b6d4' : '#10b981',
                     border: `1px solid ${mode === 'world' ? 'rgba(6, 182, 212, 0.5)' : 'rgba(16, 185, 129, 0.4)'}`,
                     fontWeight: 700,
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {mode === 'world' ? 'World Mode (Private + Web)' : 'Home Mode (Private Only)'}
                 </span>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)', minWidth: 0 }}>
                   {mode === 'world'
                     ? 'Dual-pass retrieval across workspace sources and snapshot-backed live web'
                     : 'Grounded retrieval strictly within workspace sources and mail'}
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setMode('home')}
@@ -1175,7 +1180,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="dash-query-input-row">
               <input
                 ref={queryInputRef}
                 type="text"
@@ -1188,12 +1193,15 @@ export default function DashboardPage() {
                 }}
                 placeholder={
                   mode === 'world'
-                    ? "Ask a World query across private docs & live web (e.g. 'What are Stripe webhook security requirements?' or enter a topic)..."
-                    : "Ask a question grounded in your uploads (e.g. 'What are the outstanding deliverables for Q3 revamp?')..."
+                    ? "Ask a World query across private docs & live web..."
+                    : "Ask a question grounded in your uploads..."
                 }
                 disabled={isGenerating}
                 style={{
-                  flex: 1,
+                  flex: '1 1 200px',
+                  minWidth: 0,
+                  width: '100%',
+                  boxSizing: 'border-box',
                   padding: '10px 14px',
                   borderRadius: '8px',
                   background: 'var(--card-bg-subtle)',
@@ -1209,9 +1217,10 @@ export default function DashboardPage() {
                 disabled={!queryPrompt.trim() || isGenerating}
                 className="dash-btn-primary"
                 style={{
-                  padding: '8px 18px',
+                  padding: '10px 18px',
                   fontSize: '0.82rem',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   background: mode === 'world' ? 'linear-gradient(135deg, #0891b2, #06b6d4)' : undefined,
                   borderColor: mode === 'world' ? '#0891b2' : undefined,
                 }}

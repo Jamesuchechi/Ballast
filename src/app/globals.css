@@ -358,8 +358,9 @@ body {
 
 @media (max-width: 767px) {
   .dash-scroll {
-    padding: 16px;
+    padding: 12px;
     padding-bottom: 90px;
+    overflow-x: hidden;
   }
 }
 
@@ -880,5 +881,35 @@ body {
 
 .dash-table tr:hover td {
   background: var(--card-bg-subtle);
+}
+
+/* Mobile Responsiveness for Query Bar and Dashboard Cards */
+.dash-query-card {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.dash-query-input-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .dash-query-input-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .dash-query-input-row button {
+    width: 100% !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+  .dash-card {
+    padding: 14px 12px !important;
+  }
 }
 
