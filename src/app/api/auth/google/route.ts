@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { findOrCreateGoogleUser, COOKIE_NAME } from '@/lib/auth';
 
+import { getGoogleAuthRedirectUri } from '@/lib/url';
+
 export async function GET(req: NextRequest) {
   try {
     const from = req.nextUrl.searchParams.get('from') || '/app';
@@ -40,10 +42,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Determine redirect URI: use GOOGLE_AUTH_REDIRECT_URI if set, otherwise default to origin
-    const redirectUri =
-      process.env.GOOGLE_AUTH_REDIRECT_URI ||
-      `${req.nextUrl.origin}/api/auth/google/callback`;
+    // Determine redirect URI dynamically for localhost or Vercel
+    const redirectUri = getGoogleAuthRedirectUri(req);
 
     // Secure random state containing target redirect path and nonce
     const statePayload = {

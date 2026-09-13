@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, Anchor } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { BallastMark } from "@/components/brand/BallastLogo";
 
 export function Footer() {
   return (
@@ -91,8 +92,8 @@ export function Footer() {
             gap: "16px",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Anchor size={16} color="var(--accent)" />
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <BallastMark size={20} />
             <span>Ballast OS © 2026. If it cannot cite, it does not state.</span>
           </div>
 

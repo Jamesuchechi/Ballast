@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Mail, Lock, Anchor, ArrowLeft, ArrowRight, ShieldCheck, FileText, Sparkles } from "lucide-react";
+import { User, Mail, Lock, ArrowLeft, ArrowRight, ShieldCheck, FileText, Sparkles } from "lucide-react";
 import { AuthSidebar } from "@/components/auth/AuthSidebar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { BallastLogo } from "@/components/brand/BallastLogo";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -160,15 +161,10 @@ export default function SignupPage() {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "8px",
-                color: "var(--text)",
                 textDecoration: "none",
-                fontWeight: 600,
-                fontSize: "1.1rem",
               }}
             >
-              <Anchor size={20} color="var(--accent)" strokeWidth={2.4} />
-              <span>Ballast</span>
+              <BallastLogo size={28} showBadge badgeText="OS" />
             </Link>
           </div>
 

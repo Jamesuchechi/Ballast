@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-  Compass,
   FileText,
   UploadCloud,
   CheckSquare,
@@ -25,6 +24,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { BallastLogo } from '@/components/brand/BallastLogo';
 
 export interface SidebarProps {
   user: any;
@@ -189,31 +189,8 @@ export function Sidebar({
       <aside className={`dash-sidebar ${isOpenMobile ? 'is-open' : ''}`}>
         {/* Workspace Brand Header */}
         <div className="dash-sidebar-header">
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: 'var(--text)' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#10b981',
-              }}
-            >
-              <Compass size={18} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontWeight: 600, fontSize: '0.92rem', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                Ballast
-                <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                  v1
-                </span>
-              </span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Personal Briefing OS</span>
-            </div>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+            <BallastLogo size={28} showBadge badgeText="v1" showSubtitle subtitleText="Personal Briefing OS" />
           </Link>
 
           {/* Close button on mobile */}

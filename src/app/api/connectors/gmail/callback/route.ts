@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storeEncryptedToken } from '@/connectors/tokenStore';
+import { getGmailRedirectUri } from '@/lib/url';
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.nextUrl.origin}/api/connectors/gmail/callback`;
+    const redirectUri = getGmailRedirectUri(req);
 
     if (!clientId || !clientSecret) {
       // Fallback mock token exchange

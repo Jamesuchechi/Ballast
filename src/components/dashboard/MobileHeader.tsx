@@ -2,7 +2,8 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Compass, Menu, Layers, Sun, Moon, PlusCircle } from 'lucide-react';
+import { Menu, Layers, Sun, Moon, PlusCircle } from 'lucide-react';
+import { BallastLogo } from '@/components/brand/BallastLogo';
 
 export interface MobileHeaderProps {
   onOpenSidebar: () => void;
@@ -31,25 +32,8 @@ export function MobileHeader({
           <Menu size={20} />
         </button>
 
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text)' }}>
-          <div
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '7px',
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#10b981',
-            }}
-          >
-            <Compass size={16} />
-          </div>
-          <span style={{ fontWeight: 600, fontSize: '0.92rem', letterSpacing: '-0.02em' }}>
-            Ballast
-          </span>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+          <BallastLogo size={24} />
         </Link>
       </div>
 

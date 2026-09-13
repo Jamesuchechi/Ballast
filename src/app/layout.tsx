@@ -6,6 +6,14 @@ export const metadata: Metadata = {
   title: "Ballast — Grounded Briefs From Your Own Sources",
   description:
     "Personal briefing OS. You ask something messy — about your inbox, your repos, your calendar, or docs — and get a dated, citable brief. If it cannot cite, it does not state.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -16,6 +24,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
         <script
           id="theme-initializer"
           suppressHydrationWarning

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none">
+  <!-- Brand Emblem (left) -->
+  <g transform="translate(4, 4) scale(0.4375)">
+    <!-- Outer Tile -->
+    <rect width="128" height="128" rx="28" fill="#050608"/>
+    <rect x="1" y="1" width="126" height="126" rx="27" stroke="url(#logoBorderGrad)" stroke-width="2"/>
+
+    <defs>
+      <linearGradient id="logoBorderGrad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#34d399" stop-opacity="0.6"/>
+        <stop offset="0.5" stop-color="#10b981" stop-opacity="0.3"/>
+        <stop offset="1" stop-color="#059669" stop-opacity="0.1"/>
+      </linearGradient>
+      <linearGradient id="logoCoreGrad" x1="20" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#6ee7b7"/>
+        <stop offset="0.2" stop-color="#34d399"/>
+        <stop offset="0.6" stop-color="#10b981"/>
+        <stop offset="1" stop-color="#059669"/>
+      </linearGradient>
+      <filter id="logoGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#10b981" flood-opacity="0.7"/>
+      </filter>
+    </defs>
+
+    <!-- Horizon Gyro Bar -->
+    <line x1="36" y1="48" x2="92" y2="48" stroke="url(#logoCoreGrad)" stroke-width="7" stroke-linecap="round" filter="url(#logoGlow)"/>
+    <!-- Top Gyro Pivot Ring -->
+    <circle cx="64" cy="32" r="10" stroke="url(#logoCoreGrad)" stroke-width="6.5" filter="url(#logoGlow)"/>
+    <circle cx="64" cy="32" r="3.5" fill="#34d399"/>
+    <!-- Central Keel Spine -->
+    <line x1="64" y1="42" x2="64" y2="96" stroke="url(#logoCoreGrad)" stroke-width="8" stroke-linecap="round" filter="url(#logoGlow)"/>
+    <!-- Symmetrical Dual-Fluke Ballast Anchor Arc -->
+    <path d="M34 70 C34 88, 47 101, 64 101 C81 101, 94 88, 94 70" stroke="url(#logoCoreGrad)" stroke-width="8" stroke-linecap="round" filter="url(#logoGlow)"/>
+    <!-- Left Fluke Tip -->
+    <path d="M26 70 L34 62 L42 70" stroke="url(#logoCoreGrad)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Right Fluke Tip -->
+    <path d="M86 70 L94 62 L102 70" stroke="url(#logoCoreGrad)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Central Citation Node -->
+    <polygon points="64,58 72,68 64,78 56,68" fill="#a7f3d0" filter="url(#logoGlow)"/>
+  </g>
+
+  <!-- Typography: BALLAST -->
+  <text x="74" y="37" font-family="'Geist', -apple-system, BlinkMacSystemFont, sans-serif" font-size="25" font-weight="800" fill="#ffffff" letter-spacing="-0.03em">
+    Ballast
+  </text>
+
+  <!-- Version Pill -->
+  <rect x="175" y="21" width="28" height="17" rx="4" fill="rgba(16, 185, 129, 0.15)" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1"/>
+  <text x="189" y="33" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600" fill="#34d399" text-anchor="middle">
+    OS
+  </text>
+
+  <!-- Subtitle -->
+  <text x="75" y="52" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="500" fill="#94a3b8" letter-spacing="0.08em">
+    PERSONAL BRIEFING OS
+  </text>
+</svg>

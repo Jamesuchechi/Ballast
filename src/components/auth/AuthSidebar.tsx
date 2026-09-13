@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { Anchor, ShieldCheck, FileText, Sparkles } from "lucide-react";
+import { ShieldCheck, FileText, Sparkles } from "lucide-react";
+import { BallastLogo } from "@/components/brand/BallastLogo";
 
 interface AuthSidebarProps {
   headline?: React.ReactNode;
@@ -76,32 +77,12 @@ export function AuthSidebar({
         <Link
           href="/"
           style={{
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: "10px",
-            color: "#ffffff",
             textDecoration: "none",
-            fontSize: "1.2rem",
-            fontWeight: 700,
-            letterSpacing: "-0.02em",
           }}
         >
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              background: "rgba(16, 185, 129, 0.15)",
-              border: "1px solid rgba(16, 185, 129, 0.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#10b981",
-            }}
-          >
-            <Anchor size={18} strokeWidth={2.4} />
-          </div>
-          <span>Ballast</span>
+          <BallastLogo size={32} showBadge badgeText="OS" />
         </Link>
       </div>
 

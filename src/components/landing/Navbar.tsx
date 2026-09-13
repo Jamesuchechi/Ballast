@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Anchor, Menu, X, ArrowRight, Terminal } from "lucide-react";
+import { Menu, X, ArrowRight, Terminal } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { BallastLogo } from "@/components/brand/BallastLogo";
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,31 +40,10 @@ export function Navbar() {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "10px",
-            fontSize: "1.15rem",
-            fontWeight: 700,
-            letterSpacing: "-0.02em",
-            color: "var(--text)",
             textDecoration: "none",
           }}
         >
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              background: "rgba(16, 185, 129, 0.14)",
-              border: "1px solid rgba(16, 185, 129, 0.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--accent)",
-              flexShrink: 0,
-            }}
-          >
-            <Anchor size={18} strokeWidth={2.4} />
-          </div>
-          <span>Ballast</span>
+          <BallastLogo size={28} showBadge badgeText="OS" />
         </Link>
 
         {/* Desktop Navigation */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findOrCreateGoogleUser, COOKIE_NAME } from '@/lib/auth';
+import { getGoogleAuthRedirectUri } from '@/lib/url';
 
 export async function GET(req: NextRequest) {
   const loginUrl = new URL('/login', req.url);
@@ -37,9 +38,7 @@ export async function GET(req: NextRequest) {
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri =
-      process.env.GOOGLE_AUTH_REDIRECT_URI ||
-      `${req.nextUrl.origin}/api/auth/google/callback`;
+    const redirectUri = getGoogleAuthRedirectUri(req);
 
     if (!clientId || !clientSecret) {
       loginUrl.searchParams.set('error', 'google_not_configured');

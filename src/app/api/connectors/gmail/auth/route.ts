@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storeEncryptedToken } from '@/connectors/tokenStore';
 import { getAuthSession } from '@/lib/auth';
+import { getGmailRedirectUri } from '@/lib/url';
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     const workspaceId = session.workspaceId;
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${req.nextUrl.origin}/api/connectors/gmail/callback`;
+    const redirectUri = getGmailRedirectUri(req);
     const wantsMock = req.nextUrl.searchParams.get('mock') === 'true';
     const isMockPermitted = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
 
