@@ -43,6 +43,7 @@ export function ProfileView({
   // Form state
   const [name, setName] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
+  const [plan, setPlan] = useState<'free' | 'pro' | 'operator'>('operator');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,6 +62,7 @@ export function ProfileView({
         if (data.stats) setStats(data.stats);
         setName(data.user?.name || '');
         setWorkspaceName(data.workspace?.name || '');
+        setPlan(data.workspace?.plan || 'operator');
       }
     } catch (err) {
       console.error('Failed to load profile:', err);
@@ -96,6 +98,7 @@ export function ProfileView({
         body: JSON.stringify({
           name: name.trim(),
           workspaceName: workspaceName.trim(),
+          plan: workspace?.role === 'owner' ? plan : undefined,
           currentPassword: currentPassword || undefined,
           newPassword: newPassword || undefined,
         }),
@@ -151,6 +154,7 @@ export function ProfileView({
                   setSuccessMsg(null);
                   setName(user?.name || '');
                   setWorkspaceName(workspace?.name || '');
+                  setPlan(workspace?.plan || 'operator');
                 }}
                 className="dash-btn-primary"
                 style={{ fontSize: '0.8rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -420,6 +424,35 @@ export function ProfileView({
                   Only workspace owners can rename the workspace.
                 </span>
               )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 500, color: 'var(--text)', marginBottom: '6px' }}>
+                Workspace Plan Tier (Testing & Dev)
+              </label>
+              <select
+                value={plan}
+                onChange={(e: any) => setPlan(e.target.value)}
+                disabled={workspace?.role !== 'owner'}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '6px',
+                  background: workspace?.role === 'owner' ? 'var(--input-bg)' : 'var(--card-border)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--text)',
+                  fontSize: '0.84rem',
+                  outline: 'none',
+                  cursor: workspace?.role === 'owner' ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <option value="operator">Operator Tier (Automated Schedules & Action Execution Enabled)</option>
+                <option value="pro">Pro Tier</option>
+                <option value="free">Free Tier</option>
+              </select>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                Pre-billing mode: switch tiers freely to test automated schedules, action approvals, and brief quotas.
+              </span>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/db/client';
@@ -67,14 +67,19 @@ export async function POST(
       console.warn('[Regenerate] BullMQ dispatch error (fallback to background task):', qErr);
     }
 
-    // 2. Schedule background execution via after() for serverless / worker-less environments
-    after(async () => {
-      try {
-        await processQueuedBrief(childBriefId);
-      } catch (procErr) {
-        console.error('[Regenerate] Background pipeline execution error:', procErr);
-      }
-    });
+    // 2. Schedule background execution asynchronously via setImmediate so response returns immediately (202)
+    // and processQueuedBrief runs in the event loop for worker-less / dev / serverless environments
+    try {
+      setImmediate(async () => {
+        try {
+          await processQueuedBrief(childBriefId);
+        } catch (procErr) {
+          console.error('[Regenerate] Background pipeline execution error:', procErr);
+        }
+      });
+    } catch (bgErr) {
+      console.warn('[Regenerate] Background trigger error:', bgErr);
+    }
 
     return NextResponse.json(
       {

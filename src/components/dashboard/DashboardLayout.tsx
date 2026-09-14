@@ -146,9 +146,9 @@ export function DashboardLayout({
       <MobileBottomBar
         activeSection={activeSection}
         onSelectSection={onSelectSection}
-        onToggleContext={() => setIsRightSidebarOpen((prev) => !prev)}
         onCreateBrief={onCreateBrief}
         pendingActionsCount={pendingActionsCount}
+        unreadNotificationsCount={unreadNotificationsCount}
       />
     </div>
   );

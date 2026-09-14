@@ -84,7 +84,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, workspaceName, currentPassword, newPassword } = body;
+    const { name, workspaceName, currentPassword, newPassword, plan } = body;
 
     // 1. Update user display name if provided
     if (typeof name === 'string' && name.trim().length > 0) {
@@ -94,17 +94,24 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // 2. Update workspace name if user is owner and workspaceName provided
-    if (typeof workspaceName === 'string' && workspaceName.trim().length > 0) {
-      if (payload.role !== 'owner') {
-        return NextResponse.json(
-          { error: 'Only workspace owner can rename the workspace' },
-          { status: 403 }
+    // 2. Update workspace name and/or plan if user is owner
+    if (payload.role === 'owner') {
+      if (typeof workspaceName === 'string' && workspaceName.trim().length > 0) {
+        await query(
+          `UPDATE workspaces SET name = $1 WHERE id = $2`,
+          [workspaceName.trim(), payload.workspaceId]
         );
       }
-      await query(
-        `UPDATE workspaces SET name = $1 WHERE id = $2`,
-        [workspaceName.trim(), payload.workspaceId]
+      if (typeof plan === 'string' && ['free', 'pro', 'operator'].includes(plan)) {
+        await query(
+          `UPDATE workspaces SET plan = $1 WHERE id = $2`,
+          [plan, payload.workspaceId]
+        );
+      }
+    } else if (workspaceName || plan) {
+      return NextResponse.json(
+        { error: 'Only workspace owner can update workspace settings' },
+        { status: 403 }
       );
     }
 

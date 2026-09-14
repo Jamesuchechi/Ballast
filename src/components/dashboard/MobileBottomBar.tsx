@@ -5,24 +5,25 @@ import {
   FileText,
   CheckSquare,
   Plus,
-  Layers,
+  Bell,
   Database,
 } from 'lucide-react';
 
 export interface MobileBottomBarProps {
   activeSection: string;
   onSelectSection: (section: string) => void;
-  onToggleContext: () => void;
+  onToggleContext?: () => void;
   onCreateBrief: () => void;
   pendingActionsCount?: number;
+  unreadNotificationsCount?: number;
 }
 
 export function MobileBottomBar({
   activeSection,
   onSelectSection,
-  onToggleContext,
   onCreateBrief,
   pendingActionsCount = 0,
+  unreadNotificationsCount = 0,
 }: MobileBottomBarProps) {
   return (
     <nav className="dash-bottom-bar">
@@ -39,6 +40,7 @@ export function MobileBottomBar({
       <button
         onClick={() => onSelectSection('actions')}
         className={`dash-bottom-btn ${activeSection === 'actions' ? 'is-active' : ''}`}
+        style={{ position: 'relative' }}
       >
         <CheckSquare size={19} />
         <span>Actions</span>
@@ -75,14 +77,36 @@ export function MobileBottomBar({
         <Plus size={24} strokeWidth={2.8} />
       </button>
 
-      {/* Context Inspector Tab */}
+      {/* Notifications / Alerts Tab */}
       <button
-        onClick={onToggleContext}
-        className="dash-bottom-btn"
-        title="Context Inspector"
+        onClick={() => onSelectSection('notifications')}
+        className={`dash-bottom-btn ${activeSection === 'notifications' ? 'is-active' : ''}`}
+        title="Notifications & Alerts"
+        style={{ position: 'relative' }}
       >
-        <Layers size={19} />
-        <span>Context</span>
+        <Bell size={19} />
+        <span>Alerts</span>
+        {unreadNotificationsCount > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '-2px',
+              right: '2px',
+              width: '15px',
+              height: '15px',
+              borderRadius: '50%',
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '9px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {unreadNotificationsCount}
+          </span>
+        )}
       </button>
 
       {/* Sources Tab */}

@@ -89,11 +89,12 @@ export async function createUserWithWorkspace(params: {
 
   // 2. Create Workspace
   const wName = workspaceName || `${user.name || user.email.split('@')[0]}'s Workspace`;
+  const defaultPlan = process.env.DEFAULT_WORKSPACE_PLAN || 'operator';
   const workspace = await queryOne<Workspace>(
     `INSERT INTO workspaces (name, plan)
-     VALUES ($1, 'free')
+     VALUES ($1, $2)
      RETURNING id, name, plan, created_at`,
-    [wName]
+    [wName, defaultPlan]
   );
 
   if (!workspace) {
@@ -228,9 +229,10 @@ export async function findOrCreateGoogleUser(params: {
     } else {
       // User exists but has no workspace: create one
       const wName = `${user.name || user.email.split('@')[0]}'s Workspace`;
+      const defaultPlan = process.env.DEFAULT_WORKSPACE_PLAN || 'operator';
       const createdWs = await queryOne<Workspace>(
-        `INSERT INTO workspaces (name, plan) VALUES ($1, 'free') RETURNING id, name, plan, created_at`,
-        [wName]
+        `INSERT INTO workspaces (name, plan) VALUES ($1, $2) RETURNING id, name, plan, created_at`,
+        [wName, defaultPlan]
       );
       if (!createdWs) throw new Error('Failed to create workspace for user');
       await query(
@@ -253,9 +255,10 @@ export async function findOrCreateGoogleUser(params: {
 
     // 3. Create initial workspace
     const wName = `${name || email.split('@')[0]}'s Workspace`;
+    const defaultPlan = process.env.DEFAULT_WORKSPACE_PLAN || 'operator';
     const createdWs = await queryOne<Workspace>(
-      `INSERT INTO workspaces (name, plan) VALUES ($1, 'free') RETURNING id, name, plan, created_at`,
-      [wName]
+      `INSERT INTO workspaces (name, plan) VALUES ($1, $2) RETURNING id, name, plan, created_at`,
+      [wName, defaultPlan]
     );
     if (!createdWs) throw new Error('Failed to create workspace');
     await query(
