@@ -118,6 +118,23 @@ Set the following environment variables in your Render service:
 | `MISTRAL_API_KEY` | Mistral AI API key | Same key as on Vercel |
 | `OPENROUTER_API_KEY`| OpenRouter API key | Same key as on Vercel |
 
+### Optional Cloud Object Storage (Cloudflare R2 / AWS S3)
+
+By default, Ballast automatically uses local filesystem storage (`.storage/`). If configured, Ballast will seamlessly switch to S3/R2 cloud storage for persistent PDF storage across worker restarts and redeploys:
+
+| Variable | Description | Example |
+| :--- | :--- | :--- |
+| `R2_BUCKET` | Cloudflare R2 or S3 bucket name | `ballast-artifacts` |
+| `R2_ACCOUNT_ID` | Cloudflare account ID (used to construct R2 endpoint) | `a1b2c3d4e5f6...` |
+| `R2_ACCESS_KEY_ID` | R2 or AWS access key ID | `AKIA...` |
+| `R2_SECRET_ACCESS_KEY` | R2 or AWS secret access key | `secret...` |
+| `S3_ENDPOINT` | *(Optional)* Custom S3 endpoint if not using R2 | `https://s3.us-east-1.amazonaws.com` |
+| `S3_REGION` | *(Optional)* S3 region | `auto` (for R2) or `us-east-1` |
+
+> [!NOTE]
+> If these variables are omitted, Ballast continues running with 100% functionality using the local filesystem driver.
+
+
 ---
 
 ## How the Free Tier Wake-Up Flow Works

@@ -37,3 +37,13 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      # Optional Cloud Object Storage (Cloudflare R2 / AWS S3) for persistent PDF storage across deploys
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+

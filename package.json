@@ -19,6 +19,7 @@
     "lint": "eslint src/app/api"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1132.0",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
