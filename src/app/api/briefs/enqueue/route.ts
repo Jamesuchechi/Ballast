@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db/client';
 import { enqueueBriefJob } from '@/queue/briefQueue';
 import { getAuthSession } from '@/lib/auth';
+import { checkWorkspaceBriefLimit } from '@/core/usage';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +17,23 @@ export async function POST(req: NextRequest) {
 
     if (!question || typeof question !== 'string' || !question.trim()) {
       return NextResponse.json({ error: 'Question is required' }, { status: 400 });
+    }
+
+    // Check monthly brief quota (FR8.1, FR8.2, FR8.5)
+    const usageCheck = await checkWorkspaceBriefLimit(workspaceId);
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        { error: usageCheck.error, code: 'quota_exceeded' },
+        { status: 402 }
+      );
+    }
+
+    // NFR7.6: Composer cannot submit World mode on Free
+    if (mode === 'world' && usageCheck.plan === 'free') {
+      return NextResponse.json(
+        { error: 'World mode requires a Pro or Operator plan.', code: 'plan_upgrade_required' },
+        { status: 403 }
+      );
     }
 
     // 1. Insert brief row with status='queued' and canonical progress

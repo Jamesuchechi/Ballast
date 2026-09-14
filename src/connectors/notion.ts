@@ -69,8 +69,9 @@ export class NotionConnector implements SourceConnector {
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
     const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'notion');
+    const bearerToken = token?.access_token || token?.token;
 
-    if (!token && isMockAllowed) {
+    if (isMockAllowed && (!token || !bearerToken || bearerToken.startsWith('mock_') || bearerToken.includes('mock'))) {
       return SAMPLE_NOTION_PAGES.map((page) => {
         const checksum = createHash('sha256').update(page.content).digest('hex');
         return {
@@ -87,7 +88,9 @@ export class NotionConnector implements SourceConnector {
       throw new Error('Notion connector is not connected or token has been revoked');
     }
 
-    const bearerToken = token.access_token || token.token;
+    if (!bearerToken) {
+      throw new Error('Notion connector is missing valid access_token');
+    }
 
     const res = await fetch('https://api.notion.com/v1/search', {
       method: 'POST',
@@ -159,35 +162,83 @@ export class NotionConnector implements SourceConnector {
     }
 
     const bearerToken = token.access_token || token.token;
-
-    // Fetch page blocks
-    const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${externalId}/children?page_size=100`, {
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'Notion-Version': '2022-06-28',
-      },
-    });
-
-    let textBlocks: string[] = [];
-    if (blocksRes.ok) {
-      const blocksData = await blocksRes.json();
-      for (const block of blocksData.results || []) {
-        const type = block.type;
-        const textArr = block[type]?.rich_text || [];
-        const line = textArr.map((t: any) => t.plain_text).join('');
-        if (line) textBlocks.push(line);
-      }
+    if (!bearerToken) {
+      throw new Error('Notion connector is missing valid access_token');
     }
 
-    const content = `Notion Document ID: ${externalId}\n\n${textBlocks.join('\n\n') || 'Content empty'}`;
-    const checksum = createHash('sha256').update(content).digest('hex');
+    let pageTitle = 'Untitled Notion Document';
+    let lastEditedTime = new Date().toISOString();
+    let pageUrl = '';
+
+    // 1. Fetch Page Metadata (Title, URL, Timestamps)
+    try {
+      const pageRes = await fetch(`https://api.notion.com/v1/pages/${externalId}`, {
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+          'Notion-Version': '2022-06-28',
+        },
+      });
+      if (pageRes.ok) {
+        const pageData = await pageRes.json();
+        if (pageData.url) pageUrl = pageData.url;
+        if (pageData.last_edited_time) lastEditedTime = pageData.last_edited_time;
+
+        const titleProp =
+          pageData.properties?.title?.title ||
+          pageData.properties?.Name?.title ||
+          pageData.properties?.Page?.title;
+        if (Array.isArray(titleProp) && titleProp.length > 0) {
+          pageTitle = titleProp.map((t: any) => t.plain_text).join('');
+        }
+      }
+    } catch (pageErr: any) {
+      console.warn(`[Notion page info error for ${externalId}]:`, pageErr?.message);
+    }
+
+    // 2. Fetch page block children (up to 200 blocks with pagination)
+    const textBlocks: string[] = [];
+    try {
+      let cursor: string | undefined = undefined;
+      let fetched = 0;
+
+      while (fetched < 200) {
+        const url: string = cursor
+          ? `https://api.notion.com/v1/blocks/${externalId}/children?page_size=100&start_cursor=${cursor}`
+          : `https://api.notion.com/v1/blocks/${externalId}/children?page_size=100`;
+
+        const blocksRes = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${bearerToken}`,
+            'Notion-Version': '2022-06-28',
+          },
+        });
+
+        if (!blocksRes.ok) break;
+        const blocksData = await blocksRes.json();
+        const results = blocksData.results || [];
+
+        for (const block of results) {
+          const formatted = renderNotionBlock(block);
+          if (formatted) textBlocks.push(formatted);
+        }
+
+        fetched += results.length;
+        if (!blocksData.has_more || !blocksData.next_cursor) break;
+        cursor = blocksData.next_cursor;
+      }
+    } catch (blockErr: any) {
+      console.warn(`[Notion blocks fetch error for ${externalId}]:`, blockErr?.message);
+    }
+
+    const content = `# ${pageTitle}\nSource: Notion Page (${externalId})\nLast Edited: ${lastEditedTime}${pageUrl ? `\nURL: ${pageUrl}` : ''}\n\n${textBlocks.join('\n\n') || 'No textual content found in page.'}`;
+    const checksum = createHash('sha256').update(`${externalId}:${content}`).digest('hex');
 
     return {
       externalId,
       content,
       checksum,
-      date: new Date().toISOString(),
-      meta: { externalId },
+      date: lastEditedTime,
+      meta: { title: pageTitle, externalId, url: pageUrl },
     };
   }
 
@@ -300,3 +351,45 @@ export class NotionConnector implements SourceConnector {
 }
 
 export const notionConnector = new NotionConnector();
+
+/**
+ * Converts Notion block objects into Markdown syntax.
+ */
+export function renderNotionBlock(block: any): string {
+  if (!block || !block.type) return '';
+  const type = block.type;
+  const data = block[type];
+  if (!data) return '';
+
+  const richText: any[] = data.rich_text || [];
+  const text = richText.map((t: any) => t.plain_text || '').join('');
+
+  switch (type) {
+    case 'paragraph':
+      return text;
+    case 'heading_1':
+      return `# ${text}`;
+    case 'heading_2':
+      return `## ${text}`;
+    case 'heading_3':
+      return `### ${text}`;
+    case 'bulleted_list_item':
+      return `- ${text}`;
+    case 'numbered_list_item':
+      return `1. ${text}`;
+    case 'to_do':
+      return `${data.checked ? '[x]' : '[ ]'} ${text}`;
+    case 'toggle':
+      return `> ${text}`;
+    case 'quote':
+      return `> ${text}`;
+    case 'callout':
+      return `> 💡 ${text}`;
+    case 'code':
+      return `\`\`\`${data.language || ''}\n${text}\n\`\`\``;
+    case 'divider':
+      return '---';
+    default:
+      return text ? text : '';
+  }
+}

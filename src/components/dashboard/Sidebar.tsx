@@ -22,6 +22,8 @@ import {
   Loader2,
   Sun,
   Moon,
+  Bell,
+  BarChart3,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { BallastLogo } from '@/components/brand/BallastLogo';
@@ -41,6 +43,8 @@ export interface SidebarProps {
   flagsCount?: number;
   telemetryAvgLatency?: number;
   storageCount?: string | number;
+  notificationsCount?: number;
+  unreadNotificationsCount?: number;
   onCreateBrief?: () => void;
   actionLoading?: boolean;
   onLogout?: () => void;
@@ -74,6 +78,8 @@ export function Sidebar({
   flagsCount = 0,
   telemetryAvgLatency,
   storageCount,
+  notificationsCount,
+  unreadNotificationsCount = 0,
   onCreateBrief,
   actionLoading = false,
   onLogout,
@@ -106,6 +112,14 @@ export function Sidebar({
           badgeColor: pendingActionsCount > 0 ? 'rgba(245, 158, 11, 0.18)' : undefined,
           badgeText: pendingActionsCount > 0 ? '#f59e0b' : undefined,
         },
+        {
+          id: 'notifications',
+          label: 'Notifications',
+          icon: Bell,
+          count: unreadNotificationsCount > 0 ? `${unreadNotificationsCount} new` : (notificationsCount && notificationsCount > 0 ? notificationsCount : undefined),
+          badgeColor: unreadNotificationsCount > 0 ? 'rgba(239, 68, 68, 0.18)' : undefined,
+          badgeText: unreadNotificationsCount > 0 ? '#ef4444' : undefined,
+        },
       ],
     },
     {
@@ -137,6 +151,14 @@ export function Sidebar({
     {
       title: 'Governance & Audit',
       items: [
+        {
+          id: 'analytics',
+          label: 'Product Analytics',
+          icon: BarChart3,
+          count: 'Live',
+          badgeColor: 'rgba(59, 130, 246, 0.12)',
+          badgeText: '#3b82f6',
+        },
         {
           id: 'audit',
           label: 'Runs & Telemetry',
@@ -297,62 +319,70 @@ export function Sidebar({
           ))}
         </nav>
 
-        {/* Entitlements & Usage Meter */}
-        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--card-border)', background: 'var(--card-bg-subtle)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: '6px' }}>
-            <span>Free Tier Briefs</span>
-            <span>{briefsCount} / 10</span>
-          </div>
-          <div style={{ width: '100%', height: '5px', background: 'var(--card-border)', borderRadius: '9999px', overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                background: '#10b981',
-                borderRadius: '9999px',
-                width: `${Math.min((briefsCount / 10) * 100, 100)}%`,
-                transition: 'width 0.3s ease',
-              }}
-            />
-          </div>
-          {isDemo && (
-            <div
-              style={{
-                marginTop: '10px',
-                padding: '10px',
-                borderRadius: '8px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                border: '1px solid rgba(99, 102, 241, 0.25)',
-                fontSize: '0.74rem',
-                color: '#a5b4fc',
-              }}
-            >
-              <div style={{ fontWeight: 600, color: '#c7d2fe', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ShieldAlert size={14} color="#818cf8" />
-                Demo Workspace
+        {/* Entitlements & Usage Meter (FR8.1, FR8.2) */}
+        {(() => {
+          const plan = workspace?.plan || 'free';
+          const limit = plan === 'operator' ? 500 : plan === 'pro' ? 80 : 10;
+          const meterLabel = plan === 'operator' ? 'Operator Brief Meter' : plan === 'pro' ? 'Pro Tier Briefs' : 'Free Tier Briefs';
+          return (
+            <div style={{ padding: '14px 16px', borderTop: '1px solid var(--card-border)', background: 'var(--card-bg-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                <span>{meterLabel}</span>
+                <span>{briefsCount} / {limit}</span>
               </div>
-              Explore before signing up. Create account to connect Gmail/GitHub.
-              <div style={{ marginTop: '8px' }}>
-                <Link
-                  href="/signup"
+              <div style={{ width: '100%', height: '5px', background: 'var(--card-border)', borderRadius: '9999px', overflow: 'hidden' }}>
+                <div
                   style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '5px 0',
-                    textAlign: 'center',
-                    fontWeight: 600,
-                    fontSize: '0.75rem',
-                    color: '#000000',
-                    background: '#818cf8',
-                    borderRadius: '6px',
-                    textDecoration: 'none',
+                    height: '100%',
+                    background: briefsCount >= limit ? '#ef4444' : '#10b981',
+                    borderRadius: '9999px',
+                    width: `${Math.min((briefsCount / limit) * 100, 100)}%`,
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+
+              {isDemo && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    fontSize: '0.74rem',
+                    color: '#a5b4fc',
                   }}
                 >
-                  Sign Up Free
-                </Link>
-              </div>
+                  <div style={{ fontWeight: 600, color: '#c7d2fe', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldAlert size={14} color="#818cf8" />
+                    Demo Workspace
+                  </div>
+                  Explore before signing up. Create account to connect Gmail/GitHub.
+                  <div style={{ marginTop: '8px' }}>
+                    <Link
+                      href="/signup"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '5px 0',
+                        textAlign: 'center',
+                        fontWeight: 600,
+                        fontSize: '0.75rem',
+                        color: '#000000',
+                        background: '#818cf8',
+                        borderRadius: '6px',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      Sign Up Free
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* User Footer */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

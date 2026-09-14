@@ -45,6 +45,22 @@ export async function POST(req: NextRequest) {
     }
     const workspaceId = payload.workspaceId;
 
+    // Operator-tier only enforcement (FR7.4, FR8.2)
+    const ws = await queryOne<{ plan: string }>(
+      `SELECT plan FROM workspaces WHERE id = $1`,
+      [workspaceId]
+    );
+
+    if (!ws || ws.plan !== 'operator') {
+      return NextResponse.json(
+        {
+          error: `Operator plan required to configure automated schedules. Current workspace plan is '${ws?.plan || 'free'}'.`,
+          code: 'operator_plan_required',
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { name, question_template, cron, mode = 'home' } = body;
 

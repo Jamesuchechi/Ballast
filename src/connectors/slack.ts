@@ -70,9 +70,15 @@ export class SlackConnector implements SourceConnector {
     const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
-    const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'slack');
+    const token = await getDecryptedToken<{
+      access_token?: string;
+      token?: string;
+      authed_user?: { access_token?: string; id?: string };
+    }>(workspaceId, 'slack');
 
-    if (!token && isMockAllowed) {
+    const bearerToken = token?.authed_user?.access_token || token?.access_token || token?.token;
+
+    if (isMockAllowed && (!token || !bearerToken || bearerToken.startsWith('mock_') || bearerToken.includes('mock'))) {
       return SAMPLE_SLACK_MESSAGES.map((msg) => {
         const content = `Slack [${msg.channel}] @${msg.user} (${msg.ts}):\n${msg.text}`;
         const checksum = createHash('sha256').update(content).digest('hex');
@@ -90,7 +96,9 @@ export class SlackConnector implements SourceConnector {
       throw new Error('Slack connector is not connected or token has been revoked');
     }
 
-    const bearerToken = token.access_token || token.token;
+    if (!bearerToken) {
+      throw new Error('Slack connector is missing valid access_token');
+    }
 
     // 1. Fetch public channels
     const channelsRes = await fetch('https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=20', {
@@ -146,29 +154,79 @@ export class SlackConnector implements SourceConnector {
           content,
           checksum,
           date: msg.ts,
-          meta: { channel: msg.channel, user: msg.user },
+          meta: { channel: msg.channel, user: msg.user, text: msg.text },
         };
       }
     }
 
-    const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'slack');
+    const token = await getDecryptedToken<{
+      access_token?: string;
+      token?: string;
+      authed_user?: { access_token?: string; id?: string };
+    }>(workspaceId, 'slack');
     if (!token) {
       throw new Error('Slack connector is not connected or token has been revoked');
+    }
+
+    const bearerToken = token.authed_user?.access_token || token.access_token || token.token;
+    if (!bearerToken) {
+      throw new Error('Slack connector is missing valid access_token');
     }
 
     const parts = externalId.split('_');
     const channelId = parts[0];
     const ts = parts[1];
 
-    const content = `Slack Message [Channel: ${channelId}, Timestamp: ${ts}]\nFetched at ${new Date().toISOString()}`;
-    const checksum = createHash('sha256').update(content).digest('hex');
+    let channelName = channelId;
+    let messageText = '';
+    let author = 'unknown';
+    let messageDate = new Date().toISOString();
+    let threadReplies: string[] = [];
+
+    try {
+      // 1. Fetch channel metadata
+      const infoRes = await fetch(`https://slack.com/api/conversations.info?channel=${channelId}`, {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+      });
+      const infoData = await infoRes.json();
+      if (infoData.ok && infoData.channel?.name) {
+        channelName = `#${infoData.channel.name}`;
+      }
+
+      // 2. Fetch message and replies
+      const repliesRes = await fetch(`https://slack.com/api/conversations.replies?channel=${channelId}&ts=${ts}&limit=25`, {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+      });
+      const repliesData = await repliesRes.json();
+      if (repliesData.ok && repliesData.messages && repliesData.messages.length > 0) {
+        const root = repliesData.messages[0];
+        messageText = root.text || '';
+        author = root.user || 'slack-user';
+        if (root.ts) {
+          messageDate = new Date(parseFloat(root.ts) * 1000).toISOString();
+        }
+
+        if (repliesData.messages.length > 1) {
+          threadReplies = repliesData.messages.slice(1).map((r: any) => {
+            const rDate = r.ts ? new Date(parseFloat(r.ts) * 1000).toISOString() : '';
+            return `> @${r.user || 'user'} (${rDate}):\n> ${r.text || ''}`;
+          });
+        }
+      }
+    } catch (apiErr: any) {
+      console.warn(`[Slack fetch error for ${externalId}]:`, apiErr?.message);
+    }
+
+    const threadSection = threadReplies.length > 0 ? `\n\n### Thread Replies (${threadReplies.length}):\n` + threadReplies.join('\n\n') : '';
+    const content = `Slack Channel: ${channelName}\nAuthor: @${author}\nTimestamp: ${messageDate}\n\nMessage:\n${messageText || 'Message content unavailable'}${threadSection}`;
+    const checksum = createHash('sha256').update(`${externalId}:${content}`).digest('hex');
 
     return {
       externalId,
       content,
       checksum,
-      date: new Date().toISOString(),
-      meta: { channelId, ts },
+      date: messageDate,
+      meta: { channel: channelName, user: author, channelId, ts },
     };
   }
 

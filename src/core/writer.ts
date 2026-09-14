@@ -11,6 +11,11 @@ export interface WriterOptions {
   mode: BriefMode;
   sources: SourceBlock[];
   retrieved: RetrievedQuote[];
+  parentBrief?: {
+    question: string;
+    as_of?: string;
+    summary?: string;
+  } | null;
   llmCall?: (prompt: string, systemPrompt: string) => Promise<string>;
 }
 
@@ -20,7 +25,7 @@ export interface WriterOptions {
  * Source corpus is passed ONLY as delimited XML data blocks, never merged into instructions (NFR1.1).
  */
 export async function runWriter(options: WriterOptions): Promise<DraftBrief> {
-  const { question, mode, sources, retrieved, llmCall } = options;
+  const { question, mode, sources, retrieved, parentBrief, llmCall } = options;
 
   if (llmCall) {
     const delimitedSources = formatDelimitedSources(sources);
@@ -34,6 +39,7 @@ Rules:
 - Do NOT assume external facts not directly stated in the sources or quotes.
 - In "evidence", each claim MUST cite the relevant quote ID(s) from the retrieved quotes.
 - What I used: categorize source IDs accurately into private, web, and unchecked.
+- If a prior brief context is provided, highlight what progressed, changed, or slipped since that prior brief.
 - Output strictly valid JSON matching the DraftBrief structure:
 {
   "title": "Brief: <concise question or title>",
@@ -48,7 +54,14 @@ Rules:
   }
 }`;
 
-    const userPrompt = `Question: ${question}
+    const parentBriefSection = parentBrief
+      ? `\n\nPrior Run Context (Parent Brief as of ${parentBrief.as_of || 'last run'}):
+Question: ${parentBrief.question}
+Prior Summary: ${parentBrief.summary || 'None'}
+Task: Analyze what progressed, changed, or slipped since the last brief.`
+      : '';
+
+    const userPrompt = `Question: ${question}${parentBriefSection}
 
 Retrieved Grounding Quotes:
 ${retrievedQuotesList || "None"}
@@ -89,7 +102,7 @@ ${delimitedSources}`;
     );
   }
 
-  return generateDeterministicDraftForEval(question, mode, sources, retrieved);
+  return generateDeterministicDraftForEval(question, mode, sources, retrieved, parentBrief);
 }
 
 /**
@@ -99,7 +112,8 @@ export function generateDeterministicDraftForEval(
   question: string,
   mode: BriefMode,
   sources: SourceBlock[],
-  retrieved: RetrievedQuote[]
+  retrieved: RetrievedQuote[],
+  parentBrief?: { question: string; as_of?: string; summary?: string } | null
 ): DraftBrief {
   const privateSources = sources
     .filter((s) => s.class === "private")
@@ -123,7 +137,9 @@ export function generateDeterministicDraftForEval(
         uncertain: [
           `The provided corpus does not contain facts or data required to answer: "${question}".`,
         ],
-        open_loops: [],
+        open_loops: parentBrief
+          ? [`Compare with prior brief as of ${parentBrief.as_of || 'previous run'}`]
+          : [],
         actions: [],
         what_i_did_not_do: [
           "Did not extrapolate or hallucinate facts absent from the corpus.",
@@ -143,6 +159,20 @@ export function generateDeterministicDraftForEval(
     .map((e) => `- ${e.claim}`)
     .join("\n");
 
+  const openLoops: string[] = [];
+  if (parentBrief) {
+    openLoops.push(
+      `Slippage tracking: compare milestones with prior brief run "${parentBrief.question}" (as_of ${parentBrief.as_of || 'last run'})`
+    );
+    const slippedQuote = retrieved.find((q) =>
+      /\b(?:delayed|postponed|rescheduled|pushed\s+back|slipped|behind\s+schedule|blocked)\b/i.test(q.quote)
+    );
+    if (slippedQuote) {
+      const cleanSnippet = slippedQuote.quote.replace(/[\n\r]+/g, " ").slice(0, 140);
+      openLoops.push(`What slipped: ${cleanSnippet}`);
+    }
+  }
+
   return {
     title: `Brief: ${question}`,
     sections: {
@@ -154,7 +184,7 @@ export function generateDeterministicDraftForEval(
       },
       evidence,
       uncertain: [],
-      open_loops: [],
+      open_loops: openLoops,
       actions: [],
       what_i_did_not_do: [
         "Did not perform actions without verified user approval.",

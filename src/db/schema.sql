@@ -196,6 +196,18 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 14. notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  brief_id UUID REFERENCES briefs(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('brief_published', 'brief_failed', 'schedule_run')),
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  read BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes for performance & workspace boundary enforcement
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
@@ -206,3 +218,4 @@ CREATE INDEX IF NOT EXISTS idx_briefs_parent ON briefs(parent_brief_id);
 CREATE INDEX IF NOT EXISTS idx_citations_brief ON citations(brief_id);
 CREATE INDEX IF NOT EXISTS idx_actions_brief ON actions(brief_id);
 CREATE INDEX IF NOT EXISTS idx_runs_brief ON runs(brief_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_workspace ON notifications(workspace_id, created_at DESC);

@@ -189,20 +189,25 @@ export function evaluateCriticDeterministicForEval(input: CriticInput): CriticOu
     });
   }
 
-  // Conflict Detection: check if different quotes assert conflicting dates or quantities
+  // Conflict Detection: check if different quotes assert conflicting dates, quantities, or statuses
   const quotes = input.retrieved;
   for (let i = 0; i < quotes.length; i++) {
     for (let j = i + 1; j < quotes.length; j++) {
       const q1 = quotes[i];
       const q2 = quotes[j];
-      if (q1.source_id !== q2.source_id) {
+      if (q1.source_id !== q2.source_id || q1.connector !== q2.connector) {
+        const connectorContext =
+          q1.connector && q2.connector && q1.connector !== q2.connector
+            ? ` (${q1.connector} vs ${q2.connector})`
+            : "";
+
         // Detect date conflict (e.g. October 15 vs November 12 or Q3 vs Q4)
         const dateRegex = /(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}|202[4-9]-\d{2}-\d{2}|q[1-4]\s+202[4-9]/gi;
         const dates1 = q1.quote.match(dateRegex);
         const dates2 = q2.quote.match(dateRegex);
 
         if (dates1 && dates2 && dates1[0].toLowerCase() !== dates2[0].toLowerCase()) {
-          const topic = `Discrepancy regarding date/milestone (${dates1[0]} vs ${dates2[0]})`;
+          const topic = `Discrepancy regarding date/milestone${connectorContext} (${dates1[0]} vs ${dates2[0]})`;
           if (!conflicts.some((c) => c.topic === topic)) {
             conflicts.push({
               topic,
@@ -216,7 +221,23 @@ export function evaluateCriticDeterministicForEval(input: CriticInput): CriticOu
         const prices1 = q1.quote.match(priceRegex);
         const prices2 = q2.quote.match(priceRegex);
         if (prices1 && prices2 && prices1[0] !== prices2[0]) {
-          const topic = `Discrepancy regarding pricing/amount (${prices1[0]} vs ${prices2[0]})`;
+          const topic = `Discrepancy regarding pricing/amount${connectorContext} (${prices1[0]} vs ${prices2[0]})`;
+          if (!conflicts.some((c) => c.topic === topic)) {
+            conflicts.push({
+              topic,
+              citation_ids: [q1.id, q2.id],
+            });
+          }
+        }
+
+        // Detect status/readiness conflicts (e.g., delayed/postponed vs confirmed/on track)
+        const positiveStatusRegex = /\b(?:confirmed|on\s+schedule|on\s+track|shipped|launched|completed|greenlit|ready)\b/i;
+        const negativeStatusRegex = /\b(?:delayed|postponed|blocked|cancelled|on\s+hold|pending\s+audit|rescheduled)\b/i;
+        if (
+          (positiveStatusRegex.test(q1.quote) && negativeStatusRegex.test(q2.quote)) ||
+          (negativeStatusRegex.test(q1.quote) && positiveStatusRegex.test(q2.quote))
+        ) {
+          const topic = `Discrepancy regarding delivery status/schedule${connectorContext}`;
           if (!conflicts.some((c) => c.topic === topic)) {
             conflicts.push({
               topic,

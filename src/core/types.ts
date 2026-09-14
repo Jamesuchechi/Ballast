@@ -21,6 +21,14 @@ export type BriefStatus =
   | "published"
   | "failed";
 
+export interface SourceBlock {
+  id: string;
+  source_id?: string;
+  class: "private" | "web";
+  connector: string;
+  body: string;
+}
+
 export interface RetrievedQuote {
   id: string;
   source_id: string;

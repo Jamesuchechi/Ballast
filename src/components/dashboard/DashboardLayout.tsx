@@ -19,6 +19,8 @@ export interface DashboardLayoutProps {
   flagsCount?: number;
   telemetryAvgLatency?: number;
   storageCount?: string | number;
+  notificationsCount?: number;
+  unreadNotificationsCount?: number;
   activeSection: string;
   onSelectSection: (section: string) => void;
   mode: 'home' | 'world';
@@ -48,6 +50,8 @@ export function DashboardLayout({
   flagsCount,
   telemetryAvgLatency,
   storageCount,
+  notificationsCount,
+  unreadNotificationsCount,
   activeSection,
   onSelectSection,
   mode,
@@ -58,17 +62,17 @@ export function DashboardLayout({
   citations = [],
   runs,
   onCreateBrief,
-  actionLoading,
+  actionLoading = false,
   onLogout,
   theme,
   onToggleTheme,
   isDemo = false,
 }: DashboardLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
   return (
-    <div className="dash-shell">
+    <div className="dash-root">
       {/* Mobile Top Header (<768px) */}
       <MobileHeader
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
@@ -79,8 +83,8 @@ export function DashboardLayout({
       />
 
       {/* Main Frame */}
-      <div className="dash-body">
-        {/* Left Sidebar (Desktop + Mobile Drawer) */}
+      <div className="dash-app-container">
+        {/* Left Sidebar */}
         <Sidebar
           user={user}
           workspace={workspace}
@@ -96,6 +100,8 @@ export function DashboardLayout({
           flagsCount={flagsCount}
           telemetryAvgLatency={telemetryAvgLatency}
           storageCount={storageCount}
+          notificationsCount={notificationsCount}
+          unreadNotificationsCount={unreadNotificationsCount}
           onCreateBrief={onCreateBrief}
           actionLoading={actionLoading}
           onLogout={onLogout}

@@ -46,7 +46,7 @@ async function runTests() {
 
   try {
     process.env.EVAL_USE_MOCK = 'false';
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     const fakeWorkspace = 'ws_unconfigured_test';
 
     // Gmail must fail loudly
@@ -118,7 +118,7 @@ async function runTests() {
     console.log('✓ All 6 connectors fail loudly without silent mock fallback in production');
   } finally {
     process.env.EVAL_USE_MOCK = origEvalMock;
-    process.env.NODE_ENV = origNodeEnv;
+    (process.env as any).NODE_ENV = origNodeEnv;
   }
 
   // Test 4: Explicit Mock/Test Mode Execution

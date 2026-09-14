@@ -38,7 +38,7 @@ export async function migrate(): Promise<void> {
     await client.query('COMMIT');
     console.log('✓ Migration executed successfully');
 
-    // Verify all 13 tables exist
+    // Verify all 14 tables exist
     const res = await client.query(`
       SELECT table_name 
       FROM information_schema.tables 

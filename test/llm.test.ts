@@ -56,7 +56,7 @@ async function runTests() {
   const originalNodeEnv = process.env.NODE_ENV;
   try {
     process.env.EVAL_USE_MOCK = "false";
-    process.env.NODE_ENV = "production";
+    (process.env as any).NODE_ENV = "production";
 
     let writerFailedLoudly = false;
     try {
@@ -105,7 +105,7 @@ async function runTests() {
     console.log("✓ Prohibited silent mock assertions passed cleanly");
   } finally {
     process.env.EVAL_USE_MOCK = originalEnv;
-    process.env.NODE_ENV = originalNodeEnv;
+    (process.env as any).NODE_ENV = originalNodeEnv;
   }
 
   console.log("\n=== ALL LLM ROUTING & FALLBACK TESTS PASSED ===");

@@ -35,6 +35,14 @@ import {
   ShieldAlert,
   Mail,
   HardDrive,
+  MessageSquare,
+  Bell,
+  BarChart3,
+  TrendingUp,
+  Zap,
+  CheckCheck,
+  Filter,
+  CheckSquare,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -91,6 +99,16 @@ export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [flags, setFlags] = useState<any[]>([]);
   const [telemetry, setTelemetry] = useState<any>(null);
+
+  // Notifications State (FR7.2)
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState<boolean>(false);
+  const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
+
+  // Product Analytics State
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(false);
 
   // Ingestion & Generation UI States
   const [pasteText, setPasteText] = useState('');
@@ -184,7 +202,7 @@ export default function DashboardPage() {
         if (data.sources) {
           setUploadedFiles(
             data.sources.map((s: any) => {
-              let displayName = s.meta?.name || s.meta?.summary || s.meta?.subject;
+              let displayName = s.meta?.title || s.meta?.name || s.meta?.summary || s.meta?.subject;
               if (!displayName) {
                 if (s.connector === 'gmail') {
                   displayName = s.meta?.from ? `Email from ${s.meta.from}` : (s.external_id || 'Gmail Message');
@@ -192,6 +210,12 @@ export default function DashboardPage() {
                   displayName = s.meta?.organizer ? `Meeting (${s.meta.organizer})` : 'Calendar Event';
                 } else if (s.connector === 'drive') {
                   displayName = 'Google Drive Document';
+                } else if (s.connector === 'github') {
+                  displayName = s.meta?.repo ? `${s.meta.repo}: ${s.meta.title || s.external_id}` : (s.external_id || 'GitHub Document');
+                } else if (s.connector === 'slack') {
+                  displayName = s.meta?.channel ? `${s.meta.channel}: ${s.meta.text?.slice(0, 50) || s.external_id}` : (s.external_id || 'Slack Message');
+                } else if (s.connector === 'notion') {
+                  displayName = s.meta?.title || (s.external_id || 'Notion Page');
                 } else {
                   displayName = s.external_id || 'Document';
                 }
@@ -207,6 +231,12 @@ export default function DashboardPage() {
                 subtitle = s.meta?.mimeType || 'Drive File';
               } else if (s.connector === 'upload') {
                 subtitle = s.meta?.mime || 'Uploaded File';
+              } else if (s.connector === 'github') {
+                subtitle = s.meta?.repo ? `Repo: ${s.meta.repo}` : 'GitHub Resource';
+              } else if (s.connector === 'slack') {
+                subtitle = s.meta?.user ? `@${s.meta.user} • ${s.meta.channel || 'channel'}` : 'Slack Thread';
+              } else if (s.connector === 'notion') {
+                subtitle = s.meta?.url ? `Notion • ${s.meta.url}` : 'Notion Document';
               }
 
               return {
@@ -281,6 +311,84 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.warn('Failed to fetch schedules:', e);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadNotifCount(data.unreadCount || 0);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch notifications:', e);
+    }
+  };
+
+  const handleMarkNotificationsRead = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      });
+      setUnreadNotifCount(0);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (e) {
+      console.warn('Failed to mark notifications read:', e);
+    }
+  };
+
+  const handleMarkSingleNotificationRead = async (id: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+      setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+    } catch (e) {
+      console.warn('Failed to mark notification read:', e);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      const res = await fetch('/api/analytics');
+      if (res.ok) {
+        const data = await res.json();
+        setAnalyticsData(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch analytics:', e);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const handleRunSchedule = async (scheduleId: string) => {
+    try {
+      setActionLoading(true);
+      const res = await fetch(`/api/schedules/${scheduleId}/run`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert('Scheduled run initiated! A new brief is being generated in the background.');
+        await fetchBriefs();
+        await fetchSchedules();
+        await fetchNotifications();
+      } else {
+        alert(data.error || 'Failed to run schedule');
+      }
+    } catch (e: any) {
+      alert('Schedule run error: ' + e.message);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -359,9 +467,11 @@ export default function DashboardPage() {
           fetchAccessLogs(),
           fetchActions(),
           fetchSchedules(),
+          fetchNotifications(),
           fetchFlags(),
           fetchTelemetry(),
           fetchConnectors(),
+          fetchAnalytics(),
         ]);
       } catch (err) {
         console.warn('Dashboard auth check failed:', err);
@@ -797,6 +907,9 @@ export default function DashboardPage() {
     const calCount = uploadedFiles.filter((f) => f.connector === 'calendar').length;
     const driveCount = uploadedFiles.filter((f) => f.connector === 'drive').length;
     const uploadCount = uploadedFiles.filter((f) => f.connector === 'upload').length;
+    const githubCount = uploadedFiles.filter((f) => f.connector === 'github').length;
+    const slackCount = uploadedFiles.filter((f) => f.connector === 'slack').length;
+    const notionCount = uploadedFiles.filter((f) => f.connector === 'notion').length;
 
     return (
       <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -892,6 +1005,69 @@ export default function DashboardPage() {
                 Drive ({driveCount})
               </button>
             )}
+            {githubCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('github')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'github' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'github' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <GitBranch size={12} color={sourceFilterConnector === 'github' ? '#fff' : '#8b5cf6'} />
+                GitHub ({githubCount})
+              </button>
+            )}
+            {slackCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('slack')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'slack' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'slack' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <MessageSquare size={12} color={sourceFilterConnector === 'slack' ? '#fff' : '#10b981'} />
+                Slack ({slackCount})
+              </button>
+            )}
+            {notionCount > 0 && (
+              <button
+                onClick={() => setSourceFilterConnector('notion')}
+                style={{
+                  fontSize: '0.75rem',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--card-border)',
+                  background: sourceFilterConnector === 'notion' ? 'var(--accent)' : 'var(--card-bg-subtle)',
+                  color: sourceFilterConnector === 'notion' ? '#ffffff' : 'var(--text)',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <FileText size={12} color={sourceFilterConnector === 'notion' ? '#fff' : '#f43f5e'} />
+                Notion ({notionCount})
+              </button>
+            )}
             {uploadCount > 0 && (
               <button
                 onClick={() => setSourceFilterConnector('upload')}
@@ -957,6 +1133,8 @@ export default function DashboardPage() {
                           {file.connector === 'drive' && <HardDrive size={14} color="#10b981" />}
                           {file.connector === 'upload' && <FileText size={14} color="var(--text-muted)" />}
                           {file.connector === 'github' && <GitBranch size={14} color="#8b5cf6" />}
+                          {file.connector === 'slack' && <MessageSquare size={14} color="#10b981" />}
+                          {file.connector === 'notion' && <FileText size={14} color="#f43f5e" />}
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <div
@@ -1082,6 +1260,8 @@ export default function DashboardPage() {
       flagsCount={flags.filter((f) => f.status !== 'resolved').length}
       telemetryAvgLatency={telemetry?.telemetry?.avg_latency_ms}
       storageCount={storageLabel}
+      notificationsCount={notifications.length}
+      unreadNotificationsCount={unreadNotifCount}
       activeSection={activeSection}
       onSelectSection={setActiveSection}
       mode={mode}
@@ -1142,41 +1322,130 @@ export default function DashboardPage() {
                     : 'Grounded retrieval strictly within workspace sources and mail'}
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setMode('home')}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    border: '1px solid',
-                    borderColor: mode === 'home' ? '#10b981' : 'var(--card-border)',
-                    background: mode === 'home' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                    color: mode === 'home' ? '#10b981' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Home (Private Only)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('world')}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: '6px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    border: '1px solid',
-                    borderColor: mode === 'world' ? '#06b6d4' : 'var(--card-border)',
-                    background: mode === 'world' ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
-                    color: mode === 'world' ? '#06b6d4' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  World (Private + Web)
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMode('home')}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      border: '1px solid',
+                      borderColor: mode === 'home' ? '#10b981' : 'var(--card-border)',
+                      background: mode === 'home' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                      color: mode === 'home' ? '#10b981' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Home (Private Only)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('world')}
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      border: '1px solid',
+                      borderColor: mode === 'world' ? '#06b6d4' : 'var(--card-border)',
+                      background: mode === 'world' ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
+                      color: mode === 'world' ? '#06b6d4' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    World (Private + Web)
+                  </button>
+                </div>
+
+                {/* Notifications Bell (FR7.2) */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNotifDropdownOpen((prev) => !prev);
+                      if (unreadNotifCount > 0) {
+                        handleMarkNotificationsRead();
+                      }
+                    }}
+                    className="dash-icon-btn"
+                    title="Notifications (FR7.2)"
+                    style={{ position: 'relative', padding: '6px' }}
+                  >
+                    <Bell size={16} />
+                    {unreadNotifCount > 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: '#ef4444',
+                        }}
+                      />
+                    )}
+                  </button>
+
+                  {isNotifDropdownOpen && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '34px',
+                        right: 0,
+                        width: '320px',
+                        maxHeight: '380px',
+                        overflowY: 'auto',
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--card-border)',
+                        borderRadius: '8px',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                        padding: '12px',
+                        zIndex: 100,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--card-border)', paddingBottom: '6px' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>Notifications</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{notifications.length} recent</span>
+                      </div>
+                      {notifications.length === 0 ? (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            style={{
+                              padding: '8px',
+                              borderRadius: '6px',
+                              background: n.read ? 'transparent' : 'var(--card-bg-subtle)',
+                              border: '1px solid var(--card-border)',
+                              fontSize: '0.78rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <strong style={{ color: n.type === 'brief_failed' ? '#ef4444' : '#10b981' }}>{n.title}</strong>
+                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div style={{ color: 'var(--text-muted)' }}>{n.message}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1393,6 +1662,13 @@ export default function DashboardPage() {
                     );
                   })}
                 </div>
+
+                {generationSteps[generationSteps.length - 1]?.message && (
+                  <div style={{ fontSize: '0.74rem', color: '#10b981', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>&bull;</span>
+                    <span>{generationSteps[generationSteps.length - 1].message}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1614,6 +1890,41 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
+
+              {/* Staleness Warning & Regenerate CTA (FR4.7) */}
+              {currentBrief?.stale_after && new Date(currentBrief.stale_after).getTime() < Date.now() && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    color: '#fbbf24',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem' }}>
+                    <Clock size={16} color="#f59e0b" />
+                    <span>
+                      <strong>Stale Brief (FR4.7):</strong> As of {new Date(currentBrief.as_of).toLocaleDateString()}, this brief is past its freshness window. Connected workspace sources may have changed.
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={actionLoading}
+                    className="dash-btn-primary"
+                    style={{ background: '#f59e0b', color: '#000000', fontSize: '0.78rem', padding: '6px 14px', fontWeight: 600 }}
+                    title="Regenerate inserts a new child row with parent_brief_id"
+                  >
+                    <RefreshCw size={13} className={actionLoading ? 'animate-spin' : ''} />
+                    <span>Regenerate (New Child Brief)</span>
+                  </button>
+                </div>
+              )}
 
               {/* Brief Action Bar */}
               <div
@@ -2184,6 +2495,15 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <span className="dash-badge dash-badge-published">FR7 Schedules</span>
                 <span className="dash-badge dash-badge-running">Automated Cron</span>
+                {workspace?.plan === 'operator' ? (
+                  <span className="dash-badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                    Operator Tier Active
+                  </span>
+                ) : (
+                  <span className="dash-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                    Operator Required
+                  </span>
+                )}
               </div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Recurring Scheduled Briefs</h2>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
@@ -2199,6 +2519,28 @@ export default function DashboardPage() {
               <span>New Schedule</span>
             </button>
           </div>
+
+          {/* Non-Operator plan callout banner (FR7.4, FR8.2) */}
+          {workspace?.plan !== 'operator' && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#f87171',
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              <Lock size={16} />
+              <span>
+                <strong>Operator Plan Required (FR7.4, FR8.2):</strong> Automated schedules run unprompted background jobs and require an Operator tier workspace. Current plan: <strong>{workspace?.plan || 'free'}</strong>.
+              </span>
+            </div>
+          )}
 
           {schedules.length === 0 ? (
             <div
@@ -2246,6 +2588,16 @@ export default function DashboardPage() {
                       <span className={sched.enabled ? 'dash-badge dash-badge-published' : 'dash-badge dash-badge-mode'}>
                         {sched.enabled ? 'Active' : 'Paused'}
                       </span>
+                      <button
+                        onClick={() => handleRunSchedule(sched.id)}
+                        disabled={actionLoading || !sched.enabled}
+                        className="dash-btn-primary"
+                        style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                        title="Run this schedule now (creates a child brief linked to the last run)"
+                      >
+                        <Play size={12} />
+                        <span>Run Now</span>
+                      </button>
                       <button
                         onClick={() => handleToggleSchedule(sched.id, sched.enabled)}
                         className="dash-btn-secondary"
@@ -2438,6 +2790,458 @@ export default function DashboardPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* SECTION: NOTIFICATIONS                                   */}
+      {/* ======================================================== */}
+      {activeSection === 'notifications' && (
+        <div style={{ maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span className="dash-badge dash-badge-published">FR7.2 Alerts</span>
+                {unreadNotifCount > 0 ? (
+                  <span className="dash-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                    {unreadNotifCount} Unread
+                  </span>
+                ) : (
+                  <span className="dash-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                    All Caught Up
+                  </span>
+                )}
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Workspace Notifications</h2>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Automated alerts on published briefs, failed pipelines, and recurring scheduled runs.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', background: 'var(--surface-hover)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setNotifFilter('all')}
+                  className={notifFilter === 'all' ? 'dash-btn-primary' : 'dash-btn-secondary'}
+                  style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px', border: 'none' }}
+                >
+                  All ({notifications.length})
+                </button>
+                <button
+                  onClick={() => setNotifFilter('unread')}
+                  className={notifFilter === 'unread' ? 'dash-btn-primary' : 'dash-btn-secondary'}
+                  style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '4px', border: 'none' }}
+                >
+                  Unread ({unreadNotifCount})
+                </button>
+              </div>
+              {unreadNotifCount > 0 && (
+                <button
+                  onClick={handleMarkNotificationsRead}
+                  className="dash-btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <CheckCheck size={14} />
+                  <span>Mark all as read</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Notifications List */}
+          {notifications.filter((n) => (notifFilter === 'unread' ? !n.read : true)).length === 0 ? (
+            <div className="dash-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <Bell size={36} color="var(--text-subtle)" style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>
+                {notifFilter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                You will receive alerts here when briefs publish, fail, or automated schedules run.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {notifications
+                .filter((n) => (notifFilter === 'unread' ? !n.read : true))
+                .map((notif) => {
+                  const isUnread = !notif.read;
+                  const isPublished = notif.type === 'brief_published';
+                  const isFailed = notif.type === 'brief_failed';
+                  const isSchedule = notif.type === 'schedule_run';
+
+                  return (
+                    <div
+                      key={notif.id}
+                      className="dash-card"
+                      style={{
+                        padding: '16px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        borderLeft: isUnread ? '3px solid #3b82f6' : '1px solid var(--border)',
+                        background: isUnread ? 'rgba(59, 130, 246, 0.03)' : 'var(--surface)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: isPublished
+                              ? 'rgba(16, 185, 129, 0.12)'
+                              : isFailed
+                              ? 'rgba(239, 68, 68, 0.12)'
+                              : 'rgba(59, 130, 246, 0.12)',
+                            color: isPublished ? '#10b981' : isFailed ? '#ef4444' : '#3b82f6',
+                            flexShrink: 0,
+                            marginTop: '2px',
+                          }}
+                        >
+                          {isPublished ? <CheckCircle2 size={16} /> : isFailed ? <AlertCircle size={16} /> : <Clock size={16} />}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: isUnread ? 700 : 600, color: 'var(--text)' }}>
+                              {notif.title}
+                            </span>
+                            <span
+                              className="dash-badge"
+                              style={{
+                                fontSize: '0.68rem',
+                                background: isPublished
+                                  ? 'rgba(16, 185, 129, 0.1)'
+                                  : isFailed
+                                  ? 'rgba(239, 68, 68, 0.1)'
+                                  : 'rgba(59, 130, 246, 0.1)',
+                                color: isPublished ? '#10b981' : isFailed ? '#ef4444' : '#3b82f6',
+                              }}
+                            >
+                              {isPublished ? 'Published' : isFailed ? 'Failed' : 'Scheduled'}
+                            </span>
+                            {isUnread && (
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6' }} />
+                            )}
+                          </div>
+                          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                            {notif.message}
+                          </p>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                            {new Date(notif.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        {notif.brief_id && (
+                          <button
+                            onClick={() => {
+                              setSelectedBriefId(notif.brief_id);
+                              setActiveSection('briefs');
+                            }}
+                            className="dash-btn-secondary"
+                            style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Eye size={12} />
+                            <span>View Brief</span>
+                          </button>
+                        )}
+                        {isUnread && (
+                          <button
+                            onClick={() => handleMarkSingleNotificationRead(notif.id)}
+                            className="dash-btn-secondary"
+                            style={{ padding: '5px 8px', fontSize: '0.75rem' }}
+                            title="Mark as read"
+                          >
+                            <Check size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* SECTION: PRODUCT ANALYTICS                               */}
+      {/* ======================================================== */}
+      {activeSection === 'analytics' && (
+        <div style={{ maxWidth: '980px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span className="dash-badge dash-badge-published">Platform Intelligence</span>
+                <span className="dash-badge dash-badge-mode">{analyticsData?.plan ? `${analyticsData.plan.toUpperCase()} Plan` : 'Operator'}</span>
+                <span className="dash-badge dash-badge-running">Real-Time Telemetry</span>
+              </div>
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text)' }}>Overall Product Analytics</h2>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Comprehensive telemetry on brief generations, citation grounding, unit economics, and action execution.
+              </p>
+            </div>
+            <button
+              onClick={fetchAnalytics}
+              disabled={analyticsLoading}
+              className="dash-btn-secondary"
+              style={{ padding: '7px 14px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw size={13} className={analyticsLoading ? 'animate-spin' : ''} />
+              <span>Refresh Metrics</span>
+            </button>
+          </div>
+
+          {/* 4 Top KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+            {/* KPI 1: Briefs Volume & Success */}
+            <div className="dash-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Brief Generations
+                </span>
+                <FileText size={16} color="#3b82f6" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text)' }}>
+                  {analyticsData?.briefs?.total ?? briefs.length}
+                </span>
+                <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                  {analyticsData?.briefs?.successRate ?? 100}% published
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '4px', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--surface-hover)', marginTop: '4px' }}>
+                <div style={{ flex: analyticsData?.briefs?.published || 1, background: '#10b981' }} title="Published" />
+                <div style={{ flex: analyticsData?.briefs?.failed || 0, background: '#ef4444' }} title="Failed" />
+                <div style={{ flex: analyticsData?.briefs?.running || 0, background: '#f59e0b' }} title="Running" />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                <span>{analyticsData?.briefs?.published ?? briefs.filter((b: any) => b.status === 'published').length} published</span>
+                <span>{analyticsData?.briefs?.failed ?? 0} failed</span>
+              </div>
+            </div>
+
+            {/* KPI 2: Tokens & Unit Economics */}
+            <div className="dash-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Unit Economics & Tokens
+                </span>
+                <Zap size={16} color="#c084fc" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text)' }}>
+                  ${analyticsData?.telemetry?.totalCostUsd ?? '0.0000'}
+                </span>
+                <span style={{ fontSize: '0.78rem', color: '#a855f7', fontFamily: 'var(--font-mono)' }}>
+                  {((analyticsData?.telemetry?.totalTokens ?? 0) / 1000).toFixed(1)}k tokens
+                </span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Avg cost: <strong>${analyticsData?.telemetry?.avgCostPerBrief ?? '0.0025'}</strong> per generated brief
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                Avg Latency: {analyticsData?.telemetry?.avgLatencyMs ?? 1250}ms
+              </div>
+            </div>
+
+            {/* KPI 3: Citations & Conflict Detection */}
+            <div className="dash-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Grounding Citations
+                </span>
+                <ShieldCheck size={16} color="#10b981" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text)' }}>
+                  {analyticsData?.citations?.total ?? 0}
+                </span>
+                {analyticsData?.citations?.conflict > 0 ? (
+                  <span style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: 600 }}>
+                    {analyticsData.citations.conflict} conflict(s) surfaced
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                    100% grounded
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                {analyticsData?.citations?.support ?? 0} support &bull; {analyticsData?.citations?.conflict ?? 0} conflict &bull; {analyticsData?.citations?.unchecked ?? 0} unchecked
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
+                Cross-source disagreements flagged without winner-picking
+              </div>
+            </div>
+
+            {/* KPI 4: Operator Meter Quota */}
+            <div className="dash-card" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Monthly Brief Meter
+                </span>
+                <Clock size={16} color="#f59e0b" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text)' }}>
+                  {analyticsData?.meter?.used ?? briefs.length}
+                </span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  / {analyticsData?.meter?.limit ?? 500}
+                </span>
+                <span style={{ fontSize: '0.78rem', color: '#3b82f6', fontWeight: 600, marginLeft: 'auto' }}>
+                  {analyticsData?.meter?.percent ?? 0}%
+                </span>
+              </div>
+              <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--surface-hover)', overflow: 'hidden', marginTop: '4px' }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, analyticsData?.meter?.percent ?? 5)}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                    borderRadius: '3px',
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
+                Resets on 1st of month &bull; Scheduled &amp; manual runs metered
+              </div>
+            </div>
+          </div>
+
+          {/* Deep-Dive Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '16px' }}>
+            {/* Left: 14-Day Activity Chart */}
+            <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>Generation Frequency (14 Days)</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Daily published and scheduled briefings</span>
+                </div>
+                <TrendingUp size={16} color="#3b82f6" />
+              </div>
+
+              {analyticsData?.timeline && analyticsData.timeline.length > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '140px', padding: '10px 0 20px 0', borderBottom: '1px solid var(--border)' }}>
+                  {analyticsData.timeline.map((t: any, idx: number) => {
+                    const maxVal = Math.max(...analyticsData.timeline.map((item: any) => item.count), 5);
+                    const heightPercent = Math.max(12, Math.round((t.count / maxVal) * 100));
+                    return (
+                      <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
+                          {t.count}
+                        </span>
+                        <div
+                          style={{
+                            width: '100%',
+                            height: `${heightPercent}%`,
+                            background: 'linear-gradient(180deg, #3b82f6, #1d4ed8)',
+                            borderRadius: '4px 4px 0 0',
+                            transition: 'height 0.3s ease',
+                          }}
+                          title={`${t.day}: ${t.count} brief(s)`}
+                        />
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-subtle)', marginTop: '6px', whiteSpace: 'nowrap', transform: 'rotate(-45deg)', transformOrigin: 'top left' }}>
+                          {t.day.slice(5)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  No historical generations in the past 14 days.
+                </div>
+              )}
+            </div>
+
+            {/* Right: Connected Sources Breakdown */}
+            <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>Connected Sources &amp; Knowledge Base</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Documents and items indexed across providers</span>
+                </div>
+                <Database size={16} color="#10b981" />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {connectors.map((c) => {
+                  const isConnected = c.health.connected;
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        background: 'var(--surface-hover)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.1rem' }}>{c.icon}</span>
+                        <div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            {isConnected ? `Synced (${c.health.sync_window_days}d window)` : 'Not Connected'}
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className="dash-badge"
+                        style={{
+                          background: isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                          color: isConnected ? '#10b981' : 'var(--text-subtle)',
+                        }}
+                      >
+                        {isConnected ? 'Live Sync' : 'Available'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Dispatch Safety & Grounding Metrics */}
+          <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>Human-in-the-Loop Action Execution</h3>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Strict approval gates on email, issue, and comment dispatches</span>
+              </div>
+              <CheckSquare size={16} color="#f59e0b" />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+              <div className="dash-card-subtle">
+                <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>Proposed Drafts</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>{analyticsData?.actions?.total ?? workspaceActions.length}</span>
+              </div>
+              <div className="dash-card-subtle">
+                <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>User Approved</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#3b82f6' }}>{analyticsData?.actions?.approved ?? workspaceActions.filter((a: any) => a.approved_at).length}</span>
+              </div>
+              <div className="dash-card-subtle">
+                <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>Provider Executed</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10b981' }}>{analyticsData?.actions?.executed ?? workspaceActions.filter((a: any) => a.executed_at).length}</span>
+              </div>
+              <div className="dash-card-subtle">
+                <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>Execution Rate</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>{analyticsData?.actions?.executionRate ?? 100}%</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2849,6 +3653,24 @@ export default function DashboardPage() {
             </div>
 
             <form onSubmit={handleCreateScheduleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {workspace?.plan !== 'operator' && (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#f87171',
+                    fontSize: '0.78rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Lock size={14} />
+                  <span>Operator plan required to create schedules. Current: {workspace?.plan || 'free'}.</span>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Schedule Name</label>
                 <input
@@ -3129,6 +3951,8 @@ export default function DashboardPage() {
                   {inspectingSource.source.connector === 'drive' && <HardDrive size={16} color="#10b981" />}
                   {inspectingSource.source.connector === 'upload' && <FileText size={16} color="var(--text-muted)" />}
                   {inspectingSource.source.connector === 'github' && <GitBranch size={16} color="#8b5cf6" />}
+                  {inspectingSource.source.connector === 'slack' && <MessageSquare size={16} color="#10b981" />}
+                  {inspectingSource.source.connector === 'notion' && <FileText size={16} color="#f43f5e" />}
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>

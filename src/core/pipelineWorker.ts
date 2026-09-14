@@ -7,6 +7,7 @@ import { llmCall } from './llm';
 import { renderBriefMarkdown } from './renderer';
 import { validateForPublish } from './validator';
 import { renderAndStorePdf } from './pdfRenderer';
+import { createNotification } from './notifications';
 import type {
   BriefV1,
   CitationRecord,
@@ -99,10 +100,19 @@ export async function processQueuedBrief(
     await query(`UPDATE briefs SET status = 'running' WHERE id = $1`, [briefId]);
 
     // Step: planning
-    await appendProgress(briefId, 'planning', `Analyzing question and planning retrieval passes for mode=${mode}`);
+    await appendProgress(briefId, 'planning', `Planning retrieval passes for mode=${mode}…`);
 
-    // Step: retrieving_private (Pass 1 - Private sources only per FR3.3)
-    await appendProgress(briefId, 'retrieving_private', 'Executing vector retrieval over private workspace chunks');
+    // Step: retrieving_private (Pass 1 - Honest connector progress per NFR7.3)
+    const connectedSources = await query<{ connector: string }>(
+      `SELECT DISTINCT connector FROM sources WHERE workspace_id = $1`,
+      [workspaceId]
+    );
+    const connectorNames = connectedSources.map((s) => s.connector);
+    const honestProgressLabel = connectorNames.length > 0
+      ? `checking ${connectorNames.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(' & ')}…`
+      : 'checking connected sources…';
+
+    await appendProgress(briefId, 'retrieving_private', honestProgressLabel);
     const privateRetrieval = await retrievePrivateChunks({
       workspaceId,
       queryText: question,
@@ -124,7 +134,7 @@ export async function processQueuedBrief(
         'Web retrieval disabled in Home mode (FR3.4)'
       );
     } else {
-      await appendProgress(briefId, 'retrieving_web', 'Executing web search and snapshot ingest (FR2.7, FR3.3)');
+      await appendProgress(briefId, 'retrieving_web', 'checking web sources & articles…');
       toolsCalled.push('web_search');
 
       const webToolResult = await toolRouter.executeWebSearch(question, {
@@ -162,13 +172,30 @@ export async function processQueuedBrief(
       ...webRetrieval.sources,
     ];
 
+    // Load parent brief context if chained (FR7.1, FR7.3)
+    let parentBriefData: { question: string; as_of?: string; summary?: string } | null = null;
+    if (parentBriefId) {
+      const parentRow = await queryOne<{ question: string; markdown: string; as_of: string }>(
+        `SELECT question, markdown, as_of FROM briefs WHERE id = $1`,
+        [parentBriefId]
+      );
+      if (parentRow) {
+        parentBriefData = {
+          question: parentRow.question,
+          as_of: parentRow.as_of,
+          summary: parentRow.markdown ? parentRow.markdown.slice(0, 400) : undefined,
+        };
+      }
+    }
+
     // Step: drafting
-    await appendProgress(briefId, 'drafting', 'Drafting brief sections quoting source evidence');
+    await appendProgress(briefId, 'drafting', 'drafting brief sections…');
     const draft = await runWriter({
       question,
       mode,
       sources: allSources,
       retrieved: allQuotes,
+      parentBrief: parentBriefData,
       llmCall: (prompt, sysPrompt) => llmCall(prompt, sysPrompt, { role: 'writer' }),
     });
 
@@ -189,7 +216,7 @@ export async function processQueuedBrief(
     }
 
     // Step: verifying (The Critic Gate)
-    await appendProgress(briefId, 'verifying', 'Auditing draft assertions against source quotes');
+    await appendProgress(briefId, 'verifying', 'verifying claims against citations…');
     const criticInput: CriticInput = {
       question,
       mode,
@@ -215,7 +242,7 @@ export async function processQueuedBrief(
     };
 
     // Step: validating (Publish Validator Gate)
-    await appendProgress(briefId, 'validating', 'Enforcing publish constraints and heading presence');
+    await appendProgress(briefId, 'validating', 'validating assertions…');
 
     const quoteMap = new Map(allQuotes.map((q) => [q.id, q]));
     const evidenceItems: PublishedEvidenceItem[] = [];
@@ -248,6 +275,9 @@ export async function processQueuedBrief(
       // Synthesize answer strictly from verified keep claims (never raw writer draft)
       const answerBullets = criticOut.keep.map((k) => `- ${k.claim}`);
       answerText = answerBullets.slice(0, 10).join('\n');
+      if (criticOut.conflicts.length > 0) {
+        answerText += '\n\n*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*';
+      }
     }
 
     const uncertainList = hasEvidence
@@ -269,6 +299,10 @@ export async function processQueuedBrief(
       ...draft.sections.what_i_did_not_do,
       'Did not publish ungrounded or unsourced assertions.',
     ];
+
+    if (criticOut.conflicts.length > 0) {
+      didNotList.push('Did not arbitrarily resolve cross-source disagreements or silently pick a winner.');
+    }
 
     // Explain circuit breaker if tripped (FR8.3)
     if (circuitBroken && circuitBrokenReason) {
@@ -356,11 +390,11 @@ export async function processQueuedBrief(
     }
 
     // Step: rendering
-    await appendProgress(briefId, 'rendering', 'Rendering Markdown and generating PDF artifact');
+    await appendProgress(briefId, 'rendering', 'rendering Markdown and PDF…');
     const pdfUri = await renderAndStorePdf(briefId, question, markdown);
 
     // Step: proposing_actions
-    await appendProgress(briefId, 'proposing_actions', 'Extracting human-gated action drafts');
+    await appendProgress(briefId, 'proposing_actions', 'proposing action drafts…');
     if (sanitizedActions.length > 0) {
       for (const act of sanitizedActions) {
         await query(
@@ -469,7 +503,20 @@ export async function processQueuedBrief(
       ]
     );
 
-    await appendProgress(briefId, 'published', 'Brief successfully validated, rendered, and published');
+    await appendProgress(briefId, 'published', 'Brief successfully published');
+
+    // Notify workspace on published brief (FR7.2)
+    try {
+      await createNotification({
+        workspaceId,
+        briefId,
+        type: 'brief_published',
+        title: draft.title || `Brief: ${question}`,
+        message: `Brief successfully published with ${publishedSections.evidence?.length || 0} verified claim(s).`,
+      });
+    } catch (notifErr) {
+      console.warn('[Notification Publish Error]:', notifErr);
+    }
 
     const publishedBrief: BriefV1 = {
       id: briefId,
@@ -501,6 +548,20 @@ export async function processQueuedBrief(
     );
 
     await appendProgress(briefId, 'failed', `Failed: ${err.message || 'Pipeline error'}`);
+
+    // Notify workspace on failed brief (FR7.2)
+    try {
+      await createNotification({
+        workspaceId,
+        briefId,
+        type: 'brief_failed',
+        title: `Brief Failed: ${question.slice(0, 40)}`,
+        message: err.message || 'Pipeline generation failed.',
+      });
+    } catch (notifErr) {
+      console.warn('[Notification Fail Error]:', notifErr);
+    }
+
     return null;
   }
 }

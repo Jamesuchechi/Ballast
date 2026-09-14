@@ -1,5 +1,6 @@
 import { query, queryOne } from '@/db/client';
 import { getAuthenticatedGmailClient } from '@/connectors/gmail';
+import { getDecryptedToken } from '@/connectors/tokenStore';
 
 export interface ActionRecord {
   id: string;
@@ -26,6 +27,17 @@ export interface ExecuteActionOptions {
     rawMessage: string;
     isDraftOnly: boolean;
   }) => Promise<{ messageId: string }>;
+
+  /**
+   * Optional custom GitHub dispatch function for dependency injection in tests
+   */
+  customGitHubDispatch?: (params: {
+    type: 'issue_draft' | 'comment_draft';
+    repo: string;
+    issueNumber?: number;
+    title?: string;
+    body: string;
+  }) => Promise<{ id: string | number; url?: string }>;
 }
 
 /**
@@ -116,6 +128,8 @@ export async function executeAction(
   try {
     if (action.type === 'email_draft') {
       await executeEmailAction(action, options);
+    } else if (action.type === 'issue_draft' || action.type === 'comment_draft') {
+      await executeGitHubAction(action as ActionRecord & { type: 'issue_draft' | 'comment_draft' }, options);
     } else if (action.type === 'task') {
       // Per TODO.md Phase 5: "A task stays in-app"
       await query(
@@ -229,6 +243,92 @@ async function executeEmailAction(
       action.workspace_id,
       action.brief_id,
       `${isDraftOnly ? 'gmail.drafts.create' : 'gmail.messages.send'}: to=${to} subject="${subject}"`,
+    ]
+  );
+}
+
+/**
+ * Handles GitHub issue and comment draft creation.
+ */
+async function executeGitHubAction(
+  action: ActionRecord & { type: 'issue_draft' | 'comment_draft' },
+  options?: ExecuteActionOptions
+): Promise<void> {
+  const payload = typeof action.payload === 'string' ? JSON.parse(action.payload) : action.payload || {};
+  const repo = payload.repo || payload.repository;
+  const body = payload.body || payload.comment || payload.content || '';
+  const title = payload.title || 'Brief Action Follow-up';
+  const issueNumber = payload.issue_number || payload.number;
+
+  if (!repo) {
+    throw new Error('GitHub action payload requires "repo" (e.g. "owner/repo").');
+  }
+  if (!body) {
+    throw new Error('GitHub action payload requires "body" or "comment" text.');
+  }
+
+  if (action.type === 'comment_draft' && !issueNumber) {
+    throw new Error('GitHub comment_draft requires "issue_number" or "number".');
+  }
+
+  if (options?.customGitHubDispatch) {
+    await options.customGitHubDispatch({
+      type: action.type,
+      repo,
+      issueNumber: issueNumber ? Number(issueNumber) : undefined,
+      title,
+      body,
+    });
+  } else {
+    const token = await getDecryptedToken<{ access_token?: string; token?: string }>(action.workspace_id, 'github');
+    if (!token) {
+      throw new Error('GitHub connector is not connected or token has been revoked');
+    }
+    const bearerToken = token.access_token || token.token;
+    const headers = {
+      Authorization: `Bearer ${bearerToken}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'Ballast-OS',
+    };
+
+    if (action.type === 'issue_draft') {
+      const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ title, body }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Failed to create GitHub issue (${res.status}): ${errText.slice(0, 150)}`);
+      }
+    } else {
+      const res = await fetch(`https://api.github.com/repos/${repo}/issues/${issueNumber}/comments`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Failed to create GitHub comment (${res.status}): ${errText.slice(0, 150)}`);
+      }
+    }
+  }
+
+  await query(
+    `UPDATE actions 
+     SET executed_at = NOW(), error = NULL
+     WHERE id = $1`,
+    [action.id]
+  );
+
+  await query(
+    `INSERT INTO access_logs (workspace_id, source_id, brief_id, action)
+     VALUES ($1, NULL, $2, $3)`,
+    [
+      action.workspace_id,
+      action.brief_id,
+      `github.${action.type}: repo=${repo} ${issueNumber ? `number=${issueNumber}` : `title="${title}"`}`,
     ]
   );
 }

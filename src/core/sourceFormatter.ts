@@ -1,12 +1,6 @@
-import type { RetrievedQuote } from "./types";
+import type { RetrievedQuote, SourceBlock } from "./types";
 
-export interface SourceBlock {
-  id: string;
-  source_id?: string;
-  class: "private" | "web";
-  connector: string;
-  body: string;
-}
+export type { SourceBlock };
 
 /**
  * Formats source blocks into XML-delimited strings to strictly isolate

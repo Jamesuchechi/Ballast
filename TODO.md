@@ -214,15 +214,16 @@ A brief proposes a Gmail draft; approval sends; unapproved never sends. A `task`
 
 ### Deliverables
 
-- [ ] GitHub OAuth, **read** repos / PRs / issues first.
-- [ ] Calendar read-only sync. No event create in v1 (FR5.4).
-- [ ] Same sync UX as Gmail (status, errors; window where it applies).
-- [ ] Planted disagreement across mail vs issue vs event → `citation_type=conflict` in a test scenario.
-- [ ] **Then** GitHub write scopes + `issue_draft` / `comment_draft` with the same approval gate as mail.
+- [x] GitHub OAuth, **read** repos / PRs / issues first.
+- [x] Calendar read-only sync. No event create in v1 (FR5.4).
+- [x] Same sync UX as Gmail (status, errors; window where it applies).
+- [x] Planted disagreement across mail vs issue vs event → `citation_type=conflict` in a test scenario.
+- [x] **Then** GitHub write scopes + `issue_draft` / `comment_draft` with the same approval gate as mail.
 
 ### Exit criterion
 
 A brief spanning inbox + repo + calendar flags at least one deliberately planted conflict. A GitHub draft posts only after approval.
+*(Status: **PASSED**. Enforced by `src/core/critic.ts`, `src/core/pipelineWorker.ts`, and `src/core/actionExecutor.ts`. Verified in `test/phase6_cross_source_conflicts.test.ts`. Discrepancies across connectors surface as `citation_type=conflict` without picking a winner; GitHub issue/comment drafts require explicit approval and Operator plan).*
 
 ---
 
@@ -234,16 +235,17 @@ A brief spanning inbox + repo + calendar flags at least one deliberately planted
 
 ### Deliverables
 
-- [ ] Confirm progress copy is honest: “checking Gmail… drafting… verifying claims… rendering.”
-- [ ] `schedules` row → weekly “what slipped since last brief” using the `parent_brief_id` chain.
-- [ ] Notify on `published` or `failed` (email or in-app).
-- [ ] Reopened brief older than `stale_after` shows regenerate CTA.
-- [ ] Scheduled runs count against the Operator brief meter.
-- [ ] Server 403 if a non-Operator workspace tries to create a schedule.
+- [x] Confirm progress copy is honest: “checking Gmail… drafting… verifying claims… rendering.”
+- [x] `schedules` row → weekly “what slipped since last brief” using the `parent_brief_id` chain.
+- [x] Notify on `published` or `failed` (email or in-app).
+- [x] Reopened brief older than `stale_after` shows regenerate CTA.
+- [x] Scheduled runs count against the Operator brief meter.
+- [x] Server 403 if a non-Operator workspace tries to create a schedule.
 
 ### Exit criterion
 
 A real weekly brief lands unprompted and is worth opening. Regenerating it creates a child brief.
+*(Status: **PASSED**. Enforced by `src/core/scheduler.ts`, `src/core/pipelineWorker.ts`, `src/core/notifications.ts`, `src/core/usage.ts`, and `src/app/api/schedules/route.ts`. Verified in `test/phase7_scheduling_retention.test.ts`. Weekly scheduled runs chain via `parent_brief_id` to identify slipped milestones, notifications fire on published/failed states, stale briefs prompt regeneration without in-place mutation, and non-Operator workspaces receive HTTP 403).*
 
 ---
 

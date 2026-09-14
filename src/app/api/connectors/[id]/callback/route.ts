@@ -113,6 +113,9 @@ export async function GET(
       if (!tokenData?.ok) {
         throw new Error(tokenData?.error || 'Failed to exchange token with Slack');
       }
+      if (!tokenData.access_token && tokenData.authed_user?.access_token) {
+        tokenData.access_token = tokenData.authed_user.access_token;
+      }
     }
 
     // 4. Notion
