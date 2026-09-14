@@ -8,6 +8,7 @@ import { renderBriefMarkdown } from './renderer';
 import { validateForPublish } from './validator';
 import { renderAndStorePdf } from './pdfRenderer';
 import { createNotification } from './notifications';
+import { sendBriefEmailNotification } from './emailService';
 import type {
   BriefV1,
   CitationRecord,
@@ -516,7 +517,7 @@ export async function processQueuedBrief(
 
     await appendProgress(briefId, 'published', 'Brief successfully published');
 
-    // Notify workspace on published brief (FR7.2)
+    // Notify workspace on published brief (FR7.2 & Part 2.2)
     try {
       await createNotification({
         workspaceId,
@@ -528,6 +529,17 @@ export async function processQueuedBrief(
     } catch (notifErr) {
       console.warn('[Notification Publish Error]:', notifErr);
     }
+
+    // Worker transactional email dispatch (non-blocking, opt-out-able)
+    sendBriefEmailNotification({
+      workspaceId,
+      briefId,
+      type: 'brief_published',
+      title: draft.title || `Brief: ${question}`,
+      question,
+      claimCount: publishedSections.evidence?.length || 0,
+      pdfUri,
+    }).catch((emailErr) => console.warn('[Email Dispatch Publish Error]:', emailErr));
 
     const publishedBrief: BriefV1 = {
       id: briefId,
@@ -560,7 +572,7 @@ export async function processQueuedBrief(
 
     await appendProgress(briefId, 'failed', `Failed: ${err.message || 'Pipeline error'}`);
 
-    // Notify workspace on failed brief (FR7.2)
+    // Notify workspace on failed brief (FR7.2 & Part 2.2)
     try {
       await createNotification({
         workspaceId,
@@ -572,6 +584,16 @@ export async function processQueuedBrief(
     } catch (notifErr) {
       console.warn('[Notification Fail Error]:', notifErr);
     }
+
+    // Worker transactional email dispatch (non-blocking, opt-out-able)
+    sendBriefEmailNotification({
+      workspaceId,
+      briefId,
+      type: 'brief_failed',
+      title: `Brief Failed: ${question.slice(0, 40)}`,
+      question,
+      summaryOrError: err.message || 'Pipeline generation failed.',
+    }).catch((emailErr) => console.warn('[Email Dispatch Fail Error]:', emailErr));
 
     return null;
   }

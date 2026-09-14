@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name TEXT,
+  notification_preferences JSONB NOT NULL DEFAULT '{"email_enabled": true, "notify_on_publish": true, "notify_on_fail": true}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

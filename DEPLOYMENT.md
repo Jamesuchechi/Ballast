@@ -134,6 +134,20 @@ By default, Ballast automatically uses local filesystem storage (`.storage/`). I
 > [!NOTE]
 > If these variables are omitted, Ballast continues running with 100% functionality using the local filesystem driver.
 
+### Optional Transactional Email Delivery (Resend)
+
+By default, Ballast creates in-app notifications and logs simulated email dispatches cleanly when `RESEND_API_KEY` is not provided. When you add a Resend API key to your Render worker, Ballast automatically sends transactional emails when automated briefs are published or fail:
+
+| Variable | Description | Example / Default |
+| :--- | :--- | :--- |
+| `RESEND_API_KEY` | Resend API key (`re_...`) | `re_123456789...` |
+| `EMAIL_FROM` | *(Optional)* Sender address | `Ballast <briefs@yourdomain.com>` (defaults to `Ballast <onboarding@resend.dev>`) |
+| `APP_URL` | *(Optional)* Web app base URL for notification links | `https://ballast.vercel.app` |
+
+> [!TIP]
+> You do not need a custom domain immediately. Resend provides `onboarding@resend.dev` out of the box for testing with your personal account email before verifying a domain. Users can opt out or customize their notification preferences in their account settings at any time.
+
+
 
 ---
 

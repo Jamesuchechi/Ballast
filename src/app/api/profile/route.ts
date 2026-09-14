@@ -14,9 +14,10 @@ export async function GET(req: NextRequest) {
       id: string;
       email: string;
       name: string | null;
+      notification_preferences: any;
       created_at: string;
     }>(
-      `SELECT id, email, name, created_at FROM users WHERE id = $1`,
+      `SELECT u.id, u.email, u.name, (to_jsonb(u.*) -> 'notification_preferences')::jsonb as notification_preferences, u.created_at FROM users u WHERE u.id = $1`,
       [payload.userId]
     );
 
@@ -84,7 +85,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, workspaceName, currentPassword, newPassword, plan } = body;
+    const { name, workspaceName, currentPassword, newPassword, plan, notificationPreferences } = body;
 
     // 1. Update user display name if provided
     if (typeof name === 'string' && name.trim().length > 0) {
@@ -149,9 +150,34 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    // 4. Update notification preferences if provided
+    if (notificationPreferences && typeof notificationPreferences === 'object') {
+      const current = await queryOne<{ notification_preferences: any }>(
+        `SELECT notification_preferences FROM users WHERE id = $1`,
+        [payload.userId]
+      );
+      const merged = {
+        email_enabled: true,
+        notify_on_publish: true,
+        notify_on_fail: true,
+        ...(current?.notification_preferences || {}),
+        ...notificationPreferences,
+      };
+      await query(
+        `UPDATE users SET notification_preferences = $1 WHERE id = $2`,
+        [JSON.stringify(merged), payload.userId]
+      );
+    }
+
     // Return updated profile
-    const updatedUser = await queryOne<{ id: string; email: string; name: string | null; created_at: string }>(
-      `SELECT id, email, name, created_at FROM users WHERE id = $1`,
+    const updatedUser = await queryOne<{
+      id: string;
+      email: string;
+      name: string | null;
+      notification_preferences: any;
+      created_at: string;
+    }>(
+      `SELECT u.id, u.email, u.name, (to_jsonb(u.*) -> 'notification_preferences')::jsonb as notification_preferences, u.created_at FROM users u WHERE u.id = $1`,
       [payload.userId]
     );
     const updatedWorkspace = await queryOne<{ id: string; name: string; plan: string; created_at: string }>(
