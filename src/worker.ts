@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import http from 'http';
 import { Worker, Job } from 'bullmq';
 import { fileURLToPath } from 'url';
 import { BRIEF_QUEUE_NAME, BriefJobData } from './queue/briefQueue';
@@ -16,6 +17,7 @@ let schedulesTriggeredCount = 0;
 let heartbeatInterval: NodeJS.Timeout | null = null;
 let schedulerInterval: NodeJS.Timeout | null = null;
 let isCheckingSchedules = false;
+let httpServer: http.Server | null = null;
 
 export function startHeartbeat(intervalMs: number = 60000): void {
   if (heartbeatInterval) {
@@ -236,12 +238,63 @@ export function createActionWorker(concurrency: number = 2): Worker<ActionJobDat
   return worker;
 }
 
+export function startHttpServer(
+  port: number = process.env.PORT ? parseInt(process.env.PORT, 10) : 10000
+): http.Server {
+  if (httpServer) {
+    return httpServer;
+  }
+
+  httpServer = http.createServer((req, res) => {
+    const url = req.url?.split('?')[0];
+    if (url === '/health' || url === '/ping' || url === '/wake' || url === '/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          uptimeSec: Math.floor(process.uptime()),
+          briefsProcessed: briefsProcessedCount,
+          actionsProcessed: actionsProcessedCount,
+          schedulesTriggered: schedulesTriggeredCount,
+          timestamp: new Date().toISOString(),
+        })
+      );
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not Found' }));
+  });
+
+  httpServer.listen(port, () => {
+    console.log(`[Worker HTTP] Health & wake server listening on port ${port}`);
+  });
+
+  return httpServer;
+}
+
+export function stopHttpServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (httpServer) {
+      httpServer.close(() => {
+        httpServer = null;
+        resolve();
+      });
+    } else {
+      resolve();
+    }
+  });
+}
+
 export async function startWorker(): Promise<{
   briefWorker: Worker<BriefJobData>;
   actionWorker: Worker<ActionJobData>;
 }> {
   console.log(`[Worker] Ballast async worker starting on queues "${BRIEF_QUEUE_NAME}" & "${ACTION_QUEUE_NAME}"...`);
   logEnvironmentStatus();
+
+  // Start HTTP health/wake server (enables Render Free Tier Web Service deployment)
+  startHttpServer();
 
   const briefWorker = createBriefWorker(2);
   const actionWorker = createActionWorker(2);
@@ -256,6 +309,7 @@ export async function startWorker(): Promise<{
     console.log(`\n[Worker] Received ${signal}. Gracefully stopping workers...`);
     stopHeartbeat();
     stopSchedulerLoop();
+    await stopHttpServer();
     await Promise.all([briefWorker.close(), actionWorker.close()]);
     console.log('[Worker] All workers closed cleanly.');
     process.exit(0);

@@ -1,18 +1,24 @@
-# Render Blueprint for Ballast Background Worker
+# Render Blueprint for Ballast Worker
 # Docs: https://render.com/docs/blueprint-spec
+# Note: Render Free Tier only supports 'type: web' services (which spin down after 15m of inactivity).
+# The worker exposes a lightweight HTTP health/wake server on PORT 10000, allowing it to run on
+# Render's Free tier and wake up automatically on incoming traffic or when pinged by the frontend.
 
 services:
-  - type: worker
+  - type: web
     name: ballast-worker
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm install && npm run db:migrate
     startCommand: npm run worker
     autoDeploy: true
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
       # Database connection (Points to the same PostgreSQL database as the Vercel Next.js app)
       - key: DATABASE_URL
         sync: false

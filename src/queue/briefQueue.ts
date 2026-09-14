@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { createRedisClient } from './redis';
+import { wakeWorker } from '../utils/wakeWorker';
 
 export const BRIEF_QUEUE_NAME = 'ballast-briefs';
 
@@ -60,6 +61,9 @@ export async function enqueueBriefJob(
       jobId: `brief-${briefId}`,
     }
   );
+
+  // Trigger wake-up ping for Render Free Tier if configured
+  wakeWorker();
 
   return job.id!;
 }

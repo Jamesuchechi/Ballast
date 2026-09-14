@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { RightSidebar } from './RightSidebar';
@@ -70,6 +70,11 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+
+  // Ping background worker to wake up from Render free-tier sleep
+  useEffect(() => {
+    fetch('/api/worker/wake').catch(() => {});
+  }, []);
 
   return (
     <div className="dash-shell dash-root">

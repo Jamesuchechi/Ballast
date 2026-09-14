@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { createRedisClient } from './redis';
+import { wakeWorker } from '../utils/wakeWorker';
 
 export const ACTION_QUEUE_NAME = 'ballast-actions';
 
@@ -56,6 +57,9 @@ export async function enqueueActionJob(
       jobId: `action-${actionId}`,
     }
   );
+
+  // Trigger wake-up ping for Render Free Tier if configured
+  wakeWorker();
 
   return job.id!;
 }
