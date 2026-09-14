@@ -72,7 +72,7 @@ export function DashboardLayout({
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
   return (
-    <div className="dash-root">
+    <div className="dash-shell dash-root">
       {/* Mobile Top Header (<768px) */}
       <MobileHeader
         onOpenSidebar={() => setIsMobileSidebarOpen(true)}
@@ -83,7 +83,7 @@ export function DashboardLayout({
       />
 
       {/* Main Frame */}
-      <div className="dash-app-container">
+      <div className="dash-body dash-app-container">
         {/* Left Sidebar */}
         <Sidebar
           user={user}
