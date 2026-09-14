@@ -381,14 +381,20 @@ export default function DashboardPage() {
     try {
       setActionLoading(true);
       const res = await fetch(`/api/schedules/${scheduleId}/run`, { method: 'POST' });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Fallback if response body is empty or non-JSON
+      }
+
       if (res.ok) {
         alert('Scheduled run initiated! A new brief is being generated in the background.');
         await fetchBriefs();
         await fetchSchedules();
         await fetchNotifications();
       } else {
-        alert(data.error || 'Failed to run schedule');
+        alert(data.error || `Failed to run schedule (Status ${res.status})`);
       }
     } catch (e: any) {
       alert('Schedule run error: ' + e.message);

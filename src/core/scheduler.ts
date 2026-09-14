@@ -123,13 +123,8 @@ export async function runSchedule(
   if (options?.runSynchronously) {
     await processQueuedBrief(briefId);
   } else {
-    // Dispatch to background queue
-    try {
-      await enqueueBriefJob(briefId, { workspaceId: schedule.workspace_id });
-    } catch {
-      // If queue service is offline in eval/mock, execute in process
-      await processQueuedBrief(briefId);
-    }
+    // Dispatch exclusively to BullMQ background queue
+    await enqueueBriefJob(briefId, { workspaceId: schedule.workspace_id });
   }
 
   return {

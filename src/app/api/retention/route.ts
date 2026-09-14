@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import {
   getRetentionPolicies,
   updateRetentionPolicy,
@@ -8,13 +8,12 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
-    if (!payload || !payload.workspaceId) {
+    const session = await getAuthSession(req);
+    if (!session || !session.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const policies = await getRetentionPolicies(payload.workspaceId);
+    const policies = await getRetentionPolicies(session.workspaceId);
     return NextResponse.json({ policies });
   } catch (err: any) {
     console.error('[API GET /api/retention error]:', err);
@@ -24,14 +23,13 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
-    if (!payload || !payload.workspaceId) {
+    const session = await getAuthSession(req);
+    if (!session || !session.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Owner role required to adjust workspace retention
-    if (payload.role !== 'owner') {
+    if (session.role !== 'owner') {
       return NextResponse.json({ error: 'Forbidden: Owner role required' }, { status: 403 });
     }
 
@@ -45,8 +43,8 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    await updateRetentionPolicy(payload.workspaceId, connector, windowDays);
-    const updated = await getRetentionPolicies(payload.workspaceId);
+    await updateRetentionPolicy(session.workspaceId, connector, windowDays);
+    const updated = await getRetentionPolicies(session.workspaceId);
 
     return NextResponse.json({ success: true, policies: updated });
   } catch (err: any) {
@@ -57,20 +55,19 @@ export async function PUT(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
-    if (!payload || !payload.workspaceId) {
+    const session = await getAuthSession(req);
+    if (!session || !session.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (payload.role !== 'owner') {
+    if (session.role !== 'owner') {
       return NextResponse.json({ error: 'Forbidden: Owner role required' }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
     const connector = body.connector || undefined;
 
-    const result = await pruneExpiredSources(payload.workspaceId, connector);
+    const result = await pruneExpiredSources(session.workspaceId, connector);
 
     return NextResponse.json({
       success: true,
