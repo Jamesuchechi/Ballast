@@ -72,7 +72,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     name: 'Notion',
     description: 'Sync workspace pages, wikis, roadmaps, and database entries.',
     icon: 'FileText',
-    authType: 'token',
+    authType: 'oauth2',
     scopes: ['read_content'],
     connector: notionConnector,
   },

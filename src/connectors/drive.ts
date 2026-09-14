@@ -38,18 +38,34 @@ export const SAMPLE_DRIVE_FILES: DriveDocPayload[] = [
   },
 ];
 
+export async function getDriveToken(
+  workspaceId: string
+): Promise<{ token: Record<string, any>; tokenConnector: string } | null> {
+  const driveToken = await getDecryptedToken<Record<string, any>>(workspaceId, 'drive');
+  if (driveToken && driveToken.access_token) {
+    return { token: driveToken, tokenConnector: 'drive' };
+  }
+
+  // Fallback to gmail token ONLY if it has drive scopes
+  const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
+  if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('drive'))) {
+    const gmailToken = await getDecryptedToken<Record<string, any>>(workspaceId, 'gmail');
+    if (gmailToken && gmailToken.access_token) {
+      return { token: gmailToken, tokenConnector: 'gmail' };
+    }
+  }
+
+  return null;
+}
+
 export async function getAuthenticatedDriveClient(workspaceId: string) {
-  let token = await getDecryptedToken<Record<string, any>>(workspaceId, 'drive');
-  let tokenConnector = 'drive';
-  if (!token) {
-    token = await getDecryptedToken<Record<string, any>>(workspaceId, 'gmail');
-    tokenConnector = 'gmail';
+  const tokenInfo = await getDriveToken(workspaceId);
+
+  if (!tokenInfo) {
+    throw new Error('Google Drive connector is not connected. Please connect Google Drive with drive permissions.');
   }
 
-  if (!token || !token.access_token) {
-    throw new Error('Google Drive connector is not connected or token has been revoked');
-  }
-
+  const { token, tokenConnector } = tokenInfo;
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = getConnectorRedirectUri('drive');
@@ -82,9 +98,17 @@ export class DriveConnector implements SourceConnector {
   readonly name = 'Google Drive';
 
   async health(workspaceId: string): Promise<ConnectorHealth> {
-    const tokenStatus = (await getTokenStatus(workspaceId, 'drive')).connected
-      ? await getTokenStatus(workspaceId, 'drive')
-      : await getTokenStatus(workspaceId, 'gmail');
+    const driveStatus = await getTokenStatus(workspaceId, 'drive');
+    let isConnected = driveStatus.connected;
+    let revokedAt = driveStatus.revoked_at;
+
+    if (!isConnected) {
+      const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
+      if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('drive'))) {
+        isConnected = true;
+        revokedAt = gmailStatus.revoked_at;
+      }
+    }
 
     const sourceStats = await queryOne<{
       last_synced: string | null;
@@ -98,11 +122,11 @@ export class DriveConnector implements SourceConnector {
     );
 
     return {
-      connected: tokenStatus.connected,
+      connected: isConnected,
       last_synced: sourceStats?.last_synced || null,
       last_error: sourceStats?.last_error || null,
       sync_window_days: DEFAULT_DRIVE_WINDOW_DAYS,
-      revoked_at: tokenStatus.revoked_at,
+      revoked_at: revokedAt,
     };
   }
 
@@ -111,11 +135,9 @@ export class DriveConnector implements SourceConnector {
     const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
-    const hasToken =
-      (await getDecryptedToken(workspaceId, 'drive')) ||
-      (await getDecryptedToken(workspaceId, 'gmail'));
+    const tokenInfo = await getDriveToken(workspaceId);
 
-    if (!hasToken && isMockAllowed) {
+    if (!tokenInfo && isMockAllowed) {
       return SAMPLE_DRIVE_FILES.map((f) => {
         const checksum = createHash('sha256').update(f.content).digest('hex');
         return {
@@ -128,8 +150,8 @@ export class DriveConnector implements SourceConnector {
       });
     }
 
-    if (!hasToken) {
-      throw new Error('Google Drive connector is not connected or token has been revoked');
+    if (!tokenInfo) {
+      throw new Error('Google Drive connector is not connected. Please connect Google Drive with drive permissions.');
     }
 
     const { drive } = await getAuthenticatedDriveClient(workspaceId);

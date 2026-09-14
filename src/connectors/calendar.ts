@@ -65,19 +65,34 @@ export const SAMPLE_CALENDAR_EVENTS: CalendarEventPayload[] = [
   },
 ];
 
+export async function getCalendarToken(
+  workspaceId: string
+): Promise<{ token: Record<string, any>; tokenConnector: string } | null> {
+  const calToken = await getDecryptedToken<Record<string, any>>(workspaceId, 'calendar');
+  if (calToken && calToken.access_token) {
+    return { token: calToken, tokenConnector: 'calendar' };
+  }
+
+  // Fallback to gmail token ONLY if it has calendar scopes
+  const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
+  if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('calendar'))) {
+    const gmailToken = await getDecryptedToken<Record<string, any>>(workspaceId, 'gmail');
+    if (gmailToken && gmailToken.access_token) {
+      return { token: gmailToken, tokenConnector: 'gmail' };
+    }
+  }
+
+  return null;
+}
+
 export async function getAuthenticatedCalendarClient(workspaceId: string) {
-  // Check 'calendar' token first, then fallback to 'gmail' token (unified Google OAuth)
-  let token = await getDecryptedToken<Record<string, any>>(workspaceId, 'calendar');
-  let tokenConnector = 'calendar';
-  if (!token) {
-    token = await getDecryptedToken<Record<string, any>>(workspaceId, 'gmail');
-    tokenConnector = 'gmail';
+  const tokenInfo = await getCalendarToken(workspaceId);
+
+  if (!tokenInfo) {
+    throw new Error('Google Calendar connector is not connected. Please connect Google Calendar with calendar permissions.');
   }
 
-  if (!token || !token.access_token) {
-    throw new Error('Google Calendar connector is not connected or token has been revoked');
-  }
-
+  const { token, tokenConnector } = tokenInfo;
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = getConnectorRedirectUri('calendar');
@@ -110,9 +125,17 @@ export class CalendarConnector implements SourceConnector {
   readonly name = 'Google Calendar';
 
   async health(workspaceId: string): Promise<ConnectorHealth> {
-    const tokenStatus = (await getTokenStatus(workspaceId, 'calendar')).connected
-      ? await getTokenStatus(workspaceId, 'calendar')
-      : await getTokenStatus(workspaceId, 'gmail');
+    const calStatus = await getTokenStatus(workspaceId, 'calendar');
+    let isConnected = calStatus.connected;
+    let revokedAt = calStatus.revoked_at;
+
+    if (!isConnected) {
+      const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
+      if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('calendar'))) {
+        isConnected = true;
+        revokedAt = gmailStatus.revoked_at;
+      }
+    }
 
     const sourceStats = await queryOne<{
       last_synced: string | null;
@@ -126,11 +149,11 @@ export class CalendarConnector implements SourceConnector {
     );
 
     return {
-      connected: tokenStatus.connected,
+      connected: isConnected,
       last_synced: sourceStats?.last_synced || null,
       last_error: sourceStats?.last_error || null,
       sync_window_days: DEFAULT_CALENDAR_WINDOW_DAYS,
-      revoked_at: tokenStatus.revoked_at,
+      revoked_at: revokedAt,
     };
   }
 
@@ -139,11 +162,9 @@ export class CalendarConnector implements SourceConnector {
     const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
-    const hasToken =
-      (await getDecryptedToken(workspaceId, 'calendar')) ||
-      (await getDecryptedToken(workspaceId, 'gmail'));
+    const tokenInfo = await getCalendarToken(workspaceId);
 
-    if (!hasToken && isMockAllowed) {
+    if (!tokenInfo && isMockAllowed) {
       return SAMPLE_CALENDAR_EVENTS.map((e) => {
         const content = formatCalendarContent(e);
         const checksum = createHash('sha256').update(content).digest('hex');
@@ -157,8 +178,8 @@ export class CalendarConnector implements SourceConnector {
       });
     }
 
-    if (!hasToken) {
-      throw new Error('Google Calendar connector is not connected or token has been revoked');
+    if (!tokenInfo) {
+      throw new Error('Google Calendar connector is not connected. Please connect Google Calendar with calendar permissions.');
     }
 
     const { calendar } = await getAuthenticatedCalendarClient(workspaceId);
