@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/auth';
-import { query, queryOne } from '@/db/client';
+import { queryOne } from '@/db/client';
 import { processQueuedBrief } from '@/core/pipelineWorker';
+import { enqueueBriefJob } from '@/queue/briefQueue';
 
 export async function POST(
   req: NextRequest,
@@ -59,19 +60,30 @@ export async function POST(
       ]
     );
 
-    // Process regeneration live through the grounded async pipeline
-    const publishedBrief = await processQueuedBrief(childBriefId);
+    // 1. Dispatch to BullMQ for dedicated worker execution
+    try {
+      await enqueueBriefJob(childBriefId, { workspaceId });
+    } catch (qErr) {
+      console.warn('[Regenerate] BullMQ dispatch error (fallback to background task):', qErr);
+    }
 
-    const updatedChild = await queryOne(
-      `SELECT * FROM briefs WHERE id = $1`,
-      [childBriefId]
-    );
-
-    return NextResponse.json({
-      childBrief: updatedChild || childRow,
-      publishedBrief,
-      message: 'Regenerated brief created as new version',
+    // 2. Schedule background execution via after() for serverless / worker-less environments
+    after(async () => {
+      try {
+        await processQueuedBrief(childBriefId);
+      } catch (procErr) {
+        console.error('[Regenerate] Background pipeline execution error:', procErr);
+      }
     });
+
+    return NextResponse.json(
+      {
+        childBrief: childRow,
+        status: 'queued',
+        message: 'Regenerated brief enqueued for processing',
+      },
+      { status: 202 }
+    );
   } catch (err: any) {
     console.error('Regenerate brief error:', err);
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });

@@ -88,6 +88,11 @@ export async function processQueuedBrief(
     throw new Error(`Brief ${briefId} not found`);
   }
 
+  // Idempotency guard: do not re-process already running or published briefs
+  if (briefRow.status !== 'queued') {
+    return null;
+  }
+
   const { workspace_id: workspaceId, question, mode, parent_brief_id: parentBriefId } = briefRow;
 
   try {
@@ -96,8 +101,14 @@ export async function processQueuedBrief(
     let circuitBrokenReason: string | null = null;
     const toolsCalled: string[] = ['retrieval_private'];
 
-    // Transition to running
-    await query(`UPDATE briefs SET status = 'running' WHERE id = $1`, [briefId]);
+    // Transition to running atomically
+    const acquired = await query(
+      `UPDATE briefs SET status = 'running' WHERE id = $1 AND status = 'queued' RETURNING id`,
+      [briefId]
+    );
+    if (acquired.length === 0) {
+      return null;
+    }
 
     // Step: planning
     await appendProgress(briefId, 'planning', `Planning retrieval passes for mode=${mode}…`);

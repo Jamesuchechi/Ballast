@@ -586,15 +586,59 @@ export default function DashboardPage() {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/briefs/${selectedBriefId}/regenerate`, { method: 'POST' });
-      const data = await res.json();
-      if (data.childBrief) {
-        await Promise.all([
-          fetchBriefs(),
-          fetchAccessLogs(),
-          fetchActions(),
-          fetchTelemetry(),
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Response was not JSON (e.g. gateway timeout or 500 error page)
+      }
+
+      if (!res.ok || !data) {
+        alert(data?.error || `Server error (${res.status}): Failed to trigger regeneration.`);
+        setActionLoading(false);
+        return;
+      }
+
+      if (data.childBrief?.id) {
+        const childId = data.childBrief.id;
+        setIsGenerating(true);
+        setGenerationSteps([
+          {
+            step: 'queued',
+            timestamp: new Date().toISOString(),
+            message: 'Queued regenerated brief for background processing',
+          },
         ]);
-        setSelectedBriefId(data.childBrief.id);
+
+        // Poll progress until published or failed
+        const interval = setInterval(async () => {
+          try {
+            const progRes = await fetch(`/api/briefs/${childId}/progress`);
+            if (progRes.ok) {
+              const pData = await progRes.json();
+              if (pData.progress) {
+                setGenerationSteps(pData.progress);
+              }
+              if (pData.status === 'published') {
+                clearInterval(interval);
+                setIsGenerating(false);
+                await Promise.all([
+                  fetchBriefs(),
+                  fetchAccessLogs(),
+                  fetchActions(),
+                  fetchTelemetry(),
+                ]);
+                setSelectedBriefId(childId);
+              } else if (pData.status === 'failed') {
+                clearInterval(interval);
+                setIsGenerating(false);
+                alert('Brief regeneration failed: ' + (pData.error || 'Validation error'));
+              }
+            }
+          } catch (e) {
+            console.warn('Regeneration progress poll error:', e);
+          }
+        }, 500);
       } else {
         alert(data.error || 'Failed to regenerate brief');
       }
