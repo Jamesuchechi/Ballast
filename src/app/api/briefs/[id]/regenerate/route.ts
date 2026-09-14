@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/db/client';
-import { processQueuedBrief } from '@/core/pipelineWorker';
 import { enqueueBriefJob } from '@/queue/briefQueue';
 
 export async function POST(
@@ -60,26 +59,8 @@ export async function POST(
       ]
     );
 
-    // 1. Dispatch to BullMQ for dedicated worker execution
-    try {
-      await enqueueBriefJob(childBriefId, { workspaceId });
-    } catch (qErr) {
-      console.warn('[Regenerate] BullMQ dispatch error (fallback to background task):', qErr);
-    }
-
-    // 2. Schedule background execution asynchronously via setImmediate so response returns immediately (202)
-    // and processQueuedBrief runs in the event loop for worker-less / dev / serverless environments
-    try {
-      setImmediate(async () => {
-        try {
-          await processQueuedBrief(childBriefId);
-        } catch (procErr) {
-          console.error('[Regenerate] Background pipeline execution error:', procErr);
-        }
-      });
-    } catch (bgErr) {
-      console.warn('[Regenerate] Background trigger error:', bgErr);
-    }
+    // Dispatch to BullMQ for dedicated worker execution
+    await enqueueBriefJob(childBriefId, { workspaceId });
 
     return NextResponse.json(
       {

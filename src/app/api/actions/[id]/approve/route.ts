@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne, query } from '@/db/client';
-import { executeAction, ActionRecord } from '@/core/actionExecutor';
+import { ActionRecord } from '@/core/actionExecutor';
+import { enqueueActionJob } from '@/queue/actionQueue';
 
 export async function POST(
   req: NextRequest,
@@ -55,31 +56,16 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update action approval' }, { status: 500 });
     }
 
-    // 4. Execute the action through the actionExecutor
-    try {
-      const executedAction = await executeAction(id);
-      return NextResponse.json({
-        success: true,
-        action: executedAction,
-        message: executedAction.type === 'email_draft'
-          ? 'Email draft approved and dispatched via Gmail API'
-          : 'Action approved and executed successfully',
-      });
-    } catch (execErr: any) {
-      // Re-fetch action with populated error
-      const actionWithError = await queryOne<ActionRecord>(
-        `SELECT * FROM actions WHERE id = $1`,
-        [id]
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          action: actionWithError || approvedAction,
-          error: execErr.message || 'Execution failed on external provider',
-        },
-        { status: 502 }
-      );
-    }
+    // 4. Dispatch to BullMQ for dedicated worker execution
+    await enqueueActionJob(id, workspaceId);
+
+    return NextResponse.json({
+      success: true,
+      action: approvedAction,
+      message: approvedAction.type === 'email_draft'
+        ? 'Email draft approved and enqueued for dispatch via Gmail API'
+        : 'Action approved and enqueued for execution',
+    });
   } catch (err: any) {
     console.error('Approve action error:', err);
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });

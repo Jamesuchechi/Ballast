@@ -1,3 +1,4 @@
+-- Migration 001: Initial Base Schema
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$
@@ -24,7 +25,6 @@ CREATE TABLE IF NOT EXISTS workspaces (
   meta JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- 3. workspace_members
 CREATE TABLE IF NOT EXISTS workspace_members (
@@ -153,13 +153,10 @@ CREATE TABLE IF NOT EXISTS schedules (
   last_run_brief_id UUID REFERENCES briefs(id) ON DELETE SET NULL,
   enabled BOOLEAN NOT NULL DEFAULT true,
   name TEXT,
-  last_triggered_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE schedules ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE schedules ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMPTZ;
 
--- Foreign key for briefs.schedule_id now that schedules exists
+-- Foreign key for briefs.schedule_id
 ALTER TABLE briefs DROP CONSTRAINT IF EXISTS briefs_schedule_id_fkey;
 ALTER TABLE briefs ADD CONSTRAINT briefs_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE SET NULL;
 
@@ -176,8 +173,6 @@ CREATE TABLE IF NOT EXISTS flags (
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'investigating', 'resolved')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE flags ADD COLUMN IF NOT EXISTS claim_text TEXT;
-ALTER TABLE flags ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open';
 
 -- 12. access_logs
 CREATE TABLE IF NOT EXISTS access_logs (

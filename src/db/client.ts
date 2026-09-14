@@ -16,6 +16,14 @@ if (connectionString.includes('sslmode=require') && !connectionString.includes('
   connectionString += (connectionString.includes('?') ? '&' : '?') + 'uselibpqcompat=true';
 }
 
+const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+const requiresSsl =
+  !isLocalhost ||
+  connectionString.includes('sslmode=require') ||
+  connectionString.includes('neon.tech') ||
+  connectionString.includes('render.com') ||
+  connectionString.includes('ssl=true');
+
 const poolConfig: PoolConfig = {
   connectionString,
   max: 20,
@@ -23,9 +31,7 @@ const poolConfig: PoolConfig = {
   connectionTimeoutMillis: 30000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  ssl: connectionString.includes('sslmode=require') || connectionString.includes('neon.tech')
-    ? { rejectUnauthorized: false }
-    : undefined,
+  ssl: requiresSsl ? { rejectUnauthorized: false } : undefined,
 };
 
 // Global pool singleton for Next.js hot reload environments

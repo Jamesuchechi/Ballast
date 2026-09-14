@@ -1,0 +1,33 @@
+# Render Blueprint for Ballast Background Worker
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: worker
+    name: ballast-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run db:migrate
+    startCommand: npm run worker
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Database connection (Points to the same PostgreSQL database as the Vercel Next.js app)
+      - key: DATABASE_URL
+        sync: false
+      # Redis connection for BullMQ (Points to the same Redis / Upstash instance as Vercel)
+      - key: REDIS_URL
+        sync: false
+      # Optional Upstash Redis direct credentials if used instead of REDIS_URL
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      # Multi-provider LLM API keys (Required for writer and critic pipeline execution)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
