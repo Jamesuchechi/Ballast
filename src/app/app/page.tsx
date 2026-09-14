@@ -47,6 +47,9 @@ import {
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { IntegrationsMarketplace, type ConnectorItem } from '@/components/dashboard/IntegrationsMarketplace';
+import { ProfileView } from '@/components/dashboard/ProfileView';
+import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
+import { LatencyPlot } from '@/components/dashboard/LatencyPlot';
 
 function computeUnifiedDiff(oldText: string, newText: string) {
   if (!oldText && !newText) return [];
@@ -118,6 +121,8 @@ export default function DashboardPage() {
   const [queryPrompt, setQueryPrompt] = useState('');
   const [briefFilter, setBriefFilter] = useState<'all' | 'home' | 'world'>('all');
   const [actionLoading, setActionLoading] = useState(false);
+  const [diffModalData, setDiffModalData] = useState<any>(null);
+  const [isDiffLoading, setIsDiffLoading] = useState(false);
 
   // Connector UI States (Marketplace driven by Phase B registry)
   const [connectors, setConnectors] = useState<ConnectorItem[]>([]);
@@ -941,6 +946,75 @@ export default function DashboardPage() {
     return briefs.filter((b) => (b.mode || 'home') === briefFilter);
   }, [briefs, briefFilter]);
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    window.location.href = '/login';
+  };
+
+  const handleOpenDiff = async (fromId: string, toId: string) => {
+    try {
+      setIsDiffLoading(true);
+      const res = await fetch(`/api/briefs/diff?fromId=${fromId}&toId=${toId}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.diff) {
+          setDiffModalData(json.diff);
+        }
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to compare brief versions');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to compare brief versions');
+    } finally {
+      setIsDiffLoading(false);
+    }
+  };
+
+  const handleExportObsidian = async (briefId: string) => {
+    try {
+      const res = await fetch(`/api/briefs/${briefId}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'obsidian' }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `brief_${briefId.slice(0, 8)}_obsidian.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Obsidian export error:', err);
+    }
+  };
+
+  const handleExportNotion = async (briefId: string) => {
+    try {
+      const res = await fetch(`/api/briefs/${briefId}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'notion' }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.markdown) {
+          await navigator.clipboard.writeText(json.markdown);
+          alert('Notion blocks copied to clipboard! You can paste directly into any Notion page.');
+        }
+      }
+    } catch (err) {
+      console.error('Notion export error:', err);
+    }
+  };
+
   const renderSourcesTable = (title: string, description?: string) => {
     const filtered = uploadedFiles.filter((f) => {
       if (sourceFilterConnector === 'all') return true;
@@ -1317,6 +1391,7 @@ export default function DashboardPage() {
       runs={briefDetail?.runs}
       onCreateBrief={handleOpenCreateBrief}
       actionLoading={actionLoading}
+      onLogout={handleLogout}
       theme={theme}
       onToggleTheme={toggleTheme}
       isDemo={isDemo}
@@ -2009,6 +2084,19 @@ export default function DashboardPage() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {currentBrief?.parent_brief_id && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDiff(currentBrief.parent_brief_id, currentBrief.id)}
+                      disabled={isDiffLoading}
+                      className="dash-btn-secondary"
+                      title="View side-by-side section and claim diff against parent revision (FR6.2)"
+                    >
+                      <GitBranch size={14} className={isDiffLoading ? 'animate-spin' : ''} />
+                      <span>Compare Diff</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={handleRegenerate}
                     disabled={actionLoading}
@@ -2039,6 +2127,30 @@ export default function DashboardPage() {
                       <FileText size={14} />
                       <span>Export Markdown</span>
                     </button>
+                  )}
+
+                  {currentBrief?.id && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleExportObsidian(currentBrief.id)}
+                        className="dash-btn-secondary"
+                        title="Export brief formatted for Obsidian with YAML frontmatter and callouts (FR9)"
+                      >
+                        <FileUp size={14} />
+                        <span>Obsidian</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleExportNotion(currentBrief.id)}
+                        className="dash-btn-secondary"
+                        title="Copy Notion-compatible markdown blocks to clipboard (FR9)"
+                      >
+                        <FileText size={14} />
+                        <span>Notion</span>
+                      </button>
+                    </>
                   )}
 
                   {currentBrief?.id && (
@@ -2701,15 +2813,29 @@ export default function DashboardPage() {
                 </span>
               </div>
               {currentBrief && (
-                <button
-                  onClick={handleRegenerate}
-                  disabled={actionLoading}
-                  className="dash-btn-primary"
-                  style={{ padding: '6px 14px', fontSize: '0.78rem' }}
-                >
-                  <GitBranch size={14} />
-                  <span>Create Revision</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {currentBrief.parent_brief_id && (
+                    <button
+                      onClick={() => handleOpenDiff(currentBrief.parent_brief_id, currentBrief.id)}
+                      disabled={isDiffLoading}
+                      className="dash-btn-secondary"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                      title="Open full interactive side-by-side modal with section and claim diffs"
+                    >
+                      <GitBranch size={14} className={isDiffLoading ? 'animate-spin' : ''} />
+                      <span>Deep Diff View</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={actionLoading}
+                    className="dash-btn-primary"
+                    style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                  >
+                    <GitBranch size={14} />
+                    <span>Create Revision</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -3333,6 +3459,9 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Latency P50/P95 Targets & Histogram (NFR3.2) */}
+          <LatencyPlot />
 
           {/* Recent Runs Table */}
           <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -4147,6 +4276,28 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* ======================================================== */}
+      {/* SECTION: PROFILE (READONLY & EDIT)                       */}
+      {/* ======================================================== */}
+      {activeSection === 'profile' && (
+        <ProfileView
+          initialUser={user}
+          initialWorkspace={workspace}
+          onLogout={handleLogout}
+          onProfileUpdated={(updatedUser, updatedWorkspace) => {
+            if (updatedUser) setUser(updatedUser);
+            if (updatedWorkspace) setWorkspace(updatedWorkspace);
+          }}
+        />
+      )}
+
+      {/* Interactive Side-by-Side Brief Diff Modal (FR6.2) */}
+      {diffModalData && (
+        <BriefDiffModal
+          diff={diffModalData}
+          onClose={() => setDiffModalData(null)}
+        />
       )}
     </DashboardLayout>
   );

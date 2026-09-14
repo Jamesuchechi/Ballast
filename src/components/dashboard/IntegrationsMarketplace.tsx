@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -13,6 +13,10 @@ import {
   X,
   CheckCircle2,
   RefreshCw,
+  Clock,
+  Download,
+  Trash2,
+  HardDrive,
 } from 'lucide-react';
 import { ConnectorCard, ConnectorItem, ConnectorHealth } from './ConnectorCard';
 export type { ConnectorItem, ConnectorHealth };
@@ -98,6 +102,99 @@ export function IntegrationsMarketplace({
       setTokenError(err.message || 'Failed to save token');
     } finally {
       setIsSubmittingToken(false);
+    }
+  };
+
+  // Retention & Compliance State (NFR2.1, NFR2.2)
+  const [retentionPolicies, setRetentionPolicies] = useState<any[]>([]);
+  const [isLoadingRetention, setIsLoadingRetention] = useState(false);
+  const [pruningStatus, setPruningStatus] = useState<string | null>(null);
+  const [wipeConfirmInput, setWipeConfirmInput] = useState('');
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
+  const [wipeMessage, setWipeMessage] = useState<string | null>(null);
+
+  const fetchRetentionPolicies = async () => {
+    try {
+      setIsLoadingRetention(true);
+      const res = await fetch('/api/retention');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.policies) setRetentionPolicies(data.policies);
+      }
+    } catch (err) {
+      console.error('Failed to load retention policies:', err);
+    } finally {
+      setIsLoadingRetention(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRetentionPolicies();
+  }, []);
+
+  const handleUpdateRetention = async (connector: string, windowDays: number) => {
+    try {
+      const res = await fetch('/api/retention', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connector, windowDays }),
+      });
+      if (res.ok) {
+        await fetchRetentionPolicies();
+      }
+    } catch (err) {
+      console.error('Failed to update retention:', err);
+    }
+  };
+
+  const handlePruneRetention = async (connector?: string) => {
+    try {
+      setPruningStatus('Pruning expired sources...');
+      const res = await fetch('/api/retention', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connector }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPruningStatus(data.message || 'Pruning completed');
+        await fetchRetentionPolicies();
+      }
+    } catch (err: any) {
+      setPruningStatus(err.message || 'Pruning failed');
+    } finally {
+      setTimeout(() => setPruningStatus(null), 4000);
+    }
+  };
+
+  const handleExportData = () => {
+    window.location.href = '/api/workspace/export';
+  };
+
+  const handleWipeAccount = async () => {
+    if (wipeConfirmInput !== 'DELETE_MY_WORKSPACE') return;
+    setIsWiping(true);
+    setWipeMessage(null);
+    try {
+      const res = await fetch('/api/workspace/wipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'DELETE_MY_WORKSPACE' }),
+      });
+      if (res.ok) {
+        setWipeMessage('Workspace wiped. Redirecting...');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1200);
+      } else {
+        const err = await res.json();
+        setWipeMessage(err.error || 'Wipe failed');
+      }
+    } catch (err: any) {
+      setWipeMessage(err.message || 'Wipe failed');
+    } finally {
+      setIsWiping(false);
     }
   };
 
@@ -432,6 +529,275 @@ export function IntegrationsMarketplace({
           </div>
         </div>
       </div>
+
+      {/* Data Retention & Compliance Policy Controls (NFR2.1) */}
+      <div
+        className="dash-card"
+        style={{
+          padding: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Clock size={20} color="#818cf8" />
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                Data Retention Policies (NFR2.1)
+              </h3>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                Retention policies are enforced per source type. Chunks and embeddings older than the window are purged.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => handlePruneRetention()}
+              className="dash-btn-secondary"
+              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Trash2 size={13} />
+              Prune All Expired
+            </button>
+            <button
+              onClick={handleExportData}
+              className="dash-btn-secondary"
+              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Download size={13} />
+              Export First (JSON)
+            </button>
+          </div>
+        </div>
+
+        {pruningStatus && (
+          <div
+            style={{
+              fontSize: '0.78rem',
+              color: '#10b981',
+              background: 'rgba(16, 185, 129, 0.1)',
+              padding: '8px 12px',
+              borderRadius: '6px',
+            }}
+          >
+            {pruningStatus}
+          </div>
+        )}
+
+        {/* Retention Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--card-border)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Source Type</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Active Records</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600 }}>Sync &amp; Retention Window</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {retentionPolicies.map((p) => (
+                <tr
+                  key={p.connector}
+                  style={{ borderBottom: '1px solid var(--card-border)' }}
+                >
+                  <td style={{ padding: '10px', color: 'var(--text)', fontWeight: 500 }}>
+                    <div>{p.name}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{p.description}</div>
+                  </td>
+                  <td style={{ padding: '10px', color: 'var(--text)' }}>
+                    {p.sourceCount} sources
+                  </td>
+                  <td style={{ padding: '10px' }}>
+                    <select
+                      value={p.windowDays}
+                      onChange={(e) => handleUpdateRetention(p.connector, parseInt(e.target.value, 10))}
+                      style={{
+                        background: 'var(--input-bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text)',
+                        fontSize: '0.78rem',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value={7}>7 Days (Ephemeral)</option>
+                      <option value={14}>14 Days</option>
+                      <option value={30}>30 Days (Rolling month)</option>
+                      <option value={60}>60 Days</option>
+                      <option value={90}>90 Days (Default)</option>
+                      <option value={180}>180 Days</option>
+                      <option value={365}>365 Days (1 Year)</option>
+                    </select>
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>
+                    <button
+                      onClick={() => handlePruneRetention(p.connector)}
+                      className="dash-btn-secondary"
+                      style={{ fontSize: '0.72rem', padding: '4px 8px' }}
+                    >
+                      Prune {p.connector}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Server-Side Wipe Policy Section (Closed Decision #2) */}
+        <div
+          style={{
+            marginTop: '8px',
+            paddingTop: '16px',
+            borderTop: '1px solid var(--card-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#ef4444' }}>
+              Account Data Deletion &amp; Wipe Policy (Closed Decision #2)
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Server-side wipe permanently destroys all briefs, vector embeddings, chunks, and storage bytes.
+              Use <strong>Export First</strong> before proceeding.
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowWipeModal(true);
+              setWipeConfirmInput('');
+              setWipeMessage(null);
+            }}
+            className="dash-btn-secondary"
+            style={{
+              color: '#ef4444',
+              borderColor: 'rgba(239, 68, 68, 0.4)',
+              fontSize: '0.78rem',
+              padding: '6px 14px',
+            }}
+          >
+            Wipe Account Data
+          </button>
+        </div>
+      </div>
+
+      {/* Wipe Confirmation Modal */}
+      {showWipeModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={20} color="#ef4444" />
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#ef4444', margin: 0 }}>
+                  Confirm Permanent Account Wipe
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowWipeModal(false)}
+                className="dash-icon-btn"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+              This operation is <strong>irreversible</strong> per Closed Decision #2.
+              All briefs, citations, embeddings, raw files in storage, schedules, and OAuth tokens will be completely erased.
+              No briefs are retained after deletion.
+            </p>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text)', marginBottom: '6px' }}>
+                Type <strong>DELETE_MY_WORKSPACE</strong> to confirm:
+              </label>
+              <input
+                type="text"
+                placeholder="DELETE_MY_WORKSPACE"
+                value={wipeConfirmInput}
+                onChange={(e) => setWipeConfirmInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--card-border)',
+                  color: 'var(--text)',
+                  fontSize: '0.82rem',
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {wipeMessage && (
+              <div style={{ fontSize: '0.74rem', color: wipeMessage.includes('Redirecting') ? '#10b981' : '#ef4444' }}>
+                {wipeMessage}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={() => setShowWipeModal(false)}
+                className="dash-btn-secondary"
+                style={{ padding: '7px 14px', fontSize: '0.78rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={wipeConfirmInput !== 'DELETE_MY_WORKSPACE' || isWiping}
+                onClick={handleWipeAccount}
+                style={{
+                  padding: '7px 16px',
+                  fontSize: '0.78rem',
+                  background: wipeConfirmInput === 'DELETE_MY_WORKSPACE' ? '#ef4444' : 'rgba(239, 68, 68, 0.3)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: wipeConfirmInput === 'DELETE_MY_WORKSPACE' ? 'pointer' : 'not-allowed',
+                  fontWeight: 600,
+                }}
+              >
+                {isWiping ? 'Wiping Everything...' : 'Wipe All Data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notion / Token Configuration Modal */}
       {tokenModalConnector && (

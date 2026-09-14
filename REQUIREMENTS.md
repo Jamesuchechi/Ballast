@@ -144,7 +144,7 @@ Status of the product today: **Phase 0**. Requirements marked “first phase N�
 ### NFR3 — Performance and cost
 
 - **NFR3.1** UI never blocks a multi-pass pipeline on a synchronous request.
-- **NFR3.2** P50/P95 generation latency is defined and recorded on `runs` before Phase 10 exit. A rough internal target is required; a public SLA is not. Record the chosen numbers in this file when set.
+- **NFR3.2** P50/P95 generation latency internal targets: **Home Mode: P50 <= 4,500 ms, P95 <= 12,000 ms**; **World Mode: P50 <= 9,000 ms, P95 <= 25,000 ms**. Latencies are recorded on `runs.latency_ms` and monitored via `/api/metrics/latency`. A public SLA is not provided.
 - **NFR3.3** Hard per-brief cost cap (FR8.3). World-mode search is the first thing the cap is allowed to kill.
 - **NFR3.4** Upload limits (normative v1 defaults, adjustable by config): max file **20 MB**, allowed types `txt, md, pdf, png, jpg, jpeg, csv`. Reject others with a clear error. Virus / content scanning may be added later; do not block Phase 2 on it.
 - **NFR3.5** Embedding and chunk jobs are async for large uploads; the brief job waits on ingest completion or fails visibly (“source not ready”).

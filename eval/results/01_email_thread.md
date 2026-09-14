@@ -1,6 +1,6 @@
 # Brief: What are the outstanding deliverables and open questions for the Q3 billing revamp?
 
-As of: 2026-09-13T09:16:09.063Z
+As of: 2026-09-14T13:57:07.639Z
 Mode: home
 Status: published
 

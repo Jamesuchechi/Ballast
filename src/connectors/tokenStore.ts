@@ -141,13 +141,14 @@ export async function getDecryptedToken<T = Record<string, any>>(
  * Marks a connector token revoked_at = NOW(), halting all future sync runs (FR1.3).
  */
 export async function revokeToken(workspaceId: string, connector: string): Promise<boolean> {
-  const res = await query(
+  const res = await query<{ id: string }>(
     `UPDATE oauth_tokens 
      SET revoked_at = NOW() 
-     WHERE workspace_id = $1 AND connector = $2 AND revoked_at IS NULL`,
+     WHERE workspace_id = $1 AND connector = $2 AND revoked_at IS NULL
+     RETURNING id`,
     [workspaceId, connector]
   );
-  return (res as any).rowCount > 0;
+  return res.length > 0;
 }
 
 /**

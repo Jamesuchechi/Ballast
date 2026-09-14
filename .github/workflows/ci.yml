@@ -1,0 +1,51 @@
+name: Ballast CI — Grounding, Safety & Hardening Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Eval & Security Hardening Suites
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start PostgreSQL with pgvector & Redis
+        run: |
+          docker compose up -d
+          # Wait for PostgreSQL to become healthy
+          until docker compose exec -T postgres pg_isready -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+
+      - name: Run Database Migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ballast
+
+      - name: Run Phase 0 Standalone Critic & Eval Harness (NFR1.5, NFR8.2)
+        run: npm run test
+        env:
+          EVAL_USE_MOCK: 'true'
+          NODE_ENV: 'test'
+
+      - name: Run Security Hardening & Prompt-Injection Suite (Phase 8)
+        run: npx tsx test/phase8_security_hardening.test.ts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ballast
+          SESSION_SECRET: ballast_ci_secret_key_32bytes_sample_2026
+          BALLAST_ENCRYPTION_KEY: ballast_ci_encryption_master_key_2026

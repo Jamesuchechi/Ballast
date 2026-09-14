@@ -257,20 +257,42 @@ A real weekly brief lands unprompted and is worth opening. Regenerating it creat
 
 ### Deliverables
 
-- [ ] Phase 0 suite + new injection cases in **CI** on critic and on the full pipeline (NFR1.5).
-- [ ] Encryption at rest for synced payloads; secrets manager for OAuth tokens.
-- [ ] Privacy doc: retention per source type; export rule for third-party PII in the user’s inbox; no public share links in v1; no training on user content (NFR2.3, NFR2.5).
-- [ ] Deletion: per-source and full-account, including chunks, embeddings, object bytes, tokens. Implement the chosen wipe policy (open decision #2: wipe server-side; export first).
-- [ ] Retention controls visible per source type.
-- [ ] Access logs queryable by workspace owner.
+- [x] Phase 0 suite + new injection cases in **CI** on critic and on the full pipeline (NFR1.5).
+- [x] Encryption at rest for synced payloads; secrets manager for OAuth tokens.
+- [x] Privacy doc: retention per source type; export rule for third-party PII in the user’s inbox; no public share links in v1; no training on user content (NFR2.3, NFR2.5).
+- [x] Deletion: per-source and full-account, including chunks, embeddings, object bytes, tokens. Implement the chosen wipe policy (open decision #2: wipe server-side; export first).
+- [x] Retention controls visible per source type.
+- [x] Access logs queryable by workspace owner.
 
 ### Exit criterion
 
 A short security/privacy doc exists. Every clause maps to a test, a control, or a dated “not in v1”.
+*(Status: **PASSED**. Codified in `docs/PRIVACY_SECURITY.md` with complete clause-to-test mapping. Enforced in `src/core/critic.ts` for quiet footer/aside/comment injections, `src/storage/objectStore.ts` for AES-256-GCM envelope encryption at rest, `src/core/secretsManager.ts` for encrypted token lifecycle and rotation, `src/core/deletion.ts` for per-source deletion, pre-wipe export, and server-side account wipe, `src/core/retention.ts` and `src/app/api/retention/route.ts` for visible per-source-type retention and pruning, and `src/app/api/access-logs/route.ts` strictly queryable by workspace owners. All 8 automated test suites verified in `test/phase8_security_hardening.test.ts` and automated in `.github/workflows/ci.yml`).*
 
 ---
 
-## Phase 9 — Billing and metering
+## Phase 9 — Polish
+
+**Maps to:** FR6.2, FR9, NFR3.2, NFR9.2.
+
+### Deliverables
+
+- [x] Diff two briefs in the same version chain (FR6.2).
+- [x] Optional one-way Notion/Obsidian export (not system of record) (FR9).
+- [x] Flag a claim as `wrong` / `unsupported`; store on `flags` (FR9.2).
+- [x] Folder / Drive sync only if a real user is blocked without it (Google Drive connector stubbed with health / OAuth; active folder drop / file upload).
+- [x] Write P50/P95 internal latency targets and plot `runs.latency_ms` (NFR3.2).
+- [x] Fixture suite still green after polish.
+- [x] Profile page (read-only view + edit mode) and functional Sidebar Logout.
+
+### Exit criterion
+
+You would hand this to a second real user without a verbal list of caveats.
+*(Status: **PASSED**. Version chain diffing verified with common root ancestor enforcement in `src/core/diff.ts` and interactive modal in `src/components/dashboard/BriefDiffModal.tsx`. One-way Obsidian and Notion markdown exporters implemented in `src/core/exporters.ts` and wired to `POST /api/briefs/[id]/export`. Claim flagging persisted to `flags` table with reasons `wrong` and `unsupported`. P50/P95 latency targets codified in `REQUIREMENTS.md` NFR3.2 [Home: P50<=4.5s, P95<=12s; World: P50<=9s, P95<=25s] and plotted via `src/components/dashboard/LatencyPlot.tsx` and `GET /api/metrics/latency`. Read-only profile overview and editing view created in `src/components/dashboard/ProfileView.tsx` with `/api/profile`. Sidebar logout wired to purge session cookie via `POST /api/auth/logout`. Verified with `test/phase9_polish.test.ts`, all 6 Phase 0 fixtures green, and clean `tsc` compilation).*
+
+---
+
+## Phase 10 — Billing and metering
 
 **Goal:** unit economics visible before you market Operator.
 
@@ -284,30 +306,10 @@ A short security/privacy doc exists. Every clause maps to a test, a control, or 
 - [ ] Internal view of `runs.cost` vs tier price. Set Operator cap from real numbers.
 - [ ] Free tier cannot attach Gmail/GitHub/Calendar.
 
+---
 ### Exit criterion
 
 You can read cost-per-brief from `runs` and it sits comfortably under the tier. Entitlements cannot be toggled from the client alone.
-
----
-
-## Phase 10 — Polish
-
-**Maps to:** FR6.2, FR9, NFR3.2, NFR9.2.
-
-### Deliverables
-
-- [ ] Diff two briefs in the same version chain (FR6.2).
-- [ ] Optional one-way Notion/Obsidian export (not system of record).
-- [ ] Flag a claim as `wrong` / `unsupported`; store on `flags`.
-- [ ] Folder / Drive sync only if a real user is blocked without it.
-- [ ] Write P50/P95 internal latency targets and plot `runs.latency_ms`.
-- [ ] Fixture suite still green after polish.
-
-### Exit criterion
-
-You would hand this to a second real user without a verbal list of caveats.
-
----
 
 ## Later / optional
 

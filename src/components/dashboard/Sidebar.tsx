@@ -24,6 +24,7 @@ import {
   Moon,
   Bell,
   BarChart3,
+  User as UserIcon,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { BallastLogo } from '@/components/brand/BallastLogo';
@@ -190,6 +191,11 @@ export function Sidebar({
           id: 'settings',
           label: 'Workspace & Billing',
           icon: Settings,
+        },
+        {
+          id: 'profile',
+          label: 'Profile & Account',
+          icon: UserIcon,
         },
         {
           id: 'privacy',
@@ -386,35 +392,39 @@ export function Sidebar({
 
         {/* User Footer */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--card-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+          <div
+            onClick={() => onSelectSection('profile')}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', cursor: 'pointer', flex: 1, minWidth: 0 }}
+            title="View User Profile & Account Settings"
+          >
             <div
               style={{
-                width: '28px',
-                height: '28px',
+                width: '30px',
+                height: '30px',
                 borderRadius: '50%',
-                background: 'var(--card-border)',
+                background: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)',
+                color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '0.75rem',
+                fontSize: '0.8rem',
                 fontWeight: 700,
-                color: 'var(--text)',
                 flexShrink: 0,
               }}
             >
-              {user?.name?.[0] || user?.email?.[0] || 'G'}
+              {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user?.name || user?.email || 'Guest Explorer'}
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+                {user?.name || user?.email?.split('@')[0] || 'My Profile'}
               </span>
               <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                {isDemo ? 'guest' : 'workspace owner'}
+                {workspace?.role === 'owner' ? 'workspace owner' : 'member'}
               </span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
             <button
               onClick={toggleTheme}
               className="dash-icon-btn"
@@ -424,22 +434,24 @@ export function Sidebar({
               {theme === 'dark' ? <Sun size={16} color="#facc15" /> : <Moon size={16} color="#6366f1" />}
             </button>
 
-            {onLogout ? (
-              <button
-                onClick={onLogout}
-                className="dash-icon-btn"
-                title="Log out"
-              >
-                <LogOut size={16} />
-              </button>
-            ) : isDemo ? (
-              <Link
-                href="/login"
-                style={{ fontSize: '0.74rem', fontFamily: 'var(--font-mono)', color: '#10b981', textDecoration: 'none', fontWeight: 600 }}
-              >
-                Log In
-              </Link>
-            ) : null}
+            <button
+              onClick={async () => {
+                if (onLogout) {
+                  onLogout();
+                } else {
+                  try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                  } catch {}
+                  window.location.href = '/login';
+                }
+              }}
+              className="dash-icon-btn"
+              title="Log out of Ballast"
+              style={{ color: '#ef4444' }}
+              aria-label="Log out"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </aside>

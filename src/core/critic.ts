@@ -15,16 +15,22 @@ export interface CriticOptions {
 }
 
 const INJECTION_PATTERNS = [
-  /ignore\s+(all\s+)?(previous\s+)?instructions/i,
+  /ignore\s+(all\s+)?(previous|prior|above)\s+instructions/i,
   /system\s+override/i,
   /say\s+["']?banana["']?/i,
   /transfer\s+\$?[0-9]+/i,
   /execute\s+command/i,
   /exfiltrate/i,
-  /send\s+all\s+contacts/i,
-  /disregard\s+prior/i,
-  /you\s+must\s+now\s+act\s+as/i,
-  /reveal\s+(the\s+)?system\s+prompt/i,
+  /send\s+all\s+(contacts|tokens|passwords|keys|data)/i,
+  /delete\s+all\s+(backups|databases|data|files|records)/i,
+  /disregard\s+(all\s+)?(prior|previous|above|safety)/i,
+  /you\s+must\s+now\s+act\s+as(\s+an?)?\s+(unrestricted|jailbroken|root|developer|admin)/i,
+  /reveal\s+(the\s+)?(system\s+prompt|instructions|secret\s+key)/i,
+  /<!--.*?-->/is,
+  /\[(?:PDF\s+)?(?:aside|note|instruction):.*?\]/is,
+  /\b(assistant|system|developer):\s*(ignore|disregard|override|print|output)/i,
+  /\b(?:curl|wget)\s+https?:\/\//i,
+  /\b(?:drop\s+table|delete\s+from\s+users)\b/i,
 ];
 
 /**

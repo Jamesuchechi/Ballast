@@ -74,6 +74,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
+import { deleteSource } from '@/core/deletion';
+
 export async function DELETE(req: NextRequest) {
   try {
     const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -90,12 +92,17 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Source ID is required' }, { status: 400 });
     }
 
-    await query(
-      `DELETE FROM sources WHERE id = $1 AND workspace_id = $2`,
-      [id, workspaceId]
-    );
+    const result = await deleteSource(workspaceId, id);
 
-    return NextResponse.json({ success: true, message: 'Source deleted' });
+    if (!result.success) {
+      return NextResponse.json({ error: 'Source not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Source, chunks, and storage payloads deleted',
+      deletedChunks: result.deletedChunks,
+    });
   } catch (err: any) {
     console.error('[API DELETE /api/sources error]:', err);
     return NextResponse.json({ error: err.message || 'Failed to delete source' }, { status: 500 });
