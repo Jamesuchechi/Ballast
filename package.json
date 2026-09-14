@@ -15,7 +15,8 @@
     "db:down": "docker compose down",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:reembed": "tsx src/db/reembed.ts",
-    "worker": "tsx src/worker.ts"
+    "worker": "tsx src/worker.ts",
+    "lint": "eslint src/app/api"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",
@@ -39,6 +40,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
-    "typescript": "^5.8.2"
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.5",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.70.0"
   }
 }

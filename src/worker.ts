@@ -10,6 +10,8 @@ import { executeAction } from './core/actionExecutor';
 import { CronExpressionParser } from 'cron-parser';
 import { query, queryOne } from './db/client';
 import { runSchedule } from './core/scheduler';
+import { objectStore } from './storage/objectStore';
+import { generateSimplePdf } from './core/pdfRenderer';
 
 let briefsProcessedCount = 0;
 let actionsProcessedCount = 0;
@@ -259,6 +261,55 @@ export function startHttpServer(
           timestamp: new Date().toISOString(),
         })
       );
+      return;
+    }
+
+    const pdfMatch = url?.match(/^\/briefs\/([^/]+)\/pdf$/);
+    if (pdfMatch && req.method === 'GET') {
+      const briefId = pdfMatch[1];
+      queryOne<{
+        id: string;
+        question: string;
+        markdown: string;
+        pdf_uri: string | null;
+      }>(
+        `SELECT id, question, markdown, pdf_uri FROM briefs WHERE id = $1`,
+        [briefId]
+      )
+        .then(async (brief) => {
+          if (!brief) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Brief not found' }));
+            return;
+          }
+
+          let pdfBuffer: Buffer | null = null;
+          if (brief.pdf_uri) {
+            pdfBuffer = await objectStore.get(brief.pdf_uri);
+          }
+          if (!pdfBuffer && brief.markdown) {
+            const lines = brief.markdown.split('\n');
+            pdfBuffer = generateSimplePdf(brief.question, lines);
+          }
+
+          if (!pdfBuffer) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'PDF artifact not found' }));
+            return;
+          }
+
+          res.writeHead(200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="brief_${briefId.slice(0, 8)}.pdf"`,
+            'Content-Length': pdfBuffer.length,
+          });
+          res.end(pdfBuffer);
+        })
+        .catch((err) => {
+          console.error('[Worker HTTP] PDF error:', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Internal server error' }));
+        });
       return;
     }
 

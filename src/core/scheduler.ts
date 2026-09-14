@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import { query, queryOne } from '@/db/client';
 import { checkWorkspaceBriefLimit } from './usage';
 import { enqueueBriefJob } from '@/queue/briefQueue';
-import { processQueuedBrief } from './pipelineWorker';
 import { createNotification } from './notifications';
 
 export interface ScheduleRow {
@@ -41,8 +40,7 @@ export function renderQuestionTemplate(template: string): string {
  * Enforces Operator plan and brief quota.
  */
 export async function runSchedule(
-  scheduleId: string,
-  options?: { runSynchronously?: boolean }
+  scheduleId: string
 ): Promise<RunScheduleResult> {
   const schedule = await queryOne<ScheduleRow>(
     `SELECT s.*, w.plan 
@@ -120,12 +118,8 @@ export async function runSchedule(
     message: `Scheduled run started for question: "${question}"`,
   });
 
-  if (options?.runSynchronously) {
-    await processQueuedBrief(briefId);
-  } else {
-    // Dispatch exclusively to BullMQ background queue
-    await enqueueBriefJob(briefId, { workspaceId: schedule.workspace_id });
-  }
+  // Dispatch exclusively to BullMQ background queue
+  await enqueueBriefJob(briefId, { workspaceId: schedule.workspace_id });
 
   return {
     briefId,

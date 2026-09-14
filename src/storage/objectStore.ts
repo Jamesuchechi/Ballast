@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const STORAGE_ROOT = path.resolve(process.cwd(), '.storage');
-
-// Ensure base storage directory exists
-if (!fs.existsSync(STORAGE_ROOT)) {
-  fs.mkdirSync(STORAGE_ROOT, { recursive: true });
+export function getStorageRoot(): string {
+  if (process.env.VERCEL) {
+    return path.resolve('/tmp', '.storage');
+  }
+  return path.resolve(process.cwd(), '.storage');
 }
 
 const MASTER_KEY_SEED =
@@ -31,10 +31,17 @@ export interface ObjectMetadata {
 export class ObjectStore {
   private root: string;
 
-  constructor(rootPath = STORAGE_ROOT) {
-    this.root = rootPath;
+  constructor(rootPath?: string) {
+    this.root = rootPath || getStorageRoot();
+  }
+
+  private ensureStorageRoot(): void {
     if (!fs.existsSync(this.root)) {
-      fs.mkdirSync(this.root, { recursive: true });
+      try {
+        fs.mkdirSync(this.root, { recursive: true });
+      } catch (err: any) {
+        if (err.code !== 'EEXIST') throw err;
+      }
     }
   }
 
@@ -49,10 +56,15 @@ export class ObjectStore {
    * Encrypts and writes data to disk at rest (AES-256-GCM).
    */
   async put(key: string, data: Buffer | string): Promise<string> {
+    this.ensureStorageRoot();
     const fullPath = this.resolveKey(key);
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (err: any) {
+        if (err.code !== 'EEXIST') throw err;
+      }
     }
 
     const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
