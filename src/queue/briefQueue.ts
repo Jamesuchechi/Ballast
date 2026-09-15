@@ -50,6 +50,18 @@ export async function enqueueBriefJob(
   options?: { costCap?: number; workspaceId?: string }
 ): Promise<string> {
   const queue = getBriefQueue();
+  const jobId = `brief-${briefId}`;
+
+  // If a job with this ID already exists (e.g. from previous failed run), remove it so BullMQ re-executes
+  try {
+    const existingJob = await queue.getJob(jobId);
+    if (existingJob) {
+      await existingJob.remove();
+    }
+  } catch (err) {
+    console.warn(`[enqueueBriefJob] Non-fatal error cleaning existing job ${jobId}:`, err);
+  }
+
   const job = await queue.add(
     'process-brief',
     {
@@ -58,7 +70,7 @@ export async function enqueueBriefJob(
       options: { costCap: options?.costCap },
     },
     {
-      jobId: `brief-${briefId}`,
+      jobId,
     }
   );
 

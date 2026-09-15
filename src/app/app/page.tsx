@@ -660,6 +660,91 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRetryBrief = async (briefIdToRetry?: string) => {
+    const targetId = briefIdToRetry || selectedBriefId;
+    if (!targetId) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/briefs/${targetId}/retry`, { method: 'POST' });
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response
+      }
+
+      if (!res.ok || !data) {
+        alert(data?.error || `Server error (${res.status}): Failed to retry brief.`);
+        setActionLoading(false);
+        return;
+      }
+
+      // Optimistically update local state to queued and clear error
+      setBriefs((prev) =>
+        prev.map((b) => (b.id === targetId ? { ...b, status: 'queued', error: null } : b))
+      );
+      if (briefDetail?.brief?.id === targetId) {
+        setBriefDetail({
+          ...briefDetail,
+          brief: { ...briefDetail.brief, status: 'queued', error: null },
+        });
+      }
+
+      setIsGenerating(true);
+      setGenerationSteps([
+        {
+          step: 'queued',
+          timestamp: new Date().toISOString(),
+          message: 'Retried brief re-enqueued for background processing',
+        },
+      ]);
+
+      // Poll progress until published or failed
+      const interval = setInterval(async () => {
+        try {
+          const progRes = await fetch(`/api/briefs/${targetId}/progress`);
+          if (progRes.ok) {
+            const pData = await progRes.json();
+            if (pData.progress) {
+              setGenerationSteps(pData.progress);
+            }
+            if (pData.status === 'published') {
+              clearInterval(interval);
+              setIsGenerating(false);
+              setActionLoading(false);
+              await Promise.all([
+                fetchBriefs(),
+                fetchAccessLogs(),
+                fetchActions(),
+                fetchTelemetry(),
+              ]);
+              const bRes = await fetch(`/api/briefs/${targetId}`);
+              if (bRes.ok) {
+                const bData = await bRes.json();
+                setBriefDetail(bData);
+              }
+            } else if (pData.status === 'failed') {
+              clearInterval(interval);
+              setIsGenerating(false);
+              setActionLoading(false);
+              await Promise.all([fetchBriefs()]);
+              const bRes = await fetch(`/api/briefs/${targetId}`);
+              if (bRes.ok) {
+                const bData = await bRes.json();
+                setBriefDetail(bData);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Retry progress poll error:', e);
+        }
+      }, 500);
+    } catch (err: any) {
+      alert('Error retrying brief: ' + err.message);
+      setActionLoading(false);
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     if (file.size > 20 * 1024 * 1024) {
       alert('File exceeds maximum 20MB limit (NFR3.4)');
@@ -2008,6 +2093,21 @@ export default function DashboardPage() {
                           >
                             {b.question}
                           </span>
+                          {b.status === 'failed' && (
+                            <span
+                              style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                color: '#ef4444',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              Failed
+                            </span>
+                          )}
                           {isSelected && <span style={{ fontSize: '0.75rem', color: isWorld ? '#06b6d4' : '#10b981' }}>✓</span>}
                         </button>
                       );
@@ -2051,6 +2151,55 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* Failure Alert & Retry CTA */}
+              {currentBrief?.status === 'failed' && (
+                <div
+                  style={{
+                    padding: '14px 18px',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#f87171',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', maxWidth: '80%' }}>
+                    <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#ef4444', marginBottom: '2px' }}>
+                        Brief Generation Failed
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: 'rgba(254, 202, 202, 0.95)', wordBreak: 'break-word', lineHeight: 1.4 }}>
+                        {currentBrief.error ? `Failure Reason: ${currentBrief.error}` : 'The background generation pipeline failed to complete this brief.'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRetryBrief(currentBrief.id)}
+                    disabled={actionLoading || isGenerating}
+                    className="dash-btn-primary"
+                    style={{
+                      background: '#ef4444',
+                      color: '#ffffff',
+                      fontSize: '0.78rem',
+                      padding: '6px 14px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    title="Re-enqueue this brief to retry generation"
+                  >
+                    <RefreshCw size={13} className={actionLoading ? 'animate-spin' : ''} />
+                    <span>Retry Brief</span>
+                  </button>
+                </div>
+              )}
+
               {/* Brief Action Bar */}
               <div
                 className="dash-card"
@@ -2064,7 +2213,7 @@ export default function DashboardPage() {
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span className="dash-badge dash-badge-published">
+                    <span className={currentBrief?.status === 'failed' ? 'dash-badge dash-badge-failed' : 'dash-badge dash-badge-published'}>
                       {currentBrief?.status || 'published'}
                     </span>
                     <span
@@ -2100,6 +2249,19 @@ export default function DashboardPage() {
                     >
                       <GitBranch size={14} className={isDiffLoading ? 'animate-spin' : ''} />
                       <span>Compare Diff</span>
+                    </button>
+                  )}
+
+                  {currentBrief?.status === 'failed' && (
+                    <button
+                      onClick={() => handleRetryBrief(currentBrief.id)}
+                      disabled={actionLoading || isGenerating}
+                      className="dash-btn-primary"
+                      style={{ background: '#ef4444', color: '#ffffff', fontSize: '0.78rem', padding: '6px 14px', fontWeight: 600 }}
+                      title="Retry failed generation for this brief"
+                    >
+                      <RefreshCw size={13} className={actionLoading ? 'animate-spin' : ''} />
+                      <span>Retry Brief</span>
                     </button>
                   )}
 
@@ -2321,6 +2483,25 @@ export default function DashboardPage() {
                           </p>
                         );
                       })}
+                    </div>
+                  ) : currentBrief?.status === 'failed' ? (
+                    <div style={{ textAlign: 'center', padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                        <AlertCircle size={26} />
+                      </div>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text)' }}>Brief Generation Failed</h3>
+                      <p style={{ fontSize: '0.85rem', color: '#f87171', maxWidth: '520px', lineHeight: 1.5, background: 'rgba(239, 68, 68, 0.08)', padding: '10px 14px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        {currentBrief.error || 'The generation pipeline was interrupted or failed to validate.'}
+                      </p>
+                      <button
+                        onClick={() => handleRetryBrief(currentBrief.id)}
+                        disabled={actionLoading || isGenerating}
+                        className="dash-btn-primary"
+                        style={{ background: '#ef4444', color: '#ffffff', marginTop: '6px', padding: '8px 18px', fontWeight: 600 }}
+                      >
+                        <RefreshCw size={14} className={actionLoading ? 'animate-spin' : ''} />
+                        <span>Retry Brief</span>
+                      </button>
                     </div>
                   ) : (
                     <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No markdown available.</p>
