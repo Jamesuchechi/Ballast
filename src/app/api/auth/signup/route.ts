@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUserWithWorkspace, COOKIE_NAME } from '@/lib/auth';
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
   try {
+    const clientIp = getClientIp(req);
+    const rateLimit = await checkRateLimit({
+      key: `auth:signup:${clientIp}`,
+      limit: 5,
+      windowSeconds: 60,
+    });
+
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit,
+        'Too many account creation attempts. Please wait 60 seconds before trying again.'
+      );
+    }
+
     const body = await req.json();
     const { email, password, name, workspaceName } = body;
 

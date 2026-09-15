@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { runSchedule } from '@/core/scheduler';
 import { queryOne } from '@/db/client';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(
   req: NextRequest,
@@ -11,6 +12,18 @@ export async function POST(
     const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const rateLimit = await checkRateLimit({
+      key: `schedules:run:ws:${session.workspaceId}`,
+      limit: 10,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit,
+        'Too many schedule runs triggered. Please wait a minute before triggering another run.'
+      );
     }
 
     const { id } = await params;

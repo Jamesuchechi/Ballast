@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth';
 import { queryOne, query } from '@/db/client';
 import { ActionRecord } from '@/core/actionExecutor';
 import { enqueueActionJob } from '@/queue/actionQueue';
+import { checkRateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(
   req: NextRequest,
@@ -17,6 +18,18 @@ export async function POST(
     const { id } = await params;
     const workspaceId = session.workspaceId;
     const userId = session.userId;
+
+    const rateLimit = await checkRateLimit({
+      key: `actions:approve:ws:${workspaceId}`,
+      limit: 20,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.success) {
+      return rateLimitResponse(
+        rateLimit,
+        'Too many actions executed in a short period. Please wait a minute before approving more actions.'
+      );
+    }
 
     // 1. Fetch action with workspace plan
     const action = await queryOne<ActionRecord>(

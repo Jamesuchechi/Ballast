@@ -3,14 +3,43 @@ import { query } from '@/db/client';
 import { enqueueBriefJob } from '@/queue/briefQueue';
 import { getAuthSession } from '@/lib/auth';
 import { checkWorkspaceBriefLimit } from '@/core/usage';
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
   try {
+    const clientIp = getClientIp(req);
+
+    // 1. Per-IP burst rate limit (prevents rapid unauthenticated/bot flooding)
+    const ipLimit = await checkRateLimit({
+      key: `briefs:enqueue:ip:${clientIp}`,
+      limit: 15,
+      windowSeconds: 60,
+    });
+    if (!ipLimit.success) {
+      return rateLimitResponse(
+        ipLimit,
+        'Too many brief requests from this IP. Please wait a minute before trying again.'
+      );
+    }
+
     const session = await getAuthSession(req);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const workspaceId = session.workspaceId;
+
+    // 2. Per-workspace rate limit (prevents burst loops running up LLM bills)
+    const wsLimit = await checkRateLimit({
+      key: `briefs:enqueue:ws:${workspaceId}`,
+      limit: 10,
+      windowSeconds: 60,
+    });
+    if (!wsLimit.success) {
+      return rateLimitResponse(
+        wsLimit,
+        'Too many briefs submitted in a short burst for this workspace. Please wait 60 seconds before submitting another brief.'
+      );
+    }
 
     const body = await req.json();
     const { question, mode = 'home', parent_brief_id = null } = body;
