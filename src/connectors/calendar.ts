@@ -128,12 +128,16 @@ export class CalendarConnector implements SourceConnector {
     const calStatus = await getTokenStatus(workspaceId, 'calendar');
     let isConnected = calStatus.connected;
     let revokedAt = calStatus.revoked_at;
+    let requiresReconnect = calStatus.requires_reconnect;
+    let lastRefreshError = calStatus.last_refresh_error;
 
-    if (!isConnected) {
+    if (!isConnected && !requiresReconnect) {
       const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
       if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('calendar'))) {
         isConnected = true;
         revokedAt = gmailStatus.revoked_at;
+        requiresReconnect = gmailStatus.requires_reconnect;
+        lastRefreshError = gmailStatus.last_refresh_error;
       }
     }
 
@@ -151,9 +155,11 @@ export class CalendarConnector implements SourceConnector {
     return {
       connected: isConnected,
       last_synced: sourceStats?.last_synced || null,
-      last_error: sourceStats?.last_error || null,
+      last_error: lastRefreshError || sourceStats?.last_error || null,
       sync_window_days: DEFAULT_CALENDAR_WINDOW_DAYS,
       revoked_at: revokedAt,
+      requires_reconnect: requiresReconnect,
+      last_refresh_error: lastRefreshError,
     };
   }
 

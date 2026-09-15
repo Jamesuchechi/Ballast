@@ -197,6 +197,9 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   connector TEXT NOT NULL,
   encrypted_payload TEXT NOT NULL,
   scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  requires_reconnect BOOLEAN NOT NULL DEFAULT false,
+  last_refreshed_at TIMESTAMPTZ,
+  last_refresh_error TEXT,
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

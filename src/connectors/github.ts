@@ -74,9 +74,11 @@ export class GitHubConnector implements SourceConnector {
     return {
       connected: tokenStatus.connected,
       last_synced: sourceStats?.last_synced || null,
-      last_error: sourceStats?.last_error || null,
+      last_error: tokenStatus.last_refresh_error || sourceStats?.last_error || null,
       sync_window_days: DEFAULT_GITHUB_WINDOW_DAYS,
       revoked_at: tokenStatus.revoked_at,
+      requires_reconnect: tokenStatus.requires_reconnect,
+      last_refresh_error: tokenStatus.last_refresh_error,
     };
   }
 

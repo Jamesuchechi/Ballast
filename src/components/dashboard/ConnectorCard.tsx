@@ -21,6 +21,8 @@ export interface ConnectorHealth {
   last_synced: string | null;
   last_error: string | null;
   sync_window_days: number;
+  requires_reconnect?: boolean;
+  last_refresh_error?: string | null;
 }
 
 export interface ConnectorItem {
@@ -64,6 +66,7 @@ export function ConnectorCard({
   };
 
   const isConnected = connector.health.connected;
+  const requiresReconnect = Boolean(connector.health.requires_reconnect);
   const hasError = Boolean(connector.health.last_error);
 
   const renderIcon = () => {
@@ -108,7 +111,11 @@ export function ConnectorCard({
         justifyContent: 'space-between',
         padding: '18px',
         gap: '14px',
-        border: hasError ? '1px solid rgba(239, 68, 68, 0.35)' : undefined,
+        border: requiresReconnect
+          ? '1px solid rgba(245, 158, 11, 0.4)'
+          : hasError
+          ? '1px solid rgba(239, 68, 68, 0.35)'
+          : undefined,
         position: 'relative',
       }}
     >
@@ -143,7 +150,23 @@ export function ConnectorCard({
         </div>
 
         {/* Status Pill */}
-        {hasError ? (
+        {requiresReconnect ? (
+          <span
+            className="dash-badge"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '0.68rem',
+              background: 'rgba(245, 158, 11, 0.15)',
+              color: '#f59e0b',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+            }}
+          >
+            <AlertCircle size={11} />
+            <span>Reconnect Required</span>
+          </span>
+        ) : hasError ? (
           <span
             className="dash-badge dash-badge-failed"
             style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem' }}
@@ -174,8 +197,29 @@ export function ConnectorCard({
         {connector.description}
       </p>
 
+      {/* Reconnect Callout */}
+      {requiresReconnect && (
+        <div
+          style={{
+            padding: '8px 10px',
+            borderRadius: '6px',
+            background: 'rgba(245, 158, 11, 0.08)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'flex-start',
+          }}
+        >
+          <AlertCircle size={14} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ fontSize: '0.72rem', color: '#fcd34d', lineHeight: '1.4', wordBreak: 'break-word' }}>
+            <strong>Session Expired:</strong>{' '}
+            {connector.health.last_refresh_error || 'OAuth token revoked or expired. Please reconnect to resume automated sync.'}
+          </div>
+        </div>
+      )}
+
       {/* Health & Error Callout */}
-      {hasError && (
+      {!requiresReconnect && hasError && (
         <div
           style={{
             padding: '8px 10px',
@@ -218,7 +262,38 @@ export function ConnectorCard({
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
-        {isConnected ? (
+        {requiresReconnect ? (
+          <>
+            <button
+              onClick={() => onConnect(connector)}
+              className="dash-btn-primary"
+              style={{
+                flex: 1,
+                justifyContent: 'center',
+                padding: '7px 12px',
+                fontSize: '0.78rem',
+                background: 'rgba(245, 158, 11, 0.2)',
+                color: '#f59e0b',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+              }}
+            >
+              <span>Reconnect {connector.name}</span>
+            </button>
+            <button
+              onClick={() => onRevoke(connector)}
+              className="dash-btn-secondary"
+              style={{
+                padding: '7px 12px',
+                fontSize: '0.78rem',
+                color: '#ef4444',
+                borderColor: 'rgba(239, 68, 68, 0.3)',
+              }}
+              title="Remove expired credentials"
+            >
+              Disconnect
+            </button>
+          </>
+        ) : isConnected ? (
           <>
             <button
               onClick={() => onSync(connector)}

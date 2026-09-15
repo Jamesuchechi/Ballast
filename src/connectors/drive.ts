@@ -101,12 +101,16 @@ export class DriveConnector implements SourceConnector {
     const driveStatus = await getTokenStatus(workspaceId, 'drive');
     let isConnected = driveStatus.connected;
     let revokedAt = driveStatus.revoked_at;
+    let requiresReconnect = driveStatus.requires_reconnect;
+    let lastRefreshError = driveStatus.last_refresh_error;
 
-    if (!isConnected) {
+    if (!isConnected && !requiresReconnect) {
       const gmailStatus = await getTokenStatus(workspaceId, 'gmail');
       if (gmailStatus.connected && gmailStatus.scopes?.some((s) => s.includes('drive'))) {
         isConnected = true;
         revokedAt = gmailStatus.revoked_at;
+        requiresReconnect = gmailStatus.requires_reconnect;
+        lastRefreshError = gmailStatus.last_refresh_error;
       }
     }
 
@@ -124,9 +128,11 @@ export class DriveConnector implements SourceConnector {
     return {
       connected: isConnected,
       last_synced: sourceStats?.last_synced || null,
-      last_error: sourceStats?.last_error || null,
+      last_error: lastRefreshError || sourceStats?.last_error || null,
       sync_window_days: DEFAULT_DRIVE_WINDOW_DAYS,
       revoked_at: revokedAt,
+      requires_reconnect: requiresReconnect,
+      last_refresh_error: lastRefreshError,
     };
   }
 

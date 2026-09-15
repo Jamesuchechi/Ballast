@@ -6,6 +6,8 @@ export interface ConnectorHealth {
   last_error: string | null;
   sync_window_days: number;
   revoked_at?: string | null;
+  requires_reconnect?: boolean;
+  last_refresh_error?: string | null;
 }
 
 export interface SyncOptions {
