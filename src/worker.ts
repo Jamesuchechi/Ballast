@@ -12,13 +12,18 @@ import { query, queryOne } from './db/client';
 import { runSchedule } from './core/scheduler';
 import { objectStore } from './storage/objectStore';
 import { generateSimplePdf } from './core/pdfRenderer';
+import { runGlobalRetentionPass } from './core/retention';
 
 let briefsProcessedCount = 0;
 let actionsProcessedCount = 0;
 let schedulesTriggeredCount = 0;
+let retentionPrunedTotal = 0;
+let lastRetentionPassAt: string | null = null;
 let heartbeatInterval: NodeJS.Timeout | null = null;
 let schedulerInterval: NodeJS.Timeout | null = null;
+let retentionInterval: NodeJS.Timeout | null = null;
 let isCheckingSchedules = false;
+let isRunningRetention = false;
 let httpServer: http.Server | null = null;
 
 export function startHeartbeat(intervalMs: number = 60000): void {
@@ -147,6 +152,75 @@ export function stopSchedulerLoop(): void {
   }
 }
 
+/**
+ * Checks if a daily retention pass is due (> 24 hours since last pass)
+ * and executes global pruning across all workspaces.
+ */
+export async function checkAndTriggerRetentionPass(): Promise<number> {
+  if (isRunningRetention) {
+    return 0;
+  }
+  isRunningRetention = true;
+
+  try {
+    // Check if a retention pass ran within the last 24 hours
+    const recentPass = await queryOne<{ created_at: string }>(
+      `SELECT created_at FROM access_logs 
+       WHERE action LIKE 'retention_global_pass:%' 
+         AND created_at > NOW() - INTERVAL '24 hours'
+       ORDER BY created_at DESC LIMIT 1`
+    ).catch(() => null);
+
+    if (recentPass) {
+      lastRetentionPassAt = recentPass.created_at;
+      return 0;
+    }
+
+    console.log('[Retention] Daily retention enforcement pass is due. Starting global pruning...');
+    const result = await runGlobalRetentionPass();
+    if (result.executed) {
+      lastRetentionPassAt = new Date().toISOString();
+      retentionPrunedTotal += result.totalPruned;
+      return result.totalPruned;
+    }
+  } catch (err: any) {
+    console.error('[Retention] Error during scheduled retention pass:', err.message);
+  } finally {
+    isRunningRetention = false;
+  }
+
+  return 0;
+}
+
+/**
+ * Starts the background retention scheduler loop (checks hourly for 24h cadence).
+ */
+export function startRetentionLoop(intervalMs: number = 3600000): void {
+  if (retentionInterval) {
+    clearInterval(retentionInterval);
+  }
+
+  // Initial check on startup
+  checkAndTriggerRetentionPass().catch((err) => {
+    console.error('[Retention] Initial check error:', err);
+  });
+
+  retentionInterval = setInterval(() => {
+    checkAndTriggerRetentionPass().catch((err) => {
+      console.error('[Retention] Periodic check error:', err);
+    });
+  }, intervalMs);
+
+  console.log(`[Retention] Daily automated retention enforcement loop active (24h cadence, polling every ${intervalMs / 60000}m)`);
+}
+
+export function stopRetentionLoop(): void {
+  if (retentionInterval) {
+    clearInterval(retentionInterval);
+    retentionInterval = null;
+  }
+}
+
 export function logEnvironmentStatus(): void {
   const hasDb = Boolean(process.env.DATABASE_URL);
   const hasRedis = Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL);
@@ -258,6 +332,10 @@ export function startHttpServer(
           briefsProcessed: briefsProcessedCount,
           actionsProcessed: actionsProcessedCount,
           schedulesTriggered: schedulesTriggeredCount,
+          retention: {
+            lastPassAt: lastRetentionPassAt,
+            totalPruned: retentionPrunedTotal,
+          },
           timestamp: new Date().toISOString(),
         })
       );
@@ -356,10 +434,14 @@ export async function startWorker(): Promise<{
   // Start 60s autonomous cron scheduler loop
   startSchedulerLoop(60000);
 
+  // Start 24h autonomous daily data retention pass (checks hourly)
+  startRetentionLoop(3600000);
+
   const shutdown = async (signal: string) => {
     console.log(`\n[Worker] Received ${signal}. Gracefully stopping workers...`);
     stopHeartbeat();
     stopSchedulerLoop();
+    stopRetentionLoop();
     await stopHttpServer();
     await Promise.all([briefWorker.close(), actionWorker.close()]);
     console.log('[Worker] All workers closed cleanly.');

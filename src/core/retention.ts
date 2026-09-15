@@ -186,3 +186,83 @@ export async function pruneExpiredSources(
     prunedSourceIds,
   };
 }
+
+// Unique 64-bit integer advisory lock key for Ballast daily retention pass
+const RETENTION_ADVISORY_LOCK_ID = '8372910482';
+
+export interface GlobalRetentionPassResult {
+  executed: boolean;
+  totalWorkspaces: number;
+  totalPruned: number;
+  durationMs: number;
+}
+
+/**
+ * Iterates across all active workspaces and executes their configured retention policies.
+ * Uses a PostgreSQL advisory lock to ensure only one worker executes the pass at a time.
+ */
+export async function runGlobalRetentionPass(): Promise<GlobalRetentionPassResult> {
+  const startTime = Date.now();
+
+  // Attempt to acquire advisory lock
+  const lockRes = await queryOne<{ locked: boolean }>(
+    `SELECT pg_try_advisory_lock(${RETENTION_ADVISORY_LOCK_ID}) as locked`
+  );
+
+  if (!lockRes?.locked) {
+    console.log('[Retention] Another worker instance holds the retention lock; skipping pass.');
+    return {
+      executed: false,
+      totalWorkspaces: 0,
+      totalPruned: 0,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  let totalPruned = 0;
+  let workspacesCount = 0;
+
+  try {
+    console.log('[Retention] Starting scheduled global retention pass...');
+    const workspaces = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM workspaces ORDER BY created_at ASC`
+    );
+    workspacesCount = workspaces.length;
+
+    for (const ws of workspaces) {
+      try {
+        const res = await pruneExpiredSources(ws.id);
+        totalPruned += res.prunedCount;
+        if (res.prunedCount > 0) {
+          console.log(`[Retention] Workspace "${ws.name}" (${ws.id}): pruned ${res.prunedCount} expired source(s).`);
+        }
+      } catch (wsErr: any) {
+        console.error(`[Retention Error] Failed to prune workspace ${ws.id}:`, wsErr.message);
+      }
+    }
+
+    // Log global pass to access_logs if any workspace exists
+    if (workspaces.length > 0) {
+      await query(
+        `INSERT INTO access_logs (workspace_id, action)
+         VALUES ($1, $2)`,
+        [workspaces[0].id, `retention_global_pass:pruned_${totalPruned}_sources`]
+      ).catch(() => {});
+    }
+
+    console.log(
+      `[Retention] Completed global retention pass: ${totalPruned} source(s) pruned across ${workspacesCount} workspace(s) in ${Date.now() - startTime}ms.`
+    );
+  } finally {
+    // Release advisory lock
+    await query(`SELECT pg_advisory_unlock(${RETENTION_ADVISORY_LOCK_ID})`).catch(() => {});
+  }
+
+  return {
+    executed: true,
+    totalWorkspaces: workspacesCount,
+    totalPruned,
+    durationMs: Date.now() - startTime,
+  };
+}
+
