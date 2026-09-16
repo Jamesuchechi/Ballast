@@ -36,6 +36,8 @@ export interface RetrievedQuote {
   connector: ConnectorType;
   quote: string;
   url?: string | null;
+  distance?: number;
+  similarity?: number;
 }
 
 export interface UncheckedConnector {

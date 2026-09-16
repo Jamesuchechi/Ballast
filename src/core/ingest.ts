@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { query, queryOne } from '@/db/client';
 import { chunkAndEmbedText } from './embeddings';
+// @ts-ignore - bypass index.js debug auto-run issue in pdf-parse
+import pdf from 'pdf-parse/lib/pdf-parse.js';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // 20 MB cap (NFR3.4)
 
@@ -51,18 +53,106 @@ export function validateUpload(filename: string, sizeBytes: number): { ext: stri
 }
 
 /**
+ * Extracts visible text and factual descriptions from images using Gemini Multimodal Vision.
+ */
+async function extractTextFromImage(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
+  const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    if (isMockAllowed) {
+      return `[Image Asset: ${filename}]\nMock visual text and OCR data extracted for testing.`;
+    }
+    throw new Error(
+      `Image ingestion for '${filename}' requires GEMINI_API_KEY for multimodal text and visual extraction. Please configure GEMINI_API_KEY or upload text, markdown, or PDF documents.`
+    );
+  }
+
+  const base64Data = buffer.toString('base64');
+  const models = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: 'You are an expert document and image understanding engine for Ballast. Analyze this image thoroughly for information retrieval. Transcribe any and all visible text, numbers, code, labels, or tables verbatim. Accurately describe diagrams, visual facts, entities, and charts. Output the extracted text and structured factual description directly without conversational filler.',
+                },
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 2048,
+          },
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`[INGEST] Gemini vision model ${model} failed (${res.status}): ${errText.slice(0, 150)}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text && text.trim().length > 0) {
+        return `[Image Document: ${filename}]\n\n${text.trim()}`;
+      }
+    } catch (err: any) {
+      console.warn(`[INGEST] Gemini vision model ${model} error:`, err?.message);
+    }
+  }
+
+  if (isMockAllowed) {
+    return `[Image Asset: ${filename}]\nFallback mock visual text extracted for test environment.`;
+  }
+
+  throw new Error(
+    `Failed to extract multimodal content from image '${filename}'. All vision models failed or returned empty content.`
+  );
+}
+
+/**
  * Extracts plain text from an uploaded file buffer based on extension
  */
-export function extractTextFromBuffer(buffer: Buffer, ext: string, filename: string): string {
+export async function extractTextFromBuffer(
+  buffer: Buffer,
+  ext: string,
+  filename: string,
+  mimeType?: string
+): Promise<string> {
   if (ext === '.txt' || ext === '.md' || ext === '.csv') {
     return buffer.toString('utf-8');
   }
 
   if (ext === '.pdf') {
-    // Extract textual stream contents
+    try {
+      const parsed = await pdf(buffer);
+      const text = (parsed?.text || '').trim();
+      if (text.length > 0) {
+        return text;
+      }
+    } catch (err: any) {
+      console.warn(`[INGEST] pdf-parse extraction failed for ${filename}:`, err?.message);
+    }
+
+    // Secondary fallback: Extract uncompressed text objects from PDF streams
     const raw = buffer.toString('latin1');
     const textBlocks: string[] = [];
-    // Basic extraction of uncompressed text objects in PDF
     const textRegex = /\(([^)]+)\)\s*Tj/g;
     let match;
     while ((match = textRegex.exec(raw)) !== null) {
@@ -71,12 +161,20 @@ export function extractTextFromBuffer(buffer: Buffer, ext: string, filename: str
     if (textBlocks.length > 0) {
       return textBlocks.join(' ');
     }
-    // Fallback if structured stream not found
-    return `[Document: ${filename}] Text content extracted from PDF payload.`;
+
+    throw new Error(
+      `Failed to extract text from PDF '${filename}'. The document contains no extractable text or is password-protected.`
+    );
   }
 
   if (['.png', '.jpg', '.jpeg'].includes(ext)) {
-    return `[Image Asset: ${filename}] Image source metadata embedded for reference.`;
+    const resolvedMime =
+      mimeType && mimeType.startsWith('image/')
+        ? mimeType
+        : ext === '.png'
+        ? 'image/png'
+        : 'image/jpeg';
+    return await extractTextFromImage(buffer, resolvedMime, filename);
   }
 
   return buffer.toString('utf-8');
@@ -117,7 +215,7 @@ export async function ingestDocument(options: IngestOptions): Promise<IngestResu
   }
 
   // 3. Extract text
-  const extractedText = extractTextFromBuffer(buffer, ext, filename);
+  const extractedText = await extractTextFromBuffer(buffer, ext, filename, mimeType);
 
   // 4. Persist to sources table
   const rawUri = `upload://${workspaceId}/${filename}_${checksum.slice(0, 8)}`;

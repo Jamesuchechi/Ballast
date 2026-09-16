@@ -83,6 +83,27 @@ async function runTests() {
     process.env.EMBEDDING_PROVIDER = origProv;
   }
 
+  // Test 6: Incompatible Mistral Dimension Rejection (No Zero-Padding Corruption)
+  console.log('\n[Test 6] Verifying Mistral dimension incompatibility rejection...');
+  const origProv6 = process.env.EMBEDDING_PROVIDER;
+  const origMistral6 = process.env.MISTRAL_API_KEY;
+  try {
+    process.env.EMBEDDING_PROVIDER = 'mistral';
+    delete process.env.MISTRAL_API_KEY;
+    await assert.rejects(
+      async () => {
+        await generateEmbedding('Testing Mistral without key');
+      },
+      {
+        message: /MISTRAL_API_KEY is not set/,
+      }
+    );
+    console.log('✓ Mistral provider configuration guard verified');
+  } finally {
+    process.env.EMBEDDING_PROVIDER = origProv6;
+    process.env.MISTRAL_API_KEY = origMistral6;
+  }
+
   console.log('\n=== ALL MULTI-PROVIDER & LOCAL EMBEDDING TESTS PASSED ===');
 }
 

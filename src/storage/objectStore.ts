@@ -51,7 +51,7 @@ interface StorageDriver {
 /**
  * Local filesystem driver with lazy directory initialization and Vercel /tmp resolution.
  */
-class FsDriver implements StorageDriver {
+export class FsDriver implements StorageDriver {
   readonly name = 'filesystem';
   private root: string;
 

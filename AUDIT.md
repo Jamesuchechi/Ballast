@@ -36,77 +36,77 @@ Ballast is a **grounded briefing OS** — a private intelligence layer that synt
 
 ## 🐛 Bugs & Critical Gaps
 
-### 1. `mistral-embed` padding is semantically wrong
+### 1. `mistral-embed` padding is semantically wrong [RESOLVED]
 **File:** [`embeddings.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/embeddings.ts#L170-L176)
 Mistral's `mistral-embed` produces **1024-dimensional** vectors. You zero-pad them to 1536 dimensions. **Zero-padding is mathematically incorrect** — cosine similarity against Gemini-produced 1536-dim vectors will be unreliable because the two spaces are incompatible. Zero-padded vectors will always score lower similarity against real 1536-dim vectors. This means if you switch embedding providers mid-dataset, retrieval silently degrades.
 
-**Fix:** Either use only one embedding model per workspace (store which provider was used per source), or re-embed all chunks when the provider changes. The `db:reembed` script should handle this.
+**Resolution:** Removed the zero-padding hack and prohibited mixing incompatible dimension spaces. Configured Gemini as primary 1536-dim cloud provider, OpenAI/OpenRouter `text-embedding-3-small` as secondary 1536-dim provider, and Ballast Local Engine as offline 1536-dim resilient fallback. Incompatible 1024-dim Mistral configurations fail fast with clear actionable error messages. Updated `db:reembed.ts` to log the active provider and enforce dimension matching during chunk migration.
 
-### 2. PDF text extraction is a stub
+### 2. PDF text extraction is a stub [RESOLVED]
 **File:** [`ingest.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/ingest.ts#L61-L75)
 The PDF extraction regex `/([(][^)]+[)])\s*Tj/g` only works for uncompressed, non-stream PDF text objects. Modern PDFs (compressed, Type1 fonts, CIDFont) will silently return the fallback string `"[Document: filename] Text content extracted from PDF payload."` — meaning you'll index an empty placeholder instead of actual content. Users will get `No citable evidence found` when uploading PDFs.
 
-**Fix:** Integrate `pdf-parse`, `pdfmium`, or call a Gemini Document Understanding API endpoint for PDF text extraction.
+**Resolution:** Integrated `pdf-parse` (`pdf-parse/lib/pdf-parse.js` to ensure robust Node/ESM compatibility). Extract real textual content from modern compressed PDFs with stream regex as a secondary fallback. Replaced silent placeholder indexing with fail-closed validation that rejects empty/unextractable PDFs. Added end-to-end PDF ingest test in `test/ingest_pdf.test.ts`.
 
-### 3. Image files index a static string — not usable for retrieval
+### 3. Image files index a static string — not usable for retrieval [RESOLVED]
 **File:** [`ingest.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/ingest.ts#L78-L80)
 `.png`, `.jpg`, `.jpeg` files are stored with the text `"[Image Asset: filename] Image source metadata embedded for reference."` — this will never contribute to any useful retrieval. It's a placeholder that was never completed.
 
-**Fix:** Either remove image types from `ALLOWED_EXTENSIONS`, or add Gemini Vision / multimodal extraction.
+**Resolution:** Replaced the static placeholder with Gemini Multimodal Vision extraction (`gemini-3.6-flash` / `gemini-3.5-flash` / `gemini-flash-latest`) in `extractTextFromImage`. Automatically transcribes visible text, tables, numbers, and diagrams into indexed structured text. Added fail-closed enforcement requiring `GEMINI_API_KEY` for image uploads rather than polluting the database with dead placeholders. Created unit test suite in `test/ingest_image.test.ts`.
 
-### 4. Tokens in `runs` table are not real token counts
+### 4. Tokens in `runs` table are not real token counts [RESOLVED]
 **File:** [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts#L508-L509)
-```ts
-question.length * 3 + 450, // tokens_in
-markdown.length,            // tokens_out
-```
-These are character-based estimates. `tokens_in` is especially wrong — it doesn't account for the full prompt (retrieved quotes, source blocks, system prompt). `tokens_out` is also wrong since markdown character length ≠ token count.
+Character-based heuristic estimates (`question.length * 3 + 450` and `markdown.length`) were previously written to `tokens_in` and `tokens_out` in the `runs` table.
 
-**Fix:** Add actual token counting from the LLM response. Gemini API returns `usageMetadata.totalTokenCount`; Groq/OpenAI-compatible return `usage.prompt_tokens` and `usage.completion_tokens`. Pass them back from `llmCall()` and accumulate properly.
+**Resolution:** Updated `llm.ts` to extract actual token metrics from LLM responses (`usageMetadata.promptTokenCount` / `candidatesTokenCount` from Gemini, and `usage.prompt_tokens` / `completion_tokens` from OpenAI-compatible providers: Groq, Mistral, OpenRouter). Added `onUsage` callback support to `LLMCallOptions` and exported `llmCallWithUsage`. In `pipelineWorker.ts`, real token usage is accumulated across Writer and Critic stages and persisted accurately to the `runs` table. Added unit test in `test/llm.test.ts`.
 
-### 5. `retrieval.ts` has no similarity threshold
+### 5. `retrieval.ts` has no similarity threshold [RESOLVED]
 **File:** [`retrieval.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/retrieval.ts#L44-L60)
-Vector retrieval orders by cosine distance but has no `WHERE distance < 0.7` (or equivalent) cutoff. Low-relevance chunks can be returned. If there's nothing relevant in the corpus, you still return 8 chunks — which the Writer will try to use, and the Critic will then drop. This is wasteful and also means `unchecked` may be under-reported.
+Vector retrieval previously ordered by cosine distance with no distance cutoff, potentially returning irrelevant chunks when no relevant material existed.
 
-**Fix:** Add a distance threshold filter (e.g., `WHERE (c.embedding <=> $1::vector) < 0.75`) and expose the actual distance in `RetrievedQuote`.
+**Resolution:** Added `maxDistance` filtering (`(c.embedding <=> $1::vector) <= $3`) to both `retrievePrivateChunks` and `retrieveWebChunks` with `DEFAULT_MAX_DISTANCE = 0.85` (configurable via `options.maxDistance` or `RETRIEVAL_MAX_DISTANCE`). Updated `RetrievedQuote` to expose both `distance` and `similarity` (`1 - distance`) metadata on every retrieved quote. Added test suite in `test/retrieval_threshold.test.ts`.
 
-### 6. Session token is a simple HMAC — no session invalidation
-**File:** [`auth.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/auth.ts#L44-L67)
-The session is a `base64(payload).HMAC` token stored in a cookie. Once issued, **there's no way to invalidate it** (e.g., on password change, on account deletion, on suspicious activity). The token is valid for 30 days regardless.
+### 6. Session token is a simple HMAC — no session invalidation [RESOLVED]
+**File:** [`auth.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/auth.ts#L44-L105)
+The session was previously a stateless `base64(payload).HMAC` token without session revocation capability.
 
-**Fix:** Store `session_version` or a `jti` (token ID) in the `users` table. On validation, check that the token's version matches. Incrementing `session_version` on password change or account wipe instantly invalidates all existing sessions.
+**Resolution:** Added `session_version INTEGER NOT NULL DEFAULT 1` column to the `users` table via migration `006_add_session_version_to_users.sql` and updated `schema.sql`. Added `sessionVersion` into `SessionPayload` and `signToken`. Implemented `validateSessionToken(token)` and updated `getAuthSession(req)` to verify cryptographic signature, expiration, and DB `session_version` consistency. Exported `invalidateUserSessions(userId)` to bump `session_version`, instantly invalidating existing tokens. Integrated invalidation on password change in `/api/profile` and updated `/api/auth/me`. Added automated test suite in `test/session_invalidation.test.ts`.
 
-### 7. `wipeWorkspaceAccount` does not invalidate open sessions
-**File:** [`deletion.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/deletion.ts#L199-L221)
-After wipe, users can still use an existing cookie to re-authenticate and hit authenticated routes (until the 30-day session expires). The user record is deleted so eventually they'd fail, but there's a window where the cookie is valid against a deleted workspace.
+### 7. `wipeWorkspaceAccount` does not invalidate open sessions [RESOLVED]
+**File:** [`deletion.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/deletion.ts#L199-L235)
+After account/workspace wipe, users previously possessed valid HMAC session cookies that were accepted by endpoints until the 30-day cookie expired.
 
-### 8. Cost estimate baseline is hardcoded to `$0.0025`
-**File:** [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts#L100)
-```ts
-let totalCost = 0.0025; // baseline generation cost
-```
-This is a magic number. With free-tier providers (Groq, OpenRouter free tier), the actual cost may be zero. With Gemini Pro, it could be higher. This also means `runs.cost` is always overstated by `$0.0025`.
+**Resolution:** Updated `wipeWorkspaceAccount` in `src/core/deletion.ts` to locate all member users of the wiped workspace and call `invalidateUserSessions` for each, bumping their database `session_version` and immediately revoking active tokens across all devices. Orphaned user records with no remaining workspaces are permanently removed. Enhanced `validateSessionToken` in `src/lib/auth.ts` to verify active membership in `workspace_members(workspace_id, user_id)`. Upgraded all authenticated API routes (`briefs`, `actions`, `workspace/export`, `access-logs`, `notifications`, `schedules`, `analytics`, `telemetry`, `flags`, `metrics/latency`, `user/preferences`) from unvalidated token checks to `getAuthSession(req)`, ensuring requests against wiped workspaces or with revoked tokens are immediately rejected with 401 Unauthorized. Verified in `test/wipe_session_invalidation.test.ts` and `test/phase8_security_hardening.test.ts`.
 
-### 9. `diff.ts` version chain length is always `2`
-**File:** [`diff.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/diff.ts#L222)
-```ts
-versionChainLength: 2,
-```
-This is hardcoded. The function already walks the chain in `getRootBriefId` but doesn't use the chain length in the result. The UI or API consumers would incorrectly show "2" regardless of the actual chain depth.
+### 8. Cost estimate baseline is hardcoded to `$0.0025` [RESOLVED]
+**File:** [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts#L100), [`llm.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llm.ts#L446-L516)
+The pipeline previously started `totalCost` with a hardcoded `$0.0025` magic number, overstating run costs on free-tier and low-cost providers.
 
-### 10. `computeLineDiff` diff algorithm is O(n²) worst-case
-**File:** [`diff.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/diff.ts#L111-L140)
-The greedy diff uses `oldLines.includes(newLines[j], i)` and `oldLines.indexOf(...)` inside the main loop — this is O(n²) on long briefs. Not blocking today but will degrade noticeably on large markdown documents.
+**Resolution:** Removed the hardcoded `$0.0025` baseline and initialized `totalCost = 0`. Implemented `estimateLLMCost(provider, model, promptTokens, completionTokens)` in `src/core/llm.ts` with comprehensive `MODEL_PRICING` tables across Gemini, Groq, Mistral, and OpenRouter (evaluating $0.00 on free-tier models and eval mocks). In `pipelineWorker.ts`, accumulated actual LLM token costs across Writer and Critic stages via `trackUsage(usage, meta)` and combined them with tool costs (e.g. web search), persisting real, high-precision costs to the `runs` table (`NUMERIC(10, 6)`). Added test suite in `test/cost_calculation.test.ts`.
 
-**Fix:** Use the Myers diff algorithm or LCS-based approach. Or just use the `diff` npm package.
+### 9. `diff.ts` version chain length is always `2` [RESOLVED]
+**File:** [`diff.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/diff.ts#L170-L245)
+Previously, `versionChainLength` was hardcoded to `2` in `diffBriefsInChain`, regardless of how many generation steps separated two briefs or whether comparing identical briefs.
 
-### 11. `SecretsManager.rotateToken` doesn't revoke the old token
-**File:** [`secretsManager.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/secretsManager.ts#L70-L85)
-`rotateToken` calls `storeEncryptedToken` which does an `UPDATE` on the existing row — so the old token is overwritten in-place (which is fine). But it logs `token_rotated` even though this is the same underlying flow as `setToken`. There's no actual difference between `setToken` and `rotateToken`.
+**Resolution:** Upgraded `areInSameVersionChain` and `diffBriefsInChain` in `src/core/diff.ts` to compute exact lineage distances and chain depths. It accurately tracks direct ancestor/descendant relationships (chain length = generation distance + 1, self = 1, parent-child = 2, 3-generation linear = 3) and computes lowest common ancestor (LCA) tree distances for branching lineages. Integrated `versionChainLength: chainCheck.chainLength` into `diffBriefsInChain`. Verified via unit tests in `test/diff_version_chain.test.ts` and `test/phase9_polish.test.ts`.
 
-### 12. The `openrouter` header `HTTP-Referer` is `https://ballast.local`
-**File:** [`llm.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llm.ts#L133)
-OpenRouter uses this for model ranking and rate limit grouping. Using `ballast.local` will put all traffic in the "unknown app" bucket and potentially affect free tier limits. Should be the actual production URL when deployed.
+### 10. `computeLineDiff` diff algorithm is O(n²) worst-case [RESOLVED]
+**File:** [`diff.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/diff.ts#L160-L190)
+The greedy diff previously scanned forward using `oldLines.includes(newLines[j], i)` and `oldLines.indexOf(...)` in an inner loop, exhibiting $O(n^2)$ worst-case time complexity.
+
+**Resolution:** Replaced the greedy quadratic search with an $O(ND)$ Myers diff algorithm using `diffLines` from the `diff` package. Updated `computeLineDiff` in `src/core/diff.ts` to transform Myers change hunks into normalized `DiffLine[]` structures with newline sanitation. Benchmarked and verified on 5,000-line documents (diff calculated in 41ms) via `test/diff_myers.test.ts` along with full regression verification in `test/diff_version_chain.test.ts` and `test/phase9_polish.test.ts`.
+
+### 11. `SecretsManager.rotateToken` doesn't revoke the old token [RESOLVED]
+**File:** [`secretsManager.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/secretsManager.ts#L68-L98)
+Previously, `rotateToken` simply performed an in-place overwrite on the existing active token row, identical to `setToken`, without marking the previous token record as revoked or maintaining historical audit lineage.
+
+**Resolution:** Updated `SecretsManager.rotateToken` in `src/core/secretsManager.ts` to explicitly call `revokeToken(workspaceId, connector)` on the existing active token record before provisioning the new encrypted credentials (preserving previous scopes if not explicitly overridden). This guarantees that previous credentials are explicitly marked revoked in `oauth_tokens` (`revoked_at = NOW()`), maintaining an immutable audit history while provisioning fresh active credentials. Verified with unit tests in `test/token_rotation.test.ts` and regression tests in `test/phase8_security_hardening.test.ts`.
+
+### 12. The `openrouter` header `HTTP-Referer` is `https://ballast.local` [RESOLVED]
+**File:** [`llm.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llm.ts#L133-L175)
+Previously, `callOpenAICompatible` for the `openrouter` provider used a hardcoded fallback of `https://ballast.local`, placing traffic in the untracked bucket and risking rate limit degradation.
+
+**Resolution:** Implemented `getOpenRouterReferer()` in `src/core/llm.ts` to dynamically resolve the canonical application URL from environment variables (`NEXT_APP_URL`, `VERCEL_URL`, `APP_URL`) and default to the canonical production domain `https://ballast.app`. Verified via unit tests in `test/llm.test.ts`.
 
 ---
 

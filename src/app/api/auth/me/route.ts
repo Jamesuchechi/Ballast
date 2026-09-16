@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import { validateSessionToken, COOKIE_NAME } from '@/lib/auth';
 import { queryOne } from '@/db/client';
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ user: null, workspace: null }, { status: 200 });
     }
 
-    const payload = verifyToken(token);
+    const payload = await validateSessionToken(token);
     if (!payload) {
       return NextResponse.json({ user: null, workspace: null }, { status: 200 });
     }

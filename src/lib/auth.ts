@@ -8,6 +8,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  session_version?: number;
   created_at: string;
 }
 
@@ -24,6 +25,7 @@ export interface SessionPayload {
   workspaceId: string;
   email: string;
   role: string;
+  sessionVersion?: number;
   exp: number; // Unix timestamp in seconds
 }
 
@@ -42,7 +44,11 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 }
 
 export function signToken(payload: SessionPayload): string {
-  const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const tokenPayload: SessionPayload = {
+    ...payload,
+    sessionVersion: payload.sessionVersion ?? 1,
+  };
+  const data = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
   const sig = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
   return `${data}.${sig}`;
 }
@@ -66,6 +72,59 @@ export function verifyToken(token: string): SessionPayload | null {
   }
 }
 
+/**
+ * Increment the user's session_version in the database, invalidating all existing session tokens.
+ */
+export async function invalidateUserSessions(userId: string): Promise<number> {
+  const result = await queryOne<{ session_version: number }>(
+    `UPDATE users 
+     SET session_version = COALESCE(session_version, 1) + 1 
+     WHERE id = $1 
+     RETURNING session_version`,
+    [userId]
+  );
+  return result?.session_version ?? 1;
+}
+
+/**
+ * Asynchronously verifies the token signature, verifies that the token's
+ * sessionVersion matches the current session_version stored in the database,
+ * and confirms that the workspace still exists and the user is an active member.
+ */
+export async function validateSessionToken(token: string): Promise<SessionPayload | null> {
+  const payload = verifyToken(token);
+  if (!payload || !payload.userId) return null;
+
+  try {
+    const user = await queryOne<{ session_version: number }>(
+      `SELECT session_version FROM users WHERE id = $1`,
+      [payload.userId]
+    );
+    if (!user) return null;
+
+    const expectedVersion = user.session_version ?? 1;
+    const tokenVersion = payload.sessionVersion ?? 1;
+    if (tokenVersion !== expectedVersion) {
+      return null;
+    }
+
+    if (payload.workspaceId) {
+      const membership = await queryOne<{ role: string }>(
+        `SELECT role FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
+        [payload.workspaceId, payload.userId]
+      );
+      if (!membership) {
+        return null;
+      }
+    }
+
+    return payload;
+  } catch (err) {
+    console.error('[validateSessionToken error]:', err);
+    return null;
+  }
+}
+
 export async function createUserWithWorkspace(params: {
   email: string;
   password: string;
@@ -79,7 +138,7 @@ export async function createUserWithWorkspace(params: {
   const user = await queryOne<User>(
     `INSERT INTO users (email, password_hash, name)
      VALUES ($1, $2, $3)
-     RETURNING id, email, name, created_at`,
+     RETURNING id, email, name, session_version, created_at`,
     [email.toLowerCase().trim(), passwordHash, name || null]
   );
 
@@ -117,6 +176,7 @@ export async function createUserWithWorkspace(params: {
     workspaceId: workspace.id,
     email: user.email,
     role: 'owner',
+    sessionVersion: user.session_version ?? 1,
     exp,
   });
 
@@ -133,8 +193,9 @@ export async function authenticateUser(email: string, password: string): Promise
     email: string;
     name: string | null;
     password_hash: string;
+    session_version: number;
     created_at: string;
-  }>(`SELECT id, email, name, password_hash, created_at FROM users WHERE email = $1`, [
+  }>(`SELECT id, email, name, password_hash, session_version, created_at FROM users WHERE email = $1`, [
     email.toLowerCase().trim(),
   ]);
 
@@ -168,11 +229,12 @@ export async function authenticateUser(email: string, password: string): Promise
     workspaceId: memberRow.workspace_id,
     email: row.email,
     role: memberRow.role,
+    sessionVersion: row.session_version ?? 1,
     exp,
   });
 
   return {
-    user: { id: row.id, email: row.email, name: row.name, created_at: row.created_at },
+    user: { id: row.id, email: row.email, name: row.name, session_version: row.session_version, created_at: row.created_at },
     workspace: {
       id: memberRow.workspace_id,
       name: memberRow.name,
@@ -194,7 +256,7 @@ export async function findOrCreateGoogleUser(params: {
 
   // 1. Check if user already exists
   let user = await queryOne<User>(
-    `SELECT id, email, name, created_at FROM users WHERE email = $1`,
+    `SELECT id, email, name, session_version, created_at FROM users WHERE email = $1`,
     [email]
   );
 
@@ -248,7 +310,7 @@ export async function findOrCreateGoogleUser(params: {
     user = await queryOne<User>(
       `INSERT INTO users (email, password_hash, name)
        VALUES ($1, $2, $3)
-       RETURNING id, email, name, created_at`,
+       RETURNING id, email, name, session_version, created_at`,
       [email, dummyPasswordHash, name]
     );
     if (!user) throw new Error('Failed to create Google user');
@@ -276,6 +338,7 @@ export async function findOrCreateGoogleUser(params: {
     workspaceId: workspace.id,
     email: user.email,
     role: workspace.role || 'owner',
+    sessionVersion: user.session_version ?? 1,
     exp,
   });
 
@@ -290,7 +353,7 @@ export interface RequestWithCookies {
 
 /**
  * Resolves the authenticated session from request cookies.
- * Verifies HMAC signature, checks expiration, and returns verified SessionPayload.
+ * Verifies HMAC signature, checks expiration, and validates sessionVersion against the DB.
  * If fallbackToDefault is true and no valid token is present, resolves the default workspace
  * (used for guest / demo exploration mode).
  */
@@ -300,10 +363,7 @@ export async function getAuthSession(
 ): Promise<SessionPayload | null> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (token) {
-    const payload = verifyToken(token);
-    if (payload) {
-      return payload;
-    }
+    return await validateSessionToken(token);
   }
 
   return null;

@@ -27,11 +27,13 @@
     "ajv-formats": "^3.0.1",
     "bullmq": "^6.3.4",
     "cron-parser": "^5.10.1",
+    "diff": "^9.0.0",
     "dotenv": "^16.4.7",
     "googleapis": "^180.0.0",
     "ioredis": "^6.0.0",
     "lucide-react": "^1.45.0",
     "next": "^16.3.5",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -40,6 +42,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/diff": "^8.0.0",
     "@types/node": "^22.13.9",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.5",

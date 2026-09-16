@@ -1,6 +1,6 @@
 # Brief: When is the enterprise tier launch scheduled?
 
-As of: 2026-09-14T13:57:07.669Z
+As of: 2026-09-16T16:25:41.898Z
 Mode: home
 Status: published
 

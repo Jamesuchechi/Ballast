@@ -3,7 +3,7 @@ import { retrievePrivateChunks, retrieveWebChunks } from './retrieval';
 import { toolRouter, DEFAULT_BRIEF_COST_CAP } from './toolRouter';
 import { runWriter } from './writer';
 import { runCritic } from './critic';
-import { llmCall } from './llm';
+import { llmCall, estimateLLMCost, type LLMUsage } from './llm';
 import { renderBriefMarkdown } from './renderer';
 import { validateForPublish } from './validator';
 import { renderAndStorePdf } from './pdfRenderer';
@@ -97,7 +97,7 @@ export async function processQueuedBrief(
   const { workspace_id: workspaceId, question, mode, parent_brief_id: parentBriefId } = briefRow;
 
   try {
-    let totalCost = 0.0025; // baseline generation cost
+    let totalCost = 0; // Starts at $0; accumulates actual tool and LLM token costs
     let circuitBroken = false;
     let circuitBrokenReason: string | null = null;
     const toolsCalled: string[] = ['retrieval_private'];
@@ -200,6 +200,19 @@ export async function processQueuedBrief(
       }
     }
 
+    // Track actual tokens and cost consumed across pipeline LLM stages (Writer + Critic)
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let totalLLMCost = 0;
+    const trackUsage = (usage: LLMUsage, meta?: { provider: string; model: string }) => {
+      totalTokensIn += usage.promptTokens;
+      totalTokensOut += usage.completionTokens;
+      if (meta) {
+        const callCost = estimateLLMCost(meta.provider, meta.model, usage.promptTokens, usage.completionTokens);
+        totalLLMCost += callCost;
+      }
+    };
+
     // Step: drafting
     await appendProgress(briefId, 'drafting', 'drafting brief sections…');
     const draft = await runWriter({
@@ -208,7 +221,8 @@ export async function processQueuedBrief(
       sources: allSources,
       retrieved: allQuotes,
       parentBrief: parentBriefData,
-      llmCall: (prompt, sysPrompt) => llmCall(prompt, sysPrompt, { role: 'writer' }),
+      llmCall: (prompt, sysPrompt) =>
+        llmCall(prompt, sysPrompt, { role: 'writer', onUsage: trackUsage }),
     });
 
     // Check for any unchecked / partially failed connectors in this workspace (FR2.6, NFR4.5)
@@ -239,7 +253,8 @@ export async function processQueuedBrief(
 
     const criticOut = await runCritic({
       input: criticInput,
-      llmCall: (prompt, sysPrompt) => llmCall(prompt, sysPrompt, { role: 'critic' }),
+      llmCall: (prompt, sysPrompt) =>
+        llmCall(prompt, sysPrompt, { role: 'critic', onUsage: trackUsage }),
     });
 
     const criticLog: CriticLog = {
@@ -496,7 +511,11 @@ export async function processQueuedBrief(
       [briefId, markdown, pdfUri]
     );
 
-    // Persist runs telemetry (FR8.1, FR8.3, NFR6.1)
+    // Persist runs telemetry with real accumulated token usage and actual cost (FR8.1, FR8.3, NFR6.1)
+    const tokensIn = totalTokensIn > 0 ? totalTokensIn : Math.ceil((question.length * 3 + 450) / 4);
+    const tokensOut = totalTokensOut > 0 ? totalTokensOut : Math.ceil(markdown.length / 4);
+    const finalRunCost = Number((totalCost + totalLLMCost).toFixed(6));
+
     await query(
       `INSERT INTO runs (
         brief_id, workspace_id, tokens_in, tokens_out, cost, latency_ms,
@@ -505,9 +524,9 @@ export async function processQueuedBrief(
       [
         briefId,
         workspaceId,
-        question.length * 3 + 450,
-        markdown.length,
-        totalCost,
+        tokensIn,
+        tokensOut,
+        finalRunCost,
         duration,
         JSON.stringify(toolsCalled),
         circuitBroken,

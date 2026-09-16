@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME, verifyPassword, hashPassword } from '@/lib/auth';
+import { getAuthSession, COOKIE_NAME, verifyPassword, hashPassword, invalidateUserSessions, signToken } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
     if (!payload || !payload.userId || !payload.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -78,8 +77,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
     if (!payload || !payload.userId || !payload.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -148,6 +146,8 @@ export async function PUT(req: NextRequest) {
         `UPDATE users SET password_hash = $1 WHERE id = $2`,
         [newHash, payload.userId]
       );
+      const newVersion = await invalidateUserSessions(payload.userId);
+      payload.sessionVersion = newVersion;
     }
 
     // 4. Update notification preferences if provided
@@ -185,12 +185,33 @@ export async function PUT(req: NextRequest) {
       [payload.workspaceId]
     );
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
       user: updatedUser,
       workspace: updatedWorkspace,
     });
+
+    if (newPassword) {
+      const exp = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+      const newToken = signToken({
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        email: payload.email,
+        role: payload.role,
+        sessionVersion: payload.sessionVersion,
+        exp,
+      });
+      res.cookies.set(COOKIE_NAME, newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60,
+      });
+    }
+
+    return res;
   } catch (err: any) {
     console.error('[API PUT /api/profile error]:', err);
     return NextResponse.json({ error: err.message || 'Failed to update profile' }, { status: 500 });

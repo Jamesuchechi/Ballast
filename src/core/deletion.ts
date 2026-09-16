@@ -1,6 +1,7 @@
 import { query, queryOne } from '@/db/client';
 import { objectStore } from '@/storage/objectStore';
 import { revokeToken } from '@/connectors/tokenStore';
+import { invalidateUserSessions } from '@/lib/auth';
 
 export interface WorkspaceExportData {
   exportedAt: string;
@@ -203,7 +204,17 @@ export async function wipeWorkspaceAccount(workspaceId: string): Promise<{
   // 1. Purge all physical disk files belonging to workspace
   const purgedFilesCount = await objectStore.deletePrefix(workspaceId);
 
-  // 2. Cascade delete database records in proper dependency order
+  // 2. Locate all member users of this workspace to invalidate sessions
+  const members = await query<{ user_id: string }>(
+    `SELECT user_id FROM workspace_members WHERE workspace_id = $1`,
+    [workspaceId]
+  );
+
+  for (const m of members) {
+    await invalidateUserSessions(m.user_id);
+  }
+
+  // 3. Cascade delete database records in proper dependency order
   await query(`DELETE FROM access_logs WHERE workspace_id = $1`, [workspaceId]);
   await query(`DELETE FROM notifications WHERE workspace_id = $1`, [workspaceId]);
   await query(`DELETE FROM oauth_tokens WHERE workspace_id = $1`, [workspaceId]);
@@ -216,6 +227,17 @@ export async function wipeWorkspaceAccount(workspaceId: string): Promise<{
   await query(`DELETE FROM sources WHERE workspace_id = $1`, [workspaceId]);
   await query(`DELETE FROM workspace_members WHERE workspace_id = $1`, [workspaceId]);
   await query(`DELETE FROM workspaces WHERE id = $1`, [workspaceId]);
+
+  // 4. Remove any users orphaned by deleting this workspace (users with no other workspace memberships)
+  for (const m of members) {
+    const other = await queryOne<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM workspace_members WHERE user_id = $1`,
+      [m.user_id]
+    );
+    if (!other || other.count === '0') {
+      await query(`DELETE FROM users WHERE id = $1`, [m.user_id]);
+    }
+  }
 
   return { success: true, purgedFilesCount };
 }

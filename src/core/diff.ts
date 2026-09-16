@@ -1,3 +1,4 @@
+import { diffLines } from 'diff';
 import { query, queryOne } from '@/db/client';
 
 export interface DiffLine {
@@ -88,9 +89,22 @@ export async function areInSameVersionChain(
   workspaceId: string,
   fromId: string,
   toId: string
-): Promise<{ sameChain: boolean; rootId: string | null }> {
+): Promise<{
+  sameChain: boolean;
+  rootId: string | null;
+  chainLength: number;
+  fromChain: string[];
+  toChain: string[];
+}> {
   if (fromId === toId) {
-    return { sameChain: true, rootId: fromId };
+    const fromRoot = await getRootBriefId(workspaceId, fromId);
+    return {
+      sameChain: true,
+      rootId: fromId,
+      chainLength: 1,
+      fromChain: fromRoot.chain,
+      toChain: fromRoot.chain,
+    };
   }
 
   const [fromRoot, toRoot] = await Promise.all([
@@ -98,41 +112,76 @@ export async function areInSameVersionChain(
     getRootBriefId(workspaceId, toId),
   ]);
 
-  if (fromRoot.rootId === toRoot.rootId) {
-    return { sameChain: true, rootId: fromRoot.rootId };
+  if (fromRoot.rootId !== toRoot.rootId || !fromRoot.rootId) {
+    return {
+      sameChain: false,
+      rootId: null,
+      chainLength: 0,
+      fromChain: fromRoot.chain,
+      toChain: toRoot.chain,
+    };
   }
 
-  return { sameChain: false, rootId: null };
+  // Calculate actual version chain distance between fromId and toId
+  // fromRoot.chain: [fromId, parent, grandparent, ..., rootId]
+  // toRoot.chain: [toId, parent, grandparent, ..., rootId]
+  let chainLength = 2;
+
+  const fromIdxInTo = toRoot.chain.indexOf(fromId);
+  const toIdxInFrom = fromRoot.chain.indexOf(toId);
+
+  if (fromIdxInTo !== -1) {
+    // toId is a descendant of fromId (e.g. fromId=v1 at index 2 in [v3, v2, v1] -> length = 2 + 1 = 3)
+    chainLength = fromIdxInTo + 1;
+  } else if (toIdxInFrom !== -1) {
+    // fromId is a descendant of toId
+    chainLength = toIdxInFrom + 1;
+  } else {
+    // Branching from shared ancestor: find Lowest Common Ancestor (LCA)
+    const lca = fromRoot.chain.find((id) => toRoot.chain.includes(id));
+    if (lca) {
+      const distFrom = fromRoot.chain.indexOf(lca);
+      const distTo = toRoot.chain.indexOf(lca);
+      chainLength = distFrom + distTo + 1;
+    } else {
+      chainLength = fromRoot.chain.length + toRoot.chain.length;
+    }
+  }
+
+  return {
+    sameChain: true,
+    rootId: fromRoot.rootId,
+    chainLength,
+    fromChain: fromRoot.chain,
+    toChain: toRoot.chain,
+  };
 }
 
 /**
- * Computes line-by-line diff between two text blocks.
+ * Computes line-by-line diff between two text blocks using the Myers diff algorithm (O(ND)).
  */
 export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
-  const oldLines = (oldText || '').split('\n');
-  const newLines = (newText || '').split('\n');
+  const oldStr = oldText ?? '';
+  const newStr = newText ?? '';
+
+  if (oldStr === '' && newStr === '') {
+    return [{ type: 'same', text: '' }];
+  }
+
+  const changes = diffLines(oldStr, newStr);
   const diff: DiffLine[] = [];
 
-  let i = 0;
-  let j = 0;
-
-  while (i < oldLines.length || j < newLines.length) {
-    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-      diff.push({ type: 'same', text: oldLines[i] });
-      i++;
-      j++;
-    } else if (
-      j < newLines.length &&
-      (!oldLines.includes(newLines[j], i) || oldLines.indexOf(newLines[j], i) - i > 4)
-    ) {
-      diff.push({ type: 'add', text: newLines[j] });
-      j++;
-    } else if (i < oldLines.length) {
-      diff.push({ type: 'del', text: oldLines[i] });
-      i++;
-    } else if (j < newLines.length) {
-      diff.push({ type: 'add', text: newLines[j] });
-      j++;
+  for (const change of changes) {
+    const type: 'add' | 'del' | 'same' = change.added ? 'add' : change.removed ? 'del' : 'same';
+    let val = change.value;
+    if (val.endsWith('\r\n')) {
+      val = val.slice(0, -2);
+    } else if (val.endsWith('\n') || val.endsWith('\r')) {
+      val = val.slice(0, -1);
+    }
+    const lines = val.split(/\r?\n/);
+    for (const line of lines) {
+      diff.push({ type, text: line });
     }
   }
 
@@ -219,7 +268,7 @@ export async function diffBriefsInChain(
       status: toRow.status,
     },
     sharedRootId: chainCheck.rootId,
-    versionChainLength: 2,
+    versionChainLength: chainCheck.chainLength,
     stats: {
       totalAdditions,
       totalDeletions,

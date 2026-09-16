@@ -2,10 +2,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { pool, query } from './client';
-import { generateEmbedding, formatVectorForPg } from '@/core/embeddings';
+import { generateEmbedding, formatVectorForPg, EMBEDDING_DIMENSION } from '@/core/embeddings';
 
 export async function reembedAllChunks() {
+  const provider = process.env.EMBEDDING_PROVIDER?.toLowerCase() || 'gemini';
   console.log('=== Ballast Embedding Migration: Re-embedding All Chunks ===');
+  console.log(`Active Embedding Provider: ${provider} (target dimension: ${EMBEDDING_DIMENSION})`);
   const startTime = Date.now();
 
   const chunks = await query<{ id: string; text: string }>(
@@ -20,6 +22,11 @@ export async function reembedAllChunks() {
     console.log(`[${count}/${chunks.length}] Re-embedding chunk ${chunk.id.slice(0, 8)}... (${chunk.text.slice(0, 50).replace(/\n/g, ' ')}...)`);
     
     const embedding = await generateEmbedding(chunk.text);
+    if (embedding.length !== EMBEDDING_DIMENSION) {
+      throw new Error(
+        `Generated embedding dimension (${embedding.length}) does not match expected dimension (${EMBEDDING_DIMENSION}). Migration aborted to prevent vector table corruption.`
+      );
+    }
     const vectorStr = formatVectorForPg(embedding);
 
     await query(

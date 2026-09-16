@@ -14,8 +14,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   name TEXT,
   notification_preferences JSONB NOT NULL DEFAULT '{"email_enabled": true, "notify_on_publish": true, "notify_on_fail": true}'::jsonb,
+  session_version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1;
 
 -- 2. workspaces
 CREATE TABLE IF NOT EXISTS workspaces (

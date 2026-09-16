@@ -135,7 +135,10 @@ async function callGeminiEmbedding(text: string, apiKey: string, maxRetries = 2)
 }
 
 /**
- * Generates embeddings via Mistral API (mistral-embed) and pads to 1536 dimensions.
+ * Mistral API embedding helper.
+ * Note: mistral-embed natively returns 1024-dimensional vectors.
+ * Zero-padding to 1536 is strictly rejected as it corrupts cosine distances
+ * and causes silent retrieval degradation across models.
  */
 async function callMistralEmbedding(text: string, apiKey: string, maxRetries = 2): Promise<number[]> {
   let attempt = 0;
@@ -167,12 +170,12 @@ async function callMistralEmbedding(text: string, apiKey: string, maxRetries = 2
       const data = await res.json();
       const raw = data.data?.[0]?.embedding;
       if (Array.isArray(raw)) {
-        // Zero-pad 1024 to 1536 dimensions
-        const padded = new Array(EMBEDDING_DIMENSION).fill(0);
-        for (let i = 0; i < raw.length && i < EMBEDDING_DIMENSION; i++) {
-          padded[i] = raw[i];
+        if (raw.length === EMBEDDING_DIMENSION) {
+          return normalizeVector(raw);
         }
-        return normalizeVector(padded);
+        throw new Error(
+          `Mistral embed returned ${raw.length} dimensions, which is incompatible with the ${EMBEDDING_DIMENSION}-dimensional vector space. Zero-padding is rejected to prevent semantic corruption and retrieval failure.`
+        );
       }
       throw new Error('No embedding returned from Mistral');
     } catch (e: any) {
@@ -182,6 +185,58 @@ async function callMistralEmbedding(text: string, apiKey: string, maxRetries = 2
   }
 
   throw new Error('Mistral embedding failed');
+}
+
+/**
+ * Generates embeddings via OpenAI or OpenRouter API (native 1536 dim, e.g. text-embedding-3-small).
+ */
+async function callOpenAICompatibleEmbedding(
+  text: string,
+  apiKey: string,
+  endpoint = 'https://api.openai.com/v1/embeddings',
+  model = 'text-embedding-3-small',
+  maxRetries = 2
+): Promise<number[]> {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          input: text,
+          dimensions: EMBEDDING_DIMENSION,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        attempt++;
+        if ((res.status === 429 || res.status >= 500) && attempt <= maxRetries) {
+          await delay(1000 * attempt);
+          continue;
+        }
+        throw new Error(`OpenAI-compatible embed error (${res.status}): ${err.slice(0, 150)}`);
+      }
+
+      const data = await res.json();
+      const raw = data.data?.[0]?.embedding;
+      if (Array.isArray(raw) && raw.length === EMBEDDING_DIMENSION) {
+        return normalizeVector(raw);
+      }
+      throw new Error(`OpenAI embed returned invalid dimensions: ${raw?.length} (expected ${EMBEDDING_DIMENSION})`);
+    } catch (e: any) {
+      attempt++;
+      if (attempt > maxRetries) throw e;
+    }
+  }
+
+  throw new Error('OpenAI-compatible embedding failed');
 }
 
 /**
@@ -242,17 +297,18 @@ export function generateBallastLocalEmbedding(text: string): number[] {
 
 /**
  * Generates a normalized 1536-dimensional semantic embedding vector.
- * Multi-tier fallback hierarchy:
- * 1. Checks configured EMBEDDING_PROVIDER ("gemini" | "mistral" | "local").
- * 2. Primary: Google Gemini API (gemini-embedding-001 with native 1536 dim).
- * 3. Secondary: Mistral API (mistral-embed with 1536 dim alignment).
- * 4. Tertiary / Resilient Fallback: Local Ballast Semantic Embedding Engine (runs offline with zero cost).
- * 5. Deterministic test generator is used when EVAL_USE_MOCK=true or NODE_ENV=test.
+ * Multi-tier 1536-dimensional hierarchy:
+ * 1. Checks configured EMBEDDING_PROVIDER ("gemini" | "openai" | "openrouter" | "local" | "mistral").
+ * 2. Primary Cloud: Google Gemini API (gemini-embedding-001 with native 1536 dim).
+ * 3. Secondary Cloud: OpenAI / OpenRouter (text-embedding-3-small with native 1536 dim).
+ * 4. Resilient Fallback: Local Ballast Semantic Embedding Engine (native 1536 dim, offline, zero cost).
+ * Note: Never silently mixes incompatible vector dimensionalities (e.g. 1024-dim Mistral into 1536-dim pgvector).
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
   const preferredProvider = process.env.EMBEDDING_PROVIDER?.toLowerCase() || 'gemini';
   const geminiKey = process.env.GEMINI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
   const mistralKey = process.env.MISTRAL_API_KEY;
 
   // Direct local mode if configured
@@ -260,36 +316,55 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     return generateBallastLocalEmbedding(text);
   }
 
-  // 1. Try Gemini
-  if (geminiKey && (preferredProvider === 'gemini' || !mistralKey)) {
+  // Explicit Mistral configuration check
+  if (preferredProvider === 'mistral') {
+    if (!mistralKey) {
+      throw new Error('MISTRAL_API_KEY is not set for preferred provider mistral.');
+    }
+    return await callMistralEmbedding(text, mistralKey);
+  }
+
+  // 1. Primary: Try Gemini if preferred or default
+  if (geminiKey && (preferredProvider === 'gemini' || (!openaiKey && !openrouterKey))) {
     try {
       return await callGeminiEmbedding(text, geminiKey);
     } catch (err: any) {
-      console.warn(`[EMBEDDING FAILOVER] Gemini failed: ${err.message}. Trying Mistral fallback...`);
+      console.warn(`[EMBEDDING FAILOVER] Gemini failed: ${err.message}. Cascading to 1536-dim secondary...`);
     }
   }
 
-  // 2. Try Mistral
-  if (mistralKey) {
+  // 2. Secondary: Try OpenAI / OpenRouter if configured
+  if (openaiKey) {
     try {
-      return await callMistralEmbedding(text, mistralKey);
+      return await callOpenAICompatibleEmbedding(text, openaiKey, 'https://api.openai.com/v1/embeddings');
     } catch (err: any) {
-      console.warn(`[EMBEDDING FAILOVER] Mistral failed: ${err.message}. Cascading to Local Ballast Embedding...`);
+      console.warn(`[EMBEDDING FAILOVER] OpenAI embedding failed: ${err.message}.`);
+    }
+  } else if (openrouterKey) {
+    try {
+      return await callOpenAICompatibleEmbedding(
+        text,
+        openrouterKey,
+        'https://openrouter.ai/api/v1/embeddings',
+        'openai/text-embedding-3-small'
+      );
+    } catch (err: any) {
+      console.warn(`[EMBEDDING FAILOVER] OpenRouter embedding failed: ${err.message}.`);
     }
   }
 
-  // 3. Try Gemini if Mistral was preferred but failed
-  if (geminiKey && preferredProvider === 'mistral') {
+  // 3. Try Gemini as backup if OpenAI was preferred but failed
+  if (geminiKey && preferredProvider !== 'gemini') {
     try {
       return await callGeminiEmbedding(text, geminiKey);
     } catch (err: any) {
-      console.warn(`[EMBEDDING FAILOVER] Gemini failed: ${err.message}. Cascading to Local Ballast Embedding...`);
+      console.warn(`[EMBEDDING FAILOVER] Gemini failed: ${err.message}.`);
     }
   }
 
-  // 4. Fallback to Local Ballast Semantic Embedding Engine
+  // 4. Resilient Fallback: Local Ballast Semantic Embedding Engine (native 1536-dim)
   console.warn(
-    '[EMBEDDING FALLBACK] All external cloud embedding providers unavailable or unconfigured. Falling back to Local Ballast Semantic Embedding Engine.'
+    '[EMBEDDING FALLBACK] All external cloud 1536-dim embedding providers unavailable or unconfigured. Falling back to Local Ballast Semantic Embedding Engine.'
   );
   return generateBallastLocalEmbedding(text);
 }

@@ -6,6 +6,17 @@
 
 export type LLMRole = 'writer' | 'critic';
 
+export interface LLMUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LLMInvocationResult {
+  text: string;
+  usage: LLMUsage;
+}
+
 export interface LLMCallOptions {
   role?: LLMRole;
   timeoutMs?: number;
@@ -13,6 +24,7 @@ export interface LLMCallOptions {
   maxTokens?: number;
   maxRetries?: number;
   preferredProvider?: 'gemini' | 'groq' | 'mistral' | 'openrouter';
+  onUsage?: (usage: LLMUsage, meta: { provider: string; model: string }) => void;
 }
 
 export class LLMProviderError extends Error {
@@ -47,7 +59,7 @@ interface ProviderConfig {
     prompt: string,
     systemPrompt: string,
     opts: LLMCallOptions
-  ) => Promise<string>;
+  ) => Promise<LLMInvocationResult>;
 }
 
 // Helper: exponential backoff delay
@@ -62,7 +74,7 @@ async function callGemini(
   prompt: string,
   systemPrompt: string,
   opts: LLMCallOptions
-): Promise<string> {
+): Promise<LLMInvocationResult> {
   const timeoutMs = opts.timeoutMs ?? 30000;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -101,7 +113,37 @@ async function callGemini(
     throw new LLMProviderError('gemini', model, response.status, 'No text candidate returned');
   }
 
-  return text;
+  const promptEstimate = Math.ceil(combinedPrompt.length / 4);
+  const completionEstimate = Math.ceil(text.length / 4);
+
+  const promptTokens = data?.usageMetadata?.promptTokenCount ?? promptEstimate;
+  const completionTokens = data?.usageMetadata?.candidatesTokenCount ?? completionEstimate;
+  const totalTokens = data?.usageMetadata?.totalTokenCount ?? (promptTokens + completionTokens);
+
+  return {
+    text,
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+    },
+  };
+}
+
+/**
+ * Resolves the application URL for OpenRouter ranking and attribution (Bug 12).
+ */
+export function getOpenRouterReferer(): string {
+  if (process.env.NEXT_APP_URL && !process.env.NEXT_APP_URL.includes('localhost')) {
+    return process.env.NEXT_APP_URL.replace(/\/$/, '');
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+    return process.env.APP_URL.replace(/\/$/, '');
+  }
+  return process.env.NEXT_APP_URL || 'https://ballast.app';
 }
 
 /**
@@ -115,7 +157,7 @@ async function callOpenAICompatible(
   prompt: string,
   systemPrompt: string,
   opts: LLMCallOptions
-): Promise<string> {
+): Promise<LLMInvocationResult> {
   const timeoutMs = opts.timeoutMs ?? 30000;
   const messages = [];
 
@@ -130,7 +172,7 @@ async function callOpenAICompatible(
   };
 
   if (providerName === 'openrouter') {
-    headers['HTTP-Referer'] = 'https://ballast.local';
+    headers['HTTP-Referer'] = getOpenRouterReferer();
     headers['X-Title'] = 'Ballast Briefing Engine';
   }
 
@@ -157,7 +199,21 @@ async function callOpenAICompatible(
     throw new LLMProviderError(providerName, model, response.status, 'Invalid choice structure returned');
   }
 
-  return content;
+  const promptEstimate = Math.ceil(((prompt?.length || 0) + (systemPrompt?.length || 0)) / 4);
+  const completionEstimate = Math.ceil(content.length / 4);
+
+  const promptTokens = data?.usage?.prompt_tokens ?? promptEstimate;
+  const completionTokens = data?.usage?.completion_tokens ?? completionEstimate;
+  const totalTokens = data?.usage?.total_tokens ?? (promptTokens + completionTokens);
+
+  return {
+    text: content,
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+    },
+  };
 }
 
 /**
@@ -302,8 +358,11 @@ export async function llmCall(
       while (attempt <= maxRetries) {
         try {
           const result = await provider.invoke(apiKey, model, prompt, systemPrompt, opts);
-          if (result && result.trim().length > 0) {
-            return result;
+          if (result && result.text && result.text.trim().length > 0) {
+            if (opts.onUsage) {
+              opts.onUsage(result.usage, { provider: provider.name, model });
+            }
+            return result.text;
           }
           throw new LLMProviderError(provider.name, model, 200, 'Empty response from model');
         } catch (err: any) {
@@ -343,6 +402,25 @@ export async function llmCall(
 }
 
 /**
+ * Executes an LLM call and returns both the text output and detailed token usage.
+ */
+export async function llmCallWithUsage(
+  prompt: string,
+  systemPrompt: string,
+  opts: LLMCallOptions = {}
+): Promise<LLMInvocationResult> {
+  let capturedUsage: LLMUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  const text = await llmCall(prompt, systemPrompt, {
+    ...opts,
+    onUsage: (usage, meta) => {
+      capturedUsage = usage;
+      if (opts.onUsage) opts.onUsage(usage, meta);
+    },
+  });
+  return { text, usage: capturedUsage };
+}
+
+/**
  * Utility to extract clean JSON from LLM outputs that may contain markdown fences or surrounding chatter.
  */
 export function extractJsonFromLlm<T = any>(rawText: string): T {
@@ -378,4 +456,75 @@ export function extractJsonFromLlm<T = any>(rawText: string): T {
   }
 
   throw new Error(`No valid JSON found in LLM response:\n${trimmed.slice(0, 300)}`);
+}
+
+/**
+ * Per-token pricing table per 1,000,000 tokens (USD).
+ */
+export interface ModelPricing {
+  promptPerMillion: number;
+  completionPerMillion: number;
+}
+
+export const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Gemini
+  'gemini-3.6-flash': { promptPerMillion: 0.075, completionPerMillion: 0.30 },
+  'gemini-3.5-flash': { promptPerMillion: 0.075, completionPerMillion: 0.30 },
+  'gemini-flash-latest': { promptPerMillion: 0.075, completionPerMillion: 0.30 },
+  'gemini-3.1-pro': { promptPerMillion: 1.25, completionPerMillion: 5.00 },
+  'gemini-pro-latest': { promptPerMillion: 1.25, completionPerMillion: 5.00 },
+
+  // Groq (standard low-cost / free tier)
+  'llama-3.3-70b-versatile': { promptPerMillion: 0.59, completionPerMillion: 0.79 },
+  'llama-3.1-8b-instant': { promptPerMillion: 0.05, completionPerMillion: 0.08 },
+
+  // Mistral
+  'ministral-8b-latest': { promptPerMillion: 0.10, completionPerMillion: 0.10 },
+  'ministral-3b-latest': { promptPerMillion: 0.04, completionPerMillion: 0.04 },
+  'ministral-14b-latest': { promptPerMillion: 0.20, completionPerMillion: 0.20 },
+  'open-mistral-7b': { promptPerMillion: 0.25, completionPerMillion: 0.25 },
+
+  // OpenRouter free models
+  'nvidia/nemotron-3.5-lightning:free': { promptPerMillion: 0.0, completionPerMillion: 0.0 },
+  'nvidia/nemotron-3-super-120b-a12b:free': { promptPerMillion: 0.0, completionPerMillion: 0.0 },
+  'nex-agi/nex-n2.5-mini:free': { promptPerMillion: 0.0, completionPerMillion: 0.0 },
+  'liquid/lfm-2.5-2.6b:free': { promptPerMillion: 0.0, completionPerMillion: 0.0 },
+};
+
+/**
+ * Calculates estimated LLM cost in USD based on actual token counts and model pricing.
+ * Returns 0 if free tier, mock mode, or unrecognized free model.
+ */
+export function estimateLLMCost(
+  provider: string,
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  if (process.env.EVAL_USE_MOCK === 'true' || model.endsWith(':free')) {
+    return 0;
+  }
+
+  const pricing = MODEL_PRICING[model];
+  if (pricing) {
+    const promptCost = (promptTokens / 1_000_000) * pricing.promptPerMillion;
+    const completionCost = (completionTokens / 1_000_000) * pricing.completionPerMillion;
+    return Number((promptCost + completionCost).toFixed(6));
+  }
+
+  // Fallback defaults by provider
+  if (provider === 'openrouter' && model.includes(':free')) {
+    return 0;
+  }
+  if (provider === 'groq') {
+    return 0;
+  }
+  if (provider === 'gemini') {
+    return Number((((promptTokens * 0.075) + (completionTokens * 0.30)) / 1_000_000).toFixed(6));
+  }
+  if (provider === 'mistral') {
+    return Number((((promptTokens * 0.10) + (completionTokens * 0.10)) / 1_000_000).toFixed(6));
+  }
+
+  return 0;
 }

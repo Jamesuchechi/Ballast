@@ -185,7 +185,7 @@ async function runPhase9PolishTestSuite() {
     await query(
       `INSERT INTO flags (id, workspace_id, brief_id, citation_id, kind, note, status, created_at)
        VALUES ($1, $2, $3, $4, 'wrong', 'Numbers differ from 10-K report', 'open', NOW())
-       ON CONFLICT (id) DO NOTHING`,
+       ON CONFLICT (id) DO UPDATE SET kind = 'wrong', note = 'Numbers differ from 10-K report', status = 'open'`,
       [flagId, testWsId, childBriefId, cit2Id]
     );
 

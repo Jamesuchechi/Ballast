@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { query } from '@/db/client';
 
 function calculatePercentile(values: number[], p: number): number {
@@ -22,8 +22,7 @@ export const LATENCY_TARGETS = {
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
     if (!payload || !payload.workspaceId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

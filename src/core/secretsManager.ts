@@ -66,6 +66,7 @@ export class SecretsManager {
 
   /**
    * Rotates an existing token with new credentials (NFR1.2).
+   * Explicitly revokes the previous active token to preserve audit lineage before storing the new token.
    */
   async rotateToken(
     workspaceId: string,
@@ -73,7 +74,20 @@ export class SecretsManager {
     newTokenData: Record<string, any>,
     scopes: string[] = []
   ): Promise<string> {
-    const tokenId = await storeEncryptedToken(workspaceId, connector, newTokenData, scopes);
+    // If scopes not explicitly provided, preserve existing scopes from current token
+    let finalScopes = scopes;
+    if (finalScopes.length === 0) {
+      const currentStatus = await getTokenStatus(workspaceId, connector);
+      if (currentStatus.scopes && currentStatus.scopes.length > 0) {
+        finalScopes = currentStatus.scopes;
+      }
+    }
+
+    // Explicitly revoke the old active token row
+    await revokeToken(workspaceId, connector);
+
+    // Store new token in fresh active row
+    const tokenId = await storeEncryptedToken(workspaceId, connector, newTokenData, finalScopes);
 
     await query(
       `INSERT INTO access_logs (workspace_id, action)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
 
 export interface UserNotificationPreferences {
@@ -16,8 +16,7 @@ const DEFAULT_PREFERENCES: Required<UserNotificationPreferences> = {
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
     if (!payload || !payload.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -41,8 +40,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
     if (!payload || !payload.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

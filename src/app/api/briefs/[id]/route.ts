@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
 
 export async function GET(
@@ -7,8 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = req.cookies.get(COOKIE_NAME)?.value;
-    const payload = token ? verifyToken(token) : null;
+    const payload = await getAuthSession(req);
 
     if (!payload) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

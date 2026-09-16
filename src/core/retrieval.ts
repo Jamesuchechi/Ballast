@@ -3,11 +3,14 @@ import { generateEmbedding, formatVectorForPg } from './embeddings';
 import type { RetrievedQuote } from './types';
 import type { SourceBlock } from './sourceFormatter';
 
+export const DEFAULT_MAX_DISTANCE = 0.85;
+
 export interface RetrievalOptions {
   workspaceId: string;
   queryText: string;
   limit?: number;
   briefId?: string;
+  maxDistance?: number;
 }
 
 export interface RetrievalResult {
@@ -40,7 +43,11 @@ export async function retrievePrivateChunks(
   const queryVector = await generateEmbedding(queryText);
   const vectorStr = formatVectorForPg(queryVector);
 
-  // 2. Query pgvector for private sources only (s.connector != 'web')
+  const maxDistance =
+    options.maxDistance ??
+    (process.env.RETRIEVAL_MAX_DISTANCE ? parseFloat(process.env.RETRIEVAL_MAX_DISTANCE) : DEFAULT_MAX_DISTANCE);
+
+  // 2. Query pgvector for private sources only with distance threshold filter (s.connector != 'web')
   const rows = await query<RawChunkRow>(
     `SELECT 
        c.id, 
@@ -53,10 +60,13 @@ export async function retrievePrivateChunks(
        (c.embedding <=> $1::vector) AS distance
      FROM chunks c
      JOIN sources s ON s.id = c.source_id
-     WHERE c.workspace_id = $2 AND s.connector != 'web'
+     WHERE c.workspace_id = $2 
+       AND s.connector != 'web'
+       AND c.embedding IS NOT NULL
+       AND (c.embedding <=> $1::vector) <= $3
      ORDER BY c.embedding <=> $1::vector ASC
-     LIMIT $3`,
-    [vectorStr, workspaceId, limit]
+     LIMIT $4`,
+    [vectorStr, workspaceId, maxDistance, limit]
   );
 
   // 3. Log access into access_logs for auditing all accessed private sources (NFR2.4, NFR6.4)
@@ -83,14 +93,19 @@ export async function retrievePrivateChunks(
   }
 
   // 4. Format into RetrievedQuote[] and SourceBlock[] tagged source_class='private'
-  const quotes: RetrievedQuote[] = rows.map((r, idx) => ({
-    id: `quote_priv_${r.id.slice(0, 8)}_${idx}`,
-    source_id: r.source_id,
-    quote: r.text,
-    source_class: 'private',
-    connector: (r.connector || 'upload') as any,
-    url: null,
-  }));
+  const quotes: RetrievedQuote[] = rows.map((r, idx) => {
+    const dist = Number(r.distance);
+    return {
+      id: `quote_priv_${r.id.slice(0, 8)}_${idx}`,
+      source_id: r.source_id,
+      quote: r.text,
+      source_class: 'private',
+      connector: (r.connector || 'upload') as any,
+      url: null,
+      distance: dist,
+      similarity: Number((1 - dist).toFixed(4)),
+    };
+  });
 
   const sources: SourceBlock[] = rows.map((r) => ({
     id: r.source_id,
@@ -119,6 +134,10 @@ export async function retrieveWebChunks(
   const queryVector = await generateEmbedding(queryText);
   const vectorStr = formatVectorForPg(queryVector);
 
+  const maxDistance =
+    options.maxDistance ??
+    (process.env.RETRIEVAL_MAX_DISTANCE ? parseFloat(process.env.RETRIEVAL_MAX_DISTANCE) : DEFAULT_MAX_DISTANCE);
+
   const rows = await query<RawChunkRow>(
     `SELECT 
        c.id, 
@@ -131,10 +150,13 @@ export async function retrieveWebChunks(
        (c.embedding <=> $1::vector) AS distance
      FROM chunks c
      JOIN sources s ON s.id = c.source_id
-     WHERE c.workspace_id = $2 AND s.connector = 'web'
+     WHERE c.workspace_id = $2 
+       AND s.connector = 'web'
+       AND c.embedding IS NOT NULL
+       AND (c.embedding <=> $1::vector) <= $3
      ORDER BY c.embedding <=> $1::vector ASC
-     LIMIT $3`,
-    [vectorStr, workspaceId, limit]
+     LIMIT $4`,
+    [vectorStr, workspaceId, maxDistance, limit]
   );
 
   if (rows.length > 0) {
@@ -159,14 +181,19 @@ export async function retrieveWebChunks(
     }
   }
 
-  const quotes: RetrievedQuote[] = rows.map((r, idx) => ({
-    id: `quote_web_${r.id.slice(0, 8)}_${idx}`,
-    source_id: r.source_id,
-    quote: r.text,
-    source_class: 'web',
-    connector: 'web',
-    url: r.raw_uri || r.external_id,
-  }));
+  const quotes: RetrievedQuote[] = rows.map((r, idx) => {
+    const dist = Number(r.distance);
+    return {
+      id: `quote_web_${r.id.slice(0, 8)}_${idx}`,
+      source_id: r.source_id,
+      quote: r.text,
+      source_class: 'web',
+      connector: 'web',
+      url: r.raw_uri || r.external_id,
+      distance: dist,
+      similarity: Number((1 - dist).toFixed(4)),
+    };
+  });
 
   const sources: SourceBlock[] = rows.map((r) => ({
     id: r.source_id,
