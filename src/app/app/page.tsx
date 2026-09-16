@@ -50,6 +50,8 @@ import { IntegrationsMarketplace, type ConnectorItem } from '@/components/dashbo
 import { ProfileView } from '@/components/dashboard/ProfileView';
 import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
 import { LatencyPlot } from '@/components/dashboard/LatencyPlot';
+import { ActionDraftCard } from '@/components/dashboard/ActionDraftCard';
+import { FormattedDiffViewer } from '@/components/dashboard/FormattedDiffViewer';
 
 function computeUnifiedDiff(oldText: string, newText: string) {
   if (!oldText && !newText) return [];
@@ -2597,50 +2599,35 @@ export default function DashboardPage() {
 
               {/* Tab: Actions */}
               {activeTab === 'actions' && (
-                <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>
-                      Pending Action Drafts ({briefDetail?.actions?.length || 0})
-                    </h3>
-                    <span className="dash-badge dash-badge-published">Human Gate Enforced</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                        Action Drafts ({briefDetail?.actions?.length || 0})
+                      </h3>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                        Proposed emails, tasks, and issues generated from this brief. Review and approve before sending.
+                      </p>
+                    </div>
+                    <span className="dash-badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      Safety Review Required
+                    </span>
                   </div>
 
                   {!briefDetail?.actions || briefDetail.actions.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
-                      <p style={{ fontSize: '0.82rem' }}>No follow-up action drafts generated for this brief.</p>
+                    <div className="dash-card" style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)' }}>
+                      <p style={{ fontSize: '0.84rem' }}>No follow-up action drafts generated for this brief.</p>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {briefDetail.actions.map((act: any) => {
-                        const isApproved = !!act.approved_at;
-                        const isExecuted = !!act.executed_at;
-                        const hasError = !!act.error;
-                        return (
-                          <div key={act.id} className="dash-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className="dash-badge dash-badge-running">{act.type}</span>
-                                {isExecuted && <span className="dash-badge dash-badge-published">Executed</span>}
-                                {hasError && <span className="dash-badge dash-badge-failed">Error</span>}
-                              </div>
-                              <button
-                                onClick={() => handleApproveAction(act.id)}
-                                disabled={isApproved}
-                                className={isApproved ? 'dash-btn-secondary' : 'dash-btn-primary'}
-                                style={{ padding: '4px 12px', fontSize: '0.72rem' }}
-                              >
-                                {isExecuted ? 'Executed ✓' : isApproved ? 'Approved ✓' : 'Approve Draft'}
-                              </button>
-                            </div>
-                            <pre className="dash-code-box">{JSON.stringify(act.payload, null, 2)}</pre>
-                            {hasError && (
-                              <div style={{ fontSize: '0.72rem', color: '#ef4444', padding: '4px 8px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '4px' }}>
-                                <strong>Error:</strong> {act.error}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                      {briefDetail.actions.map((act: any) => (
+                        <ActionDraftCard
+                          key={act.id}
+                          act={act}
+                          onApprove={handleApproveAction}
+                          disabled={actionLoading}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -2806,7 +2793,7 @@ export default function DashboardPage() {
       {/* SECTION: CONNECTED SOURCES (INTEGRATIONS MARKETPLACE)    */}
       {/* ======================================================== */}
       {activeSection === 'sources' && (
-        <div style={{ maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ width: '100%', maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', boxSizing: 'border-box', minWidth: 0 }}>
           <IntegrationsMarketplace
             connectors={connectors}
             uploadedCount={uploadedFiles.filter((u) => u.connector === 'upload').length}
@@ -2978,25 +2965,25 @@ export default function DashboardPage() {
         <div style={{ maxWidth: '880px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span className="dash-badge dash-badge-published">FR6.1 &bull; FR6.2</span>
-              <span className="dash-badge dash-badge-mode">Parent-Child Revision Lineage</span>
+              <span className="dash-badge dash-badge-published">Revision History</span>
+              <span className="dash-badge dash-badge-mode">Preserved Lineage</span>
             </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Version Chains &amp; Brief Diff</h2>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Version History &amp; Brief Changes</h2>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Regenerate stubs insert a new child row with <code style={{ fontFamily: 'var(--font-mono)', color: '#10b981' }}>parent_brief_id</code>, never modifying published history in-place.
+              See verified changes between revisions. Every update preserves prior versions so you can trace how evidence evolved.
             </p>
           </div>
 
-          <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--card-border)' }}>
+          <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--card-border)', flexWrap: 'wrap', gap: '10px' }}>
               <div>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>
                   {currentBrief ? currentBrief.question : 'No Brief Selected'}
                 </h3>
-                <span style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   {currentBrief?.parent_brief_id
-                    ? `Child revision of brief ${currentBrief.parent_brief_id.slice(0, 8)}...`
-                    : 'Root Brief (v1)'}
+                    ? `Revision of earlier brief (${currentBrief.parent_brief_id.slice(0, 8)})`
+                    : 'Original Brief (v1)'}
                 </span>
               </div>
               {currentBrief && (
@@ -3026,42 +3013,14 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Real Diff Display */}
+            {/* Formatted Diff Display */}
             {briefDetail?.parentBrief ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>
-                    Unified Evidence Diff (Parent &rarr; Current Revision):
-                  </div>
-                  <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                    Comparing {briefDetail.parentBrief.id.slice(0, 8)} to {currentBrief.id.slice(0, 8)}
-                  </span>
-                </div>
-
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', background: '#000000', border: '1px solid var(--card-border)', borderRadius: '10px', padding: '14px', overflowX: 'auto', lineHeight: '1.7' }}>
-                  {unifiedDiffLines.map((line, idx) => {
-                    if (line.type === 'add') {
-                      return (
-                        <div key={idx} style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 4px' }}>
-                          + {line.text}
-                        </div>
-                      );
-                    }
-                    if (line.type === 'del') {
-                      return (
-                        <div key={idx} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '1px 4px' }}>
-                          - {line.text}
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={idx} style={{ color: '#cbd5e1' }}>
-                        &nbsp; {line.text}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <FormattedDiffViewer
+                lines={unifiedDiffLines}
+                fromLabel={briefDetail.parentBrief.id.slice(0, 8)}
+                toLabel={currentBrief.id.slice(0, 8)}
+                defaultMode="preview"
+              />
             ) : currentBrief ? (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
                 <GitBranch size={28} style={{ margin: '0 auto 8px auto', opacity: 0.5 }} />
@@ -3086,12 +3045,12 @@ export default function DashboardPage() {
         <div style={{ maxWidth: '820px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span className="dash-badge dash-badge-running">FR5.1 &ndash; FR5.7</span>
-              <span className="dash-badge dash-badge-published">Human Gate Enforced</span>
+              <span className="dash-badge dash-badge-running">Action Drafts</span>
+              <span className="dash-badge dash-badge-published">Safety Review Enforced</span>
             </div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)' }}>Pending Follow-up Actions</h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Actions are drafted by the system but require explicit user approval before execution. Unapproved drafts never touch external APIs.
+              Follow-up emails, tasks, and drafts prepared from your briefs. Nothing is sent or dispatched until you review and approve it.
             </p>
           </div>
 
@@ -3104,47 +3063,15 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {workspaceActions.map((act: any) => {
-                const isApproved = !!act.approved_at;
-                const isExecuted = !!act.executed_at;
-                const hasError = !!act.error;
-                return (
-                  <div key={act.id} className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', border: hasError ? '1px solid rgba(239, 68, 68, 0.35)' : undefined }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className="dash-badge dash-badge-running">{act.type}</span>
-                        {isExecuted && <span className="dash-badge dash-badge-published">Executed</span>}
-                        {hasError && <span className="dash-badge dash-badge-failed">Error</span>}
-                        {act.brief_question && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            from: {act.brief_question}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleApproveAction(act.id)}
-                        disabled={isApproved}
-                        className={isApproved ? 'dash-btn-secondary' : 'dash-btn-primary'}
-                        style={{ padding: '6px 14px', fontSize: '0.75rem' }}
-                      >
-                        {isExecuted ? 'Executed ✓' : isApproved ? 'Approved ✓' : 'Approve Draft'}
-                      </button>
-                    </div>
-                    <pre className="dash-code-box">{JSON.stringify(act.payload, null, 2)}</pre>
-                    {hasError && (
-                      <div style={{ fontSize: '0.74rem', color: '#ef4444', padding: '6px 10px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                        <strong>Provider Execution Error:</strong> {act.error}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
-                      <span>Created: {new Date(act.created_at).toLocaleString()}</span>
-                      {act.approved_at && <span>Approved: {new Date(act.approved_at).toLocaleString()}</span>}
-                      {act.executed_at && <span style={{ color: '#10b981' }}>Executed: {new Date(act.executed_at).toLocaleString()}</span>}
-                    </div>
-                  </div>
-                );
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {workspaceActions.map((act: any) => (
+                <ActionDraftCard
+                  key={act.id}
+                  act={act}
+                  onApprove={handleApproveAction}
+                  disabled={actionLoading}
+                />
+              ))}
             </div>
           )}
         </div>

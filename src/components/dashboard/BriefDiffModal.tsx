@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { GitBranch, X, CheckCircle2, ArrowRight, Layers, FileText, Minus, Plus } from 'lucide-react';
 import type { BriefDiffResult } from '@/core/diff';
+import { FormattedDiffViewer } from '@/components/dashboard/FormattedDiffViewer';
 
 interface BriefDiffModalProps {
   diff: BriefDiffResult;
@@ -45,9 +46,9 @@ export function BriefDiffModal({ diff, onClose }: BriefDiffModalProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <GitBranch size={18} color="#818cf8" />
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
-                Brief Revision Diff (FR6.2)
+                Brief Revision Diff
               </h3>
-              <span className="dash-badge dash-badge-mode">Same Version Lineage</span>
+              <span className="dash-badge dash-badge-mode">Revision History</span>
             </div>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
               Comparing <strong>{diff.fromBrief.id.slice(0, 8)}</strong> ({new Date(diff.fromBrief.asOf).toLocaleDateString()}) &rarr; <strong>{diff.toBrief.id.slice(0, 8)}</strong> ({new Date(diff.toBrief.asOf).toLocaleDateString()})
@@ -150,55 +151,11 @@ export function BriefDiffModal({ diff, onClose }: BriefDiffModalProps) {
         )}
 
         {activeDiffTab === 'answer' && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', background: '#000000', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '14px', lineHeight: '1.7', overflowX: 'auto' }}>
-            {diff.answerDiff.map((line, idx) => {
-              if (line.type === 'add') {
-                return (
-                  <div key={idx} style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 4px' }}>
-                    + {line.text}
-                  </div>
-                );
-              }
-              if (line.type === 'del') {
-                return (
-                  <div key={idx} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '1px 4px' }}>
-                    - {line.text}
-                  </div>
-                );
-              }
-              return (
-                <div key={idx} style={{ color: '#cbd5e1' }}>
-                  &nbsp; {line.text}
-                </div>
-              );
-            })}
-          </div>
+          <FormattedDiffViewer lines={diff.answerDiff} />
         )}
 
         {activeDiffTab === 'markdown' && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', background: '#000000', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '14px', lineHeight: '1.7', maxHeight: '500px', overflowY: 'auto' }}>
-            {diff.unifiedMarkdownDiff.map((line, idx) => {
-              if (line.type === 'add') {
-                return (
-                  <div key={idx} style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '1px 4px' }}>
-                    + {line.text}
-                  </div>
-                );
-              }
-              if (line.type === 'del') {
-                return (
-                  <div key={idx} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.12)', padding: '1px 4px' }}>
-                    - {line.text}
-                  </div>
-                );
-              }
-              return (
-                <div key={idx} style={{ color: '#cbd5e1' }}>
-                  &nbsp; {line.text}
-                </div>
-              );
-            })}
-          </div>
+          <FormattedDiffViewer lines={diff.unifiedMarkdownDiff} />
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '1px solid var(--card-border)' }}>

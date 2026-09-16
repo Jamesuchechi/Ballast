@@ -338,7 +338,8 @@ export function IntegrationsMarketplace({
             border: '1px solid var(--card-border)',
             borderRadius: '6px',
             padding: '4px 10px',
-            minWidth: '220px',
+            flex: '1 1 140px',
+            minWidth: 0,
           }}
         >
           <Search size={14} color="var(--text-subtle)" />
@@ -434,8 +435,8 @@ export function IntegrationsMarketplace({
               <span className="dash-badge dash-badge-published">{uploadedCount} active</span>
             </div>
 
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
-              Direct file drop for project roadmaps, private architecture specs, and team transcripts with 1536-dim pgvector indexing.
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+              Drop in your PDFs, docs, and notes. Ballast indexes them so you can ask questions grounded in your own files.
             </p>
 
             <button
@@ -487,8 +488,8 @@ export function IntegrationsMarketplace({
               <span className="dash-badge dash-badge-mode">Active</span>
             </div>
 
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
-              Dynamically searches public documentation and web articles during World Mode generation with verbatim URI citations.
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+              When you ask a World mode question, Ballast also searches the web and cites live sources alongside your files.
             </p>
 
             <div
