@@ -199,21 +199,20 @@ export function IntegrationsMarketplace({
   };
 
   return (
-    <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+    <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Top Banner / Marketplace Header */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <span className="dash-badge dash-badge-published">Integrations Marketplace</span>
-              <span className="dash-badge dash-badge-mode">Phase B &amp; E Standard</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+              <span className="dash-badge dash-badge-published">Integrations</span>
+              <span className="dash-badge dash-badge-mode">All Sources</span>
             </div>
-            <h1 style={{ fontSize: '1.45rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', margin: 0 }}>
-              Connected Sources &amp; Knowledge Ingestion
+            <h1 style={{ fontSize: 'clamp(1.1rem, 4vw, 1.45rem)', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', margin: 0, wordBreak: 'break-word' }}>
+              Connected Sources
             </h1>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '650px' }}>
-              Ballast retrieves ground-truth evidence strictly from connected sources. All OAuth credentials and tokens
-              are encrypted at rest using AES-256-GCM.
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.5', wordBreak: 'break-word' }}>
+              Ballast reads strictly from your connected accounts. Your credentials are encrypted with bank-grade security.
             </p>
           </div>
 
@@ -294,63 +293,39 @@ export function IntegrationsMarketplace({
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '10px',
           background: 'var(--card-bg)',
           border: '1px solid var(--card-border)',
           borderRadius: '10px',
           padding: '8px 12px',
+          minWidth: 0,
+          boxSizing: 'border-box',
         }}
       >
-        {/* Filter Tabs */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button
-            onClick={() => setFilterTab('all')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '6px',
-              fontSize: '0.78rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              border: 'none',
-              background: filterTab === 'all' ? 'var(--card-border-hover)' : 'transparent',
-              color: filterTab === 'all' ? 'var(--text)' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            All ({connectors.length})
-          </button>
-          <button
-            onClick={() => setFilterTab('connected')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '6px',
-              fontSize: '0.78rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              border: 'none',
-              background: filterTab === 'connected' ? 'var(--card-border-hover)' : 'transparent',
-              color: filterTab === 'connected' ? 'var(--text)' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            Connected ({connectedCount})
-          </button>
-          <button
-            onClick={() => setFilterTab('available')}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '6px',
-              fontSize: '0.78rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              border: 'none',
-              background: filterTab === 'available' ? 'var(--card-border-hover)' : 'transparent',
-              color: filterTab === 'available' ? 'var(--text)' : 'var(--text-muted)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            Available ({connectors.length - connectedCount})
-          </button>
+        {/* Filter Tabs — scrollable on mobile */}
+        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', flexShrink: 0, paddingBottom: '1px' }}>
+          {(['all', 'connected', 'available'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFilterTab(tab)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: 'none',
+                whiteSpace: 'nowrap',
+                background: filterTab === tab ? 'var(--card-border-hover)' : 'transparent',
+                color: filterTab === tab ? 'var(--text)' : 'var(--text-muted)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab === 'all' ? `All (${connectors.length})`
+                : tab === 'connected' ? `Connected (${connectedCount})`
+                : `Available (${connectors.length - connectedCount})`}
+            </button>
+          ))}
         </div>
 
         {/* Search Box */}
@@ -392,11 +367,11 @@ export function IntegrationsMarketplace({
         </div>
       </div>
 
-      {/* Primary Connectors Grid */}
+      {/* Primary Connectors Grid — responsive single column on mobile */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
           gap: '16px',
         }}
       >
@@ -415,10 +390,10 @@ export function IntegrationsMarketplace({
       {/* Secondary Native Ingestion Channels (Manual Uploads & Web Snapshots) */}
       <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Native Workspace Channels
+          Other Ways to Add Content
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
           {/* Manual Uploads */}
           <div
             className="dash-card"
@@ -530,7 +505,7 @@ export function IntegrationsMarketplace({
         </div>
       </div>
 
-      {/* Data Retention & Compliance Policy Controls (NFR2.1) */}
+      {/* Data Retention Settings */}
       <div
         className="dash-card"
         style={{
@@ -538,17 +513,19 @@ export function IntegrationsMarketplace({
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
+          minWidth: 0,
+          boxSizing: 'border-box',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Clock size={20} color="#818cf8" />
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-                Data Retention Policies (NFR2.1)
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 200px', minWidth: 0 }}>
+            <Clock size={20} color="#818cf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0, wordBreak: 'break-word' }}>
+                Data Retention Settings
               </h3>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                Retention policies are enforced per source type. Chunks and embeddings older than the window are purged.
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0', lineHeight: '1.5', wordBreak: 'break-word' }}>
+                Control how long Ballast keeps data from each source. Old data is automatically deleted.
               </p>
             </div>
           </div>
@@ -587,8 +564,8 @@ export function IntegrationsMarketplace({
           </div>
         )}
 
-        {/* Retention Table */}
-        <div style={{ overflowX: 'auto' }}>
+        {/* Retention Table — scrollable on mobile */}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--card-border)', color: 'var(--text-muted)', textAlign: 'left' }}>
@@ -649,24 +626,24 @@ export function IntegrationsMarketplace({
           </table>
         </div>
 
-        {/* Server-Side Wipe Policy Section (Closed Decision #2) */}
+        {/* Account Wipe Section */}
         <div
           style={{
             marginTop: '8px',
             paddingTop: '16px',
             borderTop: '1px solid var(--card-border)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
           }}
         >
-          <div>
-            <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#ef4444' }}>
-              Account Data Deletion &amp; Wipe Policy (Closed Decision #2)
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+            <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#ef4444', wordBreak: 'break-word' }}>
+              Delete All My Data
             </div>
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: '1.5', wordBreak: 'break-word' }}>
               Server-side wipe permanently destroys all briefs, vector embeddings, chunks, and storage bytes.
               Use <strong>Export First</strong> before proceeding.
             </div>

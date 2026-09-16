@@ -117,6 +117,11 @@ export function ConnectorCard({
           ? '1px solid rgba(239, 68, 68, 0.35)'
           : undefined,
         position: 'relative',
+        minWidth: 0,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
       }}
     >
       {/* Top Row: Provider Identity & Status Badge */}
@@ -193,7 +198,7 @@ export function ConnectorCard({
       </div>
 
       {/* Description */}
-      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0 }}>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
         {connector.description}
       </p>
 
@@ -244,6 +249,8 @@ export function ConnectorCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '4px',
           fontSize: '0.72rem',
           color: 'var(--text-subtle)',
           borderTop: '1px solid var(--card-border)',
@@ -251,10 +258,10 @@ export function ConnectorCard({
           marginTop: 'auto',
         }}
       >
-        <span style={{ fontFamily: 'var(--font-mono)' }}>
-          {isConnected ? `Synced: ${formatLastSynced(connector.health.last_synced)}` : 'Boundary: Untrusted'}
+        <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '1 1 0' }}>
+          {isConnected ? `Synced: ${formatLastSynced(connector.health.last_synced)}` : 'Not yet connected'}
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
           <ShieldCheck size={12} color="#10b981" />
           <span>AES-256</span>
         </span>
