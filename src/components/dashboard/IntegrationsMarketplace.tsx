@@ -199,7 +199,7 @@ export function IntegrationsMarketplace({
   };
 
   return (
-    <div style={{ maxWidth: '1080px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px', minWidth: 0, boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', maxWidth: '1080px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Top Banner / Marketplace Header */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', minWidth: 0 }}>
@@ -370,10 +370,15 @@ export function IntegrationsMarketplace({
 
       {/* Primary Connectors Grid — responsive single column on mobile */}
       <div
+        className="dash-connectors-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
           gap: '16px',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
         }}
       >
         {filteredConnectors.map((connector) => (
@@ -389,12 +394,23 @@ export function IntegrationsMarketplace({
       </div>
 
       {/* Secondary Native Ingestion Channels (Manual Uploads & Web Snapshots) */}
-      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '100%', minWidth: 0 }}>
         <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Other Ways to Add Content
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
+        <div
+          className="dash-secondary-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+            gap: '16px',
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
+          }}
+        >
           {/* Manual Uploads */}
           <div
             className="dash-card"
@@ -404,10 +420,15 @@ export function IntegrationsMarketplace({
               flexDirection: 'column',
               justifyContent: 'space-between',
               gap: '12px',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 auto' }}>
                 <div
                   style={{
                     width: '42px',
@@ -419,12 +440,13 @@ export function IntegrationsMarketplace({
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#10b981',
+                    flexShrink: 0,
                   }}
                 >
                   <UploadCloud size={20} />
                 </div>
-                <div>
-                  <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', margin: 0, wordBreak: 'break-word' }}>
                     Manual Uploads &amp; Transcripts
                   </h3>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
@@ -432,7 +454,7 @@ export function IntegrationsMarketplace({
                   </div>
                 </div>
               </div>
-              <span className="dash-badge dash-badge-published">{uploadedCount} active</span>
+              <span className="dash-badge dash-badge-published" style={{ flexShrink: 0 }}>{uploadedCount} active</span>
             </div>
 
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
@@ -457,10 +479,15 @@ export function IntegrationsMarketplace({
               flexDirection: 'column',
               justifyContent: 'space-between',
               gap: '12px',
+              width: '100%',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 auto' }}>
                 <div
                   style={{
                     width: '42px',
@@ -472,12 +499,13 @@ export function IntegrationsMarketplace({
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#06b6d4',
+                    flexShrink: 0,
                   }}
                 >
                   <Globe size={20} />
                 </div>
-                <div>
-                  <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', margin: 0, wordBreak: 'break-word' }}>
                     Web Snapshots Engine
                   </h3>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
@@ -485,7 +513,7 @@ export function IntegrationsMarketplace({
                   </div>
                 </div>
               </div>
-              <span className="dash-badge dash-badge-mode">Active</span>
+              <span className="dash-badge dash-badge-mode" style={{ flexShrink: 0 }}>Active</span>
             </div>
 
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
@@ -498,6 +526,7 @@ export function IntegrationsMarketplace({
                 fontFamily: 'var(--font-mono)',
                 color: 'var(--text-subtle)',
                 padding: '6px 0',
+                wordBreak: 'break-word',
               }}
             >
               Triggered automatically when question mode is set to World
@@ -514,11 +543,14 @@ export function IntegrationsMarketplace({
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
+          width: '100%',
+          maxWidth: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 200px', minWidth: 0 }}>
             <Clock size={20} color="#818cf8" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div style={{ minWidth: 0 }}>
@@ -531,11 +563,11 @@ export function IntegrationsMarketplace({
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={() => handlePruneRetention()}
               className="dash-btn-secondary"
-              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
             >
               <Trash2 size={13} />
               Prune All Expired
@@ -543,7 +575,7 @@ export function IntegrationsMarketplace({
             <button
               onClick={handleExportData}
               className="dash-btn-secondary"
-              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              style={{ fontSize: '0.78rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
             >
               <Download size={13} />
               Export First (JSON)
@@ -559,6 +591,7 @@ export function IntegrationsMarketplace({
               background: 'rgba(16, 185, 129, 0.1)',
               padding: '8px 12px',
               borderRadius: '6px',
+              wordBreak: 'break-word',
             }}
           >
             {pruningStatus}
@@ -566,8 +599,18 @@ export function IntegrationsMarketplace({
         )}
 
         {/* Retention Table — scrollable on mobile */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch' as any,
+            borderRadius: '8px',
+            border: '1px solid var(--card-border)',
+          }}
+        >
+          <table style={{ minWidth: '480px', width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--card-border)', color: 'var(--text-muted)', textAlign: 'left' }}>
                 <th style={{ padding: '8px 10px', fontWeight: 600 }}>Source Type</th>
@@ -586,7 +629,7 @@ export function IntegrationsMarketplace({
                     <div>{p.name}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{p.description}</div>
                   </td>
-                  <td style={{ padding: '10px', color: 'var(--text)' }}>
+                  <td style={{ padding: '10px', color: 'var(--text)', whiteSpace: 'nowrap' }}>
                     {p.sourceCount} sources
                   </td>
                   <td style={{ padding: '10px' }}>
@@ -601,6 +644,7 @@ export function IntegrationsMarketplace({
                         padding: '4px 8px',
                         borderRadius: '6px',
                         outline: 'none',
+                        maxWidth: '100%',
                       }}
                     >
                       <option value={7}>7 Days (Ephemeral)</option>
@@ -612,7 +656,7 @@ export function IntegrationsMarketplace({
                       <option value={365}>365 Days (1 Year)</option>
                     </select>
                   </td>
-                  <td style={{ padding: '10px', textAlign: 'right' }}>
+                  <td style={{ padding: '10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button
                       onClick={() => handlePruneRetention(p.connector)}
                       className="dash-btn-secondary"
@@ -634,10 +678,12 @@ export function IntegrationsMarketplace({
             paddingTop: '16px',
             borderTop: '1px solid var(--card-border)',
             display: 'flex',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <div style={{ flex: '1 1 200px', minWidth: 0 }}>
@@ -660,7 +706,9 @@ export function IntegrationsMarketplace({
               color: '#ef4444',
               borderColor: 'rgba(239, 68, 68, 0.4)',
               fontSize: '0.78rem',
-              padding: '6px 14px',
+              padding: '7px 16px',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             Wipe Account Data

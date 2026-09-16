@@ -117,6 +117,8 @@ export function ConnectorCard({
           ? '1px solid rgba(239, 68, 68, 0.35)'
           : undefined,
         position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
         minWidth: 0,
         boxSizing: 'border-box',
         overflow: 'hidden',
@@ -125,8 +127,8 @@ export function ConnectorCard({
       }}
     >
       {/* Top Row: Provider Identity & Status Badge */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 auto' }}>
           <div
             style={{
               width: '42px',
@@ -142,9 +144,9 @@ export function ConnectorCard({
           >
             {renderIcon()}
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)' }}>
+              <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text)', margin: 0, wordBreak: 'break-word' }}>
                 {connector.name}
               </h3>
             </div>
@@ -155,50 +157,53 @@ export function ConnectorCard({
         </div>
 
         {/* Status Pill */}
-        {requiresReconnect ? (
-          <span
-            className="dash-badge"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.68rem',
-              background: 'rgba(245, 158, 11, 0.15)',
-              color: '#f59e0b',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
-            }}
-          >
-            <AlertCircle size={11} />
-            <span>Reconnect Required</span>
-          </span>
-        ) : hasError ? (
-          <span
-            className="dash-badge dash-badge-failed"
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem' }}
-          >
-            <AlertCircle size={11} />
-            <span>Error</span>
-          </span>
-        ) : isConnected ? (
-          <span
-            className="dash-badge dash-badge-published"
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem' }}
-          >
-            <CheckCircle2 size={11} />
-            <span>Connected</span>
-          </span>
-        ) : (
-          <span
-            className="dash-badge dash-badge-mode"
-            style={{ fontSize: '0.68rem' }}
-          >
-            Available
-          </span>
-        )}
+        <div style={{ flexShrink: 0 }}>
+          {requiresReconnect ? (
+            <span
+              className="dash-badge"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.68rem',
+                background: 'rgba(245, 158, 11, 0.15)',
+                color: '#f59e0b',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <AlertCircle size={11} />
+              <span>Reconnect</span>
+            </span>
+          ) : hasError ? (
+            <span
+              className="dash-badge dash-badge-failed"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap' }}
+            >
+              <AlertCircle size={11} />
+              <span>Error</span>
+            </span>
+          ) : isConnected ? (
+            <span
+              className="dash-badge dash-badge-published"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap' }}
+            >
+              <CheckCircle2 size={11} />
+              <span>Connected</span>
+            </span>
+          ) : (
+            <span
+              className="dash-badge dash-badge-mode"
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', whiteSpace: 'nowrap' }}
+            >
+              <span>Available</span>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Description */}
-      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5', margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
         {connector.description}
       </p>
 
@@ -256,6 +261,7 @@ export function ConnectorCard({
           borderTop: '1px solid var(--card-border)',
           paddingTop: '10px',
           marginTop: 'auto',
+          width: '100%',
         }}
       >
         <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '1 1 0' }}>
@@ -268,32 +274,36 @@ export function ConnectorCard({
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
+      <div style={{ display: 'flex', gap: '8px', paddingTop: '2px', flexWrap: 'wrap', width: '100%' }}>
         {requiresReconnect ? (
           <>
             <button
               onClick={() => onConnect(connector)}
               className="dash-btn-primary"
               style={{
-                flex: 1,
+                flex: '1 1 130px',
                 justifyContent: 'center',
                 padding: '7px 12px',
                 fontSize: '0.78rem',
                 background: 'rgba(245, 158, 11, 0.2)',
                 color: '#f59e0b',
                 border: '1px solid rgba(245, 158, 11, 0.4)',
+                whiteSpace: 'nowrap',
               }}
             >
-              <span>Reconnect {connector.name}</span>
+              <span>Reconnect</span>
             </button>
             <button
               onClick={() => onRevoke(connector)}
               className="dash-btn-secondary"
               style={{
+                flex: '1 1 90px',
+                justifyContent: 'center',
                 padding: '7px 12px',
                 fontSize: '0.78rem',
                 color: '#ef4444',
                 borderColor: 'rgba(239, 68, 68, 0.3)',
+                whiteSpace: 'nowrap',
               }}
               title="Remove expired credentials"
             >
@@ -307,11 +317,12 @@ export function ConnectorCard({
               disabled={isSyncing}
               className="dash-btn-primary"
               style={{
-                flex: 1,
+                flex: '1 1 120px',
                 justifyContent: 'center',
                 padding: '7px 12px',
                 fontSize: '0.78rem',
                 opacity: isSyncing ? 0.7 : 1,
+                whiteSpace: 'nowrap',
               }}
             >
               <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
@@ -321,10 +332,13 @@ export function ConnectorCard({
               onClick={() => onRevoke(connector)}
               className="dash-btn-secondary"
               style={{
+                flex: '1 1 90px',
+                justifyContent: 'center',
                 padding: '7px 12px',
                 fontSize: '0.78rem',
                 color: '#ef4444',
                 borderColor: 'rgba(239, 68, 68, 0.3)',
+                whiteSpace: 'nowrap',
               }}
               title="Revoke access and purge active credentials"
             >

@@ -903,6 +903,23 @@ body {
   box-sizing: border-box;
 }
 
+@media (max-width: 767px) {
+  .dash-connectors-grid,
+  .dash-secondary-grid {
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .dash-card {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden;
+  }
+}
+
 @media (max-width: 640px) {
   .dash-query-input-row {
     flex-direction: column !important;

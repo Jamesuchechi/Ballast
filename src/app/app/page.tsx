@@ -1123,8 +1123,8 @@ export default function DashboardPage() {
     const notionCount = uploadedFiles.filter((f) => f.connector === 'notion').length;
 
     return (
-      <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+      <div className="dash-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
           <div>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>
               {title} ({uploadedFiles.length})
@@ -1309,8 +1309,8 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem' }}>No indexed items matching this filter.</p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="dash-table">
+          <div style={{ width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+            <table className="dash-table" style={{ minWidth: '600px', width: '100%' }}>
               <thead>
                 <tr>
                   <th>Source Item / Subject</th>
