@@ -167,12 +167,31 @@ async function runPhase7TestSuite() {
     const runResult = await runSchedule(testScheduleId);
     assert.equal(runResult.parentBriefId, parentBriefId, 'Scheduled run must chain to schedule.last_run_brief_id');
 
-    // Verify schedule updated its last_run_brief_id to the new child brief
-    const updatedSched = await queryOne<{ last_run_brief_id: string }>(
+    // Verify schedule did NOT prematurely advance last_run_brief_id while brief is queued (Audit M6)
+    const queuedSched = await queryOne<{ last_run_brief_id: string }>(
       `SELECT last_run_brief_id FROM schedules WHERE id = $1`,
       [testScheduleId]
     );
-    assert.equal(updatedSched?.last_run_brief_id, runResult.briefId, 'Schedule must advance last_run_brief_id');
+    assert.equal(queuedSched?.last_run_brief_id, parentBriefId, 'Schedule must retain prior last_run_brief_id while new run is in queue/processing');
+
+    // Simulate publication of the child brief
+    await query(
+      `UPDATE briefs SET status = 'published', markdown = '# Week 2 Brief\n- Verified deliverables.', published_at = NOW() WHERE id = $1`,
+      [runResult.briefId]
+    );
+    await query(
+      `UPDATE schedules SET last_run_brief_id = $1 WHERE id = (
+        SELECT schedule_id FROM briefs WHERE id = $1 AND schedule_id IS NOT NULL
+      )`,
+      [runResult.briefId]
+    );
+
+    // Verify schedule now advanced last_run_brief_id after publication
+    const publishedSched = await queryOne<{ last_run_brief_id: string }>(
+      `SELECT last_run_brief_id FROM schedules WHERE id = $1`,
+      [testScheduleId]
+    );
+    assert.equal(publishedSched?.last_run_brief_id, runResult.briefId, 'Schedule must advance last_run_brief_id only after successful publication');
 
     // Verify child brief row in DB
     const childRow = await queryOne<{ parent_brief_id: string; schedule_id: string }>(
@@ -181,7 +200,7 @@ async function runPhase7TestSuite() {
     );
     assert.equal(childRow?.parent_brief_id, parentBriefId, 'Child brief must record parent_brief_id');
     assert.equal(childRow?.schedule_id, testScheduleId, 'Child brief must record schedule_id');
-    console.log('✓ Verified: Scheduled recurrence advances parent_brief_id chain without mutating prior runs.');
+    console.log('✓ Verified: Scheduled recurrence advances parent_brief_id chain only on published runs.');
 
     // =========================================================================
     // Test 5: Weekly "What Slipped" Synthesis with Parent Context (FR4.7)

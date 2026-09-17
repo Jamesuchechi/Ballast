@@ -32,20 +32,62 @@ if (typeof setInterval !== 'undefined') {
   }, 300000).unref?.();
 }
 
+import { isIP } from 'node:net';
+
 /**
- * Extracts best-effort client IP from incoming request headers.
+ * Extracts and strictly validates client IP from incoming request headers (Security S4).
+ * Precedence: Cloudflare cf-connecting-ip -> Vercel x-vercel-forwarded-for -> x-real-ip -> x-forwarded-for.
+ * Validates IP format with net.isIP() to prevent header injection or spoofing of invalid formats.
  */
 export function getClientIp(req: NextRequest): string {
+  const cfConnectingIp = req.headers.get('cf-connecting-ip');
+  if (cfConnectingIp && isIP(cfConnectingIp.trim())) {
+    return cfConnectingIp.trim();
+  }
+
+  const vercelIp = req.headers.get('x-vercel-forwarded-for');
+  if (vercelIp) {
+    const first = vercelIp.split(',')[0].trim();
+    if (isIP(first)) return first;
+  }
+
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp && isIP(realIp.trim())) {
+    return realIp.trim();
+  }
+
   const forwarded = req.headers.get('x-forwarded-for');
   if (forwarded) {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
+    const ips = forwarded.split(',').map((s) => s.trim());
+    for (const ip of ips) {
+      if (isIP(ip)) {
+        return ip;
+      }
+    }
   }
-  const realIp = req.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  const cfConnectingIp = req.headers.get('cf-connecting-ip');
-  if (cfConnectingIp) return cfConnectingIp.trim();
+
   return '127.0.0.1';
+}
+
+/**
+ * Checks multiple rate limits in parallel (e.g. per-IP and per-account/target).
+ * If any rate limit is exceeded, returns the failing rate limit result.
+ */
+export async function checkCompoundRateLimit(
+  optionsList: RateLimitOptions[]
+): Promise<RateLimitResult> {
+  for (const opt of optionsList) {
+    const result = await checkRateLimit(opt);
+    if (!result.success) {
+      return result;
+    }
+  }
+  return {
+    success: true,
+    limit: optionsList[0]?.limit ?? 10,
+    remaining: optionsList[0]?.limit ?? 10,
+    resetSeconds: optionsList[0]?.windowSeconds ?? 60,
+  };
 }
 
 /**

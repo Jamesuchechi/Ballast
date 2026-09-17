@@ -15,6 +15,9 @@ import {
   Database,
   Clock,
   LogOut,
+  Plus,
+  Check,
+  Loader2,
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -22,6 +25,7 @@ interface ProfileViewProps {
   initialWorkspace?: any;
   onLogout?: () => void;
   onProfileUpdated?: (user: any, workspace: any) => void;
+  onWorkspaceSwitched?: () => void;
 }
 
 export function ProfileView({
@@ -29,6 +33,7 @@ export function ProfileView({
   initialWorkspace,
   onLogout,
   onProfileUpdated,
+  onWorkspaceSwitched,
 }: ProfileViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [user, setUser] = useState<any>(initialUser || null);
@@ -51,6 +56,29 @@ export function ProfileView({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Multi-Workspace Management State
+  const [workspacesList, setWorkspacesList] = useState<any[]>([]);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
+  const [isSwitchingWs, setIsSwitchingWs] = useState(false);
+  const [isCreatingWs, setIsCreatingWs] = useState(false);
+  const [newWsName, setNewWsName] = useState('');
+  const [showCreateInput, setShowCreateInput] = useState(false);
+
+  const loadWorkspaces = async () => {
+    try {
+      setIsLoadingWorkspaces(true);
+      const res = await fetch('/api/workspaces');
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspacesList(data.workspaces || []);
+      }
+    } catch (err) {
+      console.error('Failed to load workspaces:', err);
+    } finally {
+      setIsLoadingWorkspaces(false);
+    }
+  };
+
   const loadProfile = async () => {
     try {
       setIsLoading(true);
@@ -64,6 +92,7 @@ export function ProfileView({
         setWorkspaceName(data.workspace?.name || '');
         setPlan(data.workspace?.plan || 'operator');
       }
+      await loadWorkspaces();
     } catch (err) {
       console.error('Failed to load profile:', err);
     } finally {
@@ -74,6 +103,71 @@ export function ProfileView({
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const handleSwitchWorkspace = async (wsId: string) => {
+    if (wsId === workspace?.id || isSwitchingWs) return;
+    try {
+      setIsSwitchingWs(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+      const res = await fetch('/api/workspaces/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: wsId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSuccessMsg(`Switched to workspace: ${data.workspace?.name || 'Workspace'}`);
+        await loadProfile();
+        if (onWorkspaceSwitched) {
+          onWorkspaceSwitched();
+        } else if (onProfileUpdated) {
+          onProfileUpdated(user, data.workspace);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || 'Failed to switch workspace');
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to switch workspace: ' + err.message);
+    } finally {
+      setIsSwitchingWs(false);
+    }
+  };
+
+  const handleCreateWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWsName.trim() || isCreatingWs) return;
+    try {
+      setIsCreatingWs(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newWsName.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSuccessMsg(`Created and switched to workspace: ${data.workspace?.name || newWsName}`);
+        setNewWsName('');
+        setShowCreateInput(false);
+        await loadProfile();
+        if (onWorkspaceSwitched) {
+          onWorkspaceSwitched();
+        } else if (onProfileUpdated) {
+          onProfileUpdated(user, data.workspace);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || 'Failed to create workspace');
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to create workspace: ' + err.message);
+    } finally {
+      setIsCreatingWs(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +423,173 @@ export function ProfileView({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Workspaces & Organizations Section */}
+          <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building size={18} color="#10b981" />
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                  Workspaces &amp; Organizations
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateInput((prev) => !prev)}
+                className="dash-btn-secondary"
+                style={{ fontSize: '0.74rem', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={14} />
+                <span>New Workspace</span>
+              </button>
+            </div>
+
+            {/* Create Workspace Inline Form */}
+            {showCreateInput && (
+              <form
+                onSubmit={handleCreateWorkspace}
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'center',
+                  background: 'var(--card-bg-subtle)',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--card-border)',
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Enter workspace name (e.g. Engineering, Research Team)..."
+                  value={newWsName}
+                  onChange={(e) => setNewWsName(e.target.value)}
+                  disabled={isCreatingWs}
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    fontSize: '0.8rem',
+                    borderRadius: '6px',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--card-border)',
+                    color: 'var(--text)',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateInput(false);
+                    setNewWsName('');
+                  }}
+                  className="dash-btn-secondary"
+                  style={{ fontSize: '0.76rem', padding: '7px 12px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingWs || !newWsName.trim()}
+                  className="dash-btn-primary"
+                  style={{ fontSize: '0.76rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  {isCreatingWs ? <Loader2 size={13} className="animate-spin" /> : 'Create'}
+                </button>
+              </form>
+            )}
+
+            {/* Workspaces List */}
+            {isLoadingWorkspaces ? (
+              <div style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: '8px', fontSize: '0.8rem' }}>
+                <Loader2 size={15} className="animate-spin" />
+                <span>Loading available workspaces...</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {workspacesList.map((ws) => {
+                  const isCurrent = ws.id === workspace?.id;
+                  return (
+                    <div
+                      key={ws.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        background: isCurrent ? 'rgba(16, 185, 129, 0.08)' : 'var(--card-bg)',
+                        border: isCurrent ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--card-border)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            background: isCurrent ? '#10b981' : 'var(--card-bg-subtle)',
+                            color: isCurrent ? '#fff' : 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          {ws.name?.[0]?.toUpperCase() || 'W'}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text)' }}>
+                              {ws.name}
+                            </span>
+                            {isCurrent && (
+                              <span
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '1px 6px',
+                                  borderRadius: '9999px',
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  color: '#10b981',
+                                  fontWeight: 600,
+                                  fontFamily: 'var(--font-mono)',
+                                }}
+                              >
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            {ws.plan?.toUpperCase() || 'FREE'} Tier • Role: {ws.role || 'member'} • {ws.memberCount || 1} member(s)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        {isCurrent ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '0.76rem', fontWeight: 600 }}>
+                            <Check size={16} />
+                            <span>Current</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchWorkspace(ws.id)}
+                            disabled={isSwitchingWs}
+                            className="dash-btn-secondary"
+                            style={{ fontSize: '0.74rem', padding: '6px 12px' }}
+                          >
+                            {isSwitchingWs ? <Loader2 size={13} className="animate-spin" /> : 'Switch'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Security & System Info */}

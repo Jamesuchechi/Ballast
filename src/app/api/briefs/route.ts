@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     }
 
     const briefs = await query(
-      `SELECT id, workspace_id, parent_brief_id, question, mode, status, 
+      `SELECT id, workspace_id, parent_brief_id, question, mode, status, summary,
               as_of, stale_after, progress, published_at, error, template_version, created_at
        FROM briefs
        WHERE workspace_id = $1

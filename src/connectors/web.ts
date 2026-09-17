@@ -65,11 +65,16 @@ Pre-ticked consent boxes are explicitly invalid under EU Court of Justice ruling
   },
 ];
 
+export const DEFAULT_WEB_MAX_RESULTS = 10;
+
 /**
  * Helper to query live web sources (direct URL fetch, Wikipedia API, DuckDuckGo API)
  * with graceful timeout and automatic text extraction.
  */
-async function fetchLiveWebPages(searchQuery: string, maxResults: number = 3): Promise<WebSearchPage[]> {
+async function fetchLiveWebPages(
+  searchQuery: string,
+  maxResults: number = DEFAULT_WEB_MAX_RESULTS
+): Promise<WebSearchPage[]> {
   const pages: WebSearchPage[] = [];
 
   // Check if searchQuery is a direct URL or contains a URL
@@ -270,7 +275,7 @@ export class WebConnector implements SourceConnector {
     query: string;
     maxResults?: number;
   }): Promise<WebSnapshotResult[]> {
-    const { workspaceId, query: searchQuery, maxResults = 3 } = options;
+    const { workspaceId, query: searchQuery, maxResults = DEFAULT_WEB_MAX_RESULTS } = options;
     const normalizedQuery = searchQuery.toLowerCase();
 
     // 1. First check live web results (Wikipedia, DuckDuckGo, direct URL)
@@ -304,20 +309,44 @@ export class WebConnector implements SourceConnector {
       const checksum = createHash('sha256').update(page.content).digest('hex');
       const fetchedAt = new Date().toISOString();
 
-      // Check if this exact snapshot already exists in the workspace
-      const existing = await queryOne<{ id: string }>(
-        `SELECT id FROM sources WHERE workspace_id = $1 AND connector = 'web' AND external_id = $2 AND checksum = $3`,
-        [workspaceId, page.url, checksum]
+      // Check if this source already exists in the workspace (Task D3)
+      const existing = await queryOne<{ id: string; checksum: string }>(
+        `SELECT id, checksum FROM sources WHERE workspace_id = $1 AND connector = 'web' AND external_id = $2`,
+        [workspaceId, page.url]
       );
 
       let sourceId: string;
 
       if (existing) {
         sourceId = existing.id;
-        await query(
-          `UPDATE sources SET fetched_at = $2 WHERE id = $1`,
-          [sourceId, fetchedAt]
-        );
+        if (existing.checksum === checksum) {
+          await query(
+            `UPDATE sources SET fetched_at = $2 WHERE id = $1`,
+            [sourceId, fetchedAt]
+          );
+        } else {
+          // Content updated: update source and replace chunks
+          await query(
+            `UPDATE sources SET checksum = $2, fetched_at = $3, meta = $4::jsonb WHERE id = $1`,
+            [
+              sourceId,
+              checksum,
+              fetchedAt,
+              JSON.stringify({
+                title: page.title,
+                domain: page.domain,
+                query: searchQuery,
+              }),
+            ]
+          );
+          await query(`DELETE FROM chunks WHERE source_id = $1`, [sourceId]);
+          await chunkAndEmbedText({
+            workspaceId,
+            sourceId,
+            text: `${page.title}\nSource: ${page.url}\n\n${page.content}`,
+            sourceName: page.title,
+          });
+        }
       } else {
         // Persist snapshot to sources table (FR2.7)
         const insertRes = await query<{ id: string }>(

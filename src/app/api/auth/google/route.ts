@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { findOrCreateGoogleUser, COOKIE_NAME } from '@/lib/auth';
+import { findOrCreateGoogleUser, COOKIE_NAME, getSessionCookieOptions } from '@/lib/auth';
+import { attachCsrfCookie } from '@/lib/csrf';
 
 import { getGoogleAuthRedirectUri } from '@/lib/url';
 
@@ -19,13 +20,8 @@ export async function GET(req: NextRequest) {
       });
 
       const response = NextResponse.redirect(new URL(from, req.url));
-      response.cookies.set(COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60,
-      });
+      response.cookies.set(COOKIE_NAME, token, getSessionCookieOptions());
+      attachCsrfCookie(response);
       return response;
     }
 

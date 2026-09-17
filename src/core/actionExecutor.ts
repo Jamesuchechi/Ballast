@@ -2,11 +2,13 @@ import { query, queryOne } from '@/db/client';
 import { getAuthenticatedGmailClient } from '@/connectors/gmail';
 import { getDecryptedToken } from '@/connectors/tokenStore';
 
+export type ActionType = 'email_draft' | 'issue_draft' | 'comment_draft' | 'task';
+
 export interface ActionRecord {
   id: string;
   workspace_id: string;
   brief_id: string;
-  type: 'email_draft' | 'issue_draft' | 'comment_draft' | 'task';
+  type: ActionType;
   payload: Record<string, any>;
   approved_at: string | null;
   approved_by: string | null;
@@ -15,6 +17,230 @@ export interface ActionRecord {
   created_at: string;
   plan?: string;
 }
+
+export type ActionDraft = ActionRecord;
+
+export interface ParsedProposedAction {
+  type: ActionType;
+  payload: Record<string, any>;
+}
+
+/**
+ * Parses and classifies a raw action string or structured object into a strongly typed
+ * Action draft with normalized payload for the actions table.
+ */
+export function parseProposedAction(rawAction: string | Record<string, any>): ParsedProposedAction {
+  const nowIso = new Date().toISOString();
+
+  // 1. If already an object or valid JSON string
+  let obj: Record<string, any> | null = null;
+  if (typeof rawAction === 'object' && rawAction !== null) {
+    obj = rawAction;
+  } else if (typeof rawAction === 'string') {
+    const trimmed = rawAction.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        obj = JSON.parse(trimmed);
+      } catch {
+        obj = null;
+      }
+    }
+  }
+
+  if (obj) {
+    const rawType = (obj.type || '').toLowerCase();
+    let type: ActionType = 'task';
+    if (['email_draft', 'issue_draft', 'comment_draft', 'task'].includes(rawType)) {
+      type = rawType as ActionType;
+    } else if (obj.to || obj.recipient || rawType === 'email') {
+      type = 'email_draft';
+    } else if (obj.repo && (obj.issue_number || obj.number || rawType === 'comment')) {
+      type = 'comment_draft';
+    } else if (obj.repo || obj.repository || rawType === 'issue') {
+      type = 'issue_draft';
+    }
+
+    const payload: Record<string, any> = {
+      ...obj,
+      summary: obj.summary || obj.title || obj.body || obj.task || 'Action item',
+      created_at: obj.created_at || nowIso,
+    };
+    return { type, payload };
+  }
+
+  const str = String(rawAction || '').trim();
+
+  // 2. Check for explicit prefix tags like [issue_draft], issue_draft:, [email_draft], email_draft:, etc.
+  const prefixMatch = str.match(
+    /^\[?(email_draft|email|issue_draft|issue|github_issue|comment_draft|comment|github_comment|task|todo)\]?[:\s-]+(.*)$/i
+  );
+  let prefixType: string | null = null;
+  let remainingStr = str;
+
+  if (prefixMatch) {
+    prefixType = prefixMatch[1].toLowerCase();
+    remainingStr = prefixMatch[2].trim();
+  }
+
+  // Key-value pair extraction if present (e.g. repo=owner/repo title=... body=...)
+  const kvRepo = remainingStr.match(/\brepo(?:sitory)?=([^\s]+)/i);
+  const kvTo = remainingStr.match(/\b(?:to|recipient)=([^\s]+)/i);
+  const kvSubject = remainingStr.match(
+    /\bsubject=(?:"([^"]+)"|'([^']+)'|([^,\s]+(?:\s+[^,\s]+)*?)(?=\s+(?:body|to|repo|title)=|$))/i
+  );
+  const kvTitle = remainingStr.match(
+    /\btitle=(?:"([^"]+)"|'([^']+)'|([^,\s]+(?:\s+[^,\s]+)*?)(?=\s+(?:body|repo|issue)=|$))/i
+  );
+  const kvIssueNum =
+    remainingStr.match(/\b(?:issue_number|number|#)=(\d+)/i) ||
+    remainingStr.match(/#(\d+)/);
+  const kvBody = remainingStr.match(
+    /\b(?:body|content|comment)=(?:"([^"]+)"|'([^']+)'|(.*))/i
+  );
+
+  // 3. GitHub Comment Draft
+  if (
+    prefixType === 'comment_draft' ||
+    prefixType === 'comment' ||
+    prefixType === 'github_comment' ||
+    /\b(?:comment\s+on\s+(?:github\s+)?(?:issue|pr|pull\s+request)|github\s+comment)/i.test(str)
+  ) {
+    const repoMatch = kvRepo
+      ? kvRepo[1]
+      : str.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1] || 'owner/repo';
+    const numMatch = kvIssueNum
+      ? Number(kvIssueNum[1])
+      : Number(str.match(/#(\d+)/)?.[1] || 1);
+    const bodyContent = kvBody
+      ? (kvBody[1] || kvBody[2] || kvBody[3] || '').trim()
+      : remainingStr.replace(/^.*?#\d+[:\s-]*/, '') || str;
+
+    return {
+      type: 'comment_draft',
+      payload: {
+        repo: repoMatch,
+        issue_number: numMatch,
+        body: bodyContent,
+        comment: bodyContent,
+        summary: str,
+        created_at: nowIso,
+      },
+    };
+  }
+
+  // 4. GitHub Issue Draft
+  if (
+    prefixType === 'issue_draft' ||
+    prefixType === 'issue' ||
+    prefixType === 'github_issue' ||
+    /\b(?:create|open|file|draft)\s+(?:a\s+)?(?:github\s+)?issue/i.test(str) ||
+    (/\b(?:github\s+issue|issue)\b/i.test(str) &&
+      /([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/.test(str))
+  ) {
+    const repoMatch = kvRepo
+      ? kvRepo[1]
+      : str.match(/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/)?.[1] || 'owner/repo';
+    const titleMatch = kvTitle
+      ? (kvTitle[1] || kvTitle[2] || kvTitle[3] || '').trim()
+      : '';
+    const bodyMatch = kvBody
+      ? (kvBody[1] || kvBody[2] || kvBody[3] || '').trim()
+      : '';
+
+    let title = titleMatch;
+    let body = bodyMatch;
+
+    if (!title) {
+      const parts = remainingStr.split(/:\s*/);
+      if (parts.length > 1) {
+        title = parts.slice(1).join(': ').trim();
+      } else {
+        title =
+          remainingStr
+            .replace(
+              /^.*?issue\s+(?:in|on|for)?\s*(?:[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)?[:\s-]*/i,
+              ''
+            )
+            .trim() || str;
+      }
+    }
+    if (!body) {
+      body = `Action item generated from Ballast brief: ${title || str}`;
+    }
+
+    return {
+      type: 'issue_draft',
+      payload: {
+        repo: repoMatch,
+        title,
+        body,
+        summary: str,
+        created_at: nowIso,
+      },
+    };
+  }
+
+  // 5. Email Draft
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+  const emailMatch = str.match(emailRegex);
+  if (
+    prefixType === 'email_draft' ||
+    prefixType === 'email' ||
+    /\b(?:draft\s+email|send\s+email|email\s+to|mail\s+to)\b/i.test(str) ||
+    emailMatch
+  ) {
+    const to = kvTo ? kvTo[1] : emailMatch ? emailMatch[1] : 'team@example.com';
+    const subject = kvSubject
+      ? (kvSubject[1] || kvSubject[2] || kvSubject[3] || '').trim()
+      : '';
+    const body = kvBody
+      ? (kvBody[1] || kvBody[2] || kvBody[3] || '').trim()
+      : '';
+
+    let extractedSubject = subject;
+    let extractedBody = body;
+
+    if (!extractedSubject) {
+      const subjectPattern = str.match(
+        /(?:regarding|about|subject:?)\s+([^.:\n]+)/i
+      );
+      if (subjectPattern) {
+        extractedSubject = subjectPattern[1].trim();
+      } else {
+        extractedSubject = 'Follow-up from Ballast Brief';
+      }
+    }
+
+    if (!extractedBody) {
+      extractedBody = str;
+    }
+
+    return {
+      type: 'email_draft',
+      payload: {
+        to,
+        recipient: to,
+        subject: extractedSubject,
+        body: extractedBody,
+        summary: str,
+        create_draft_only: true,
+        created_at: nowIso,
+      },
+    };
+  }
+
+  // 6. In-App Task (default safe fallback)
+  return {
+    type: 'task',
+    payload: {
+      task: remainingStr || str,
+      summary: str,
+      title: remainingStr || str,
+      created_at: nowIso,
+    },
+  };
+}
+
 
 export interface ExecuteActionOptions {
   /**

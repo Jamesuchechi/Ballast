@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   FileText,
@@ -25,6 +25,8 @@ import {
   Bell,
   BarChart3,
   User as UserIcon,
+  Check,
+  Building,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { BallastLogo } from '@/components/brand/BallastLogo';
@@ -50,6 +52,7 @@ export interface SidebarProps {
   actionLoading?: boolean;
   onLogout?: () => void;
   isDemo?: boolean;
+  onWorkspaceSwitched?: () => void;
 }
 
 interface NavSection {
@@ -85,8 +88,99 @@ export function Sidebar({
   actionLoading = false,
   onLogout,
   isDemo = false,
+  onWorkspaceSwitched,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
+
+  // Multi-Workspace state
+  const [isWsDropdownOpen, setIsWsDropdownOpen] = useState(false);
+  const [workspacesList, setWorkspacesList] = useState<any[]>([]);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
+  const [isSwitchingWs, setIsSwitchingWs] = useState(false);
+  const [isCreatingWs, setIsCreatingWs] = useState(false);
+  const [newWsName, setNewWsName] = useState('');
+  const [showCreateInput, setShowCreateInput] = useState(false);
+
+  const loadWorkspaces = async () => {
+    try {
+      setIsLoadingWorkspaces(true);
+      const res = await fetch('/api/workspaces');
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspacesList(data.workspaces || []);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch workspaces:', e);
+    } finally {
+      setIsLoadingWorkspaces(false);
+    }
+  };
+
+  const toggleWsDropdown = () => {
+    const next = !isWsDropdownOpen;
+    setIsWsDropdownOpen(next);
+    if (next) {
+      loadWorkspaces();
+    }
+  };
+
+  const handleSwitchWorkspace = async (wsId: string) => {
+    if (wsId === workspace?.id || isSwitchingWs) return;
+    try {
+      setIsSwitchingWs(true);
+      const res = await fetch('/api/workspaces/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: wsId }),
+      });
+      if (res.ok) {
+        setIsWsDropdownOpen(false);
+        if (onWorkspaceSwitched) {
+          onWorkspaceSwitched();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to switch workspace');
+      }
+    } catch (e: any) {
+      alert('Failed to switch workspace: ' + e.message);
+    } finally {
+      setIsSwitchingWs(false);
+    }
+  };
+
+  const handleCreateWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWsName.trim() || isCreatingWs) return;
+    try {
+      setIsCreatingWs(true);
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newWsName.trim() }),
+      });
+      if (res.ok) {
+        setShowCreateInput(false);
+        setNewWsName('');
+        setIsWsDropdownOpen(false);
+        if (onWorkspaceSwitched) {
+          onWorkspaceSwitched();
+        } else {
+          window.location.reload();
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to create workspace');
+      }
+    } catch (e: any) {
+      alert('Failed to create workspace: ' + e.message);
+    } finally {
+      setIsCreatingWs(false);
+    }
+  };
+
   const navSections: NavSection[] = [
     {
       title: 'Workspace Core',
@@ -231,14 +325,17 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* Workspace Selector */}
-        <div className="dash-sidebar-workspace">
+        {/* Workspace Selector & Dropdown */}
+        <div className="dash-sidebar-workspace" style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-subtle)' }}>Workspace</span>
             <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: '#10b981', fontWeight: 600 }}>{workspace?.plan || 'Free'} Tier</span>
           </div>
-          <div
+          <button
+            type="button"
+            onClick={toggleWsDropdown}
             style={{
+              width: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -248,13 +345,183 @@ export function Sidebar({
               border: '1px solid var(--card-border)',
               fontSize: '0.82rem',
               fontWeight: 500,
+              color: 'var(--text)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.15s ease',
             }}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {workspace?.name || 'Personal Workspace'}
-            </span>
-            <ChevronDown size={14} color="var(--text-muted)" />
-          </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <Building size={14} color="#10b981" style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {workspace?.name || 'Personal Workspace'}
+              </span>
+            </div>
+            <ChevronDown
+              size={14}
+              color="var(--text-muted)"
+              style={{
+                transform: isWsDropdownOpen ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.2s ease',
+                flexShrink: 0,
+              }}
+            />
+          </button>
+
+          {/* Dropdown Menu */}
+          {isWsDropdownOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: '12px',
+                right: '12px',
+                zIndex: 100,
+                background: 'var(--card-bg)',
+                border: '1px solid var(--card-border)',
+                borderRadius: '10px',
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+                padding: '8px',
+                maxHeight: '300px',
+                overflowY: 'auto',
+              }}
+            >
+              <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-subtle)', padding: '4px 6px', marginBottom: '4px' }}>
+                Switch Workspace
+              </div>
+
+              {isLoadingWorkspaces ? (
+                <div style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: '8px', fontSize: '0.8rem' }}>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Loading workspaces...</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {workspacesList.map((ws) => {
+                    const isCurrent = ws.id === workspace?.id;
+                    return (
+                      <button
+                        key={ws.id}
+                        type="button"
+                        onClick={() => handleSwitchWorkspace(ws.id)}
+                        disabled={isSwitchingWs}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          background: isCurrent ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+                          border: isCurrent ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid transparent',
+                          cursor: isSwitchingWs ? 'not-allowed' : 'pointer',
+                          textAlign: 'left',
+                          color: 'var(--text)',
+                          fontSize: '0.8rem',
+                          transition: 'background 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                          <span style={{ fontWeight: isCurrent ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ws.name}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            {ws.plan || 'Free'} • {ws.role || 'member'}
+                          </span>
+                        </div>
+                        {isCurrent && <Check size={14} color="#10b981" style={{ flexShrink: 0 }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Create Workspace Inline */}
+              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--card-border)' }}>
+                {showCreateInput ? (
+                  <form onSubmit={handleCreateWorkspace} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <input
+                      type="text"
+                      placeholder="Workspace name..."
+                      value={newWsName}
+                      onChange={(e) => setNewWsName(e.target.value)}
+                      disabled={isCreatingWs}
+                      autoFocus
+                      style={{
+                        padding: '6px 8px',
+                        fontSize: '0.78rem',
+                        borderRadius: '6px',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--card-border)',
+                        color: 'var(--text)',
+                        outline: 'none',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateInput(false);
+                          setNewWsName('');
+                        }}
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '0.72rem',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreatingWs || !newWsName.trim()}
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.72rem',
+                          borderRadius: '4px',
+                          background: '#10b981',
+                          border: 'none',
+                          color: '#fff',
+                          fontWeight: 600,
+                          cursor: isCreatingWs || !newWsName.trim() ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        {isCreatingWs ? <Loader2 size={12} className="animate-spin" /> : 'Create'}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateInput(true)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.76rem',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>Create new workspace</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Primary Action Button: + New Brief */}

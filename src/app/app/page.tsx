@@ -52,6 +52,11 @@ import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
 import { LatencyPlot } from '@/components/dashboard/LatencyPlot';
 import { ActionDraftCard } from '@/components/dashboard/ActionDraftCard';
 import { FormattedDiffViewer } from '@/components/dashboard/FormattedDiffViewer';
+import {
+  SUPPORTED_TEMPLATE_TAGS,
+  validateQuestionTemplate,
+  renderQuestionTemplate,
+} from '@/lib/templateValidator';
 
 function computeUnifiedDiff(oldText: string, newText: string) {
   if (!oldText && !newText) return [];
@@ -339,10 +344,11 @@ export default function DashboardPage() {
       await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
+        body: JSON.stringify({ all: true, action: 'read' }),
       });
       setUnreadNotifCount(0);
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      const now = new Date().toISOString();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, read_at: n.read_at || now })));
     } catch (e) {
       console.warn('Failed to mark notifications read:', e);
     }
@@ -353,14 +359,46 @@ export default function DashboardPage() {
       await fetch('/api/notifications', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, action: 'read' }),
       });
+      const now = new Date().toISOString();
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        prev.map((n) => (n.id === id ? { ...n, read: true, read_at: n.read_at || now } : n))
       );
       setUnreadNotifCount((prev) => Math.max(0, prev - 1));
     } catch (e) {
       console.warn('Failed to mark notification read:', e);
+    }
+  };
+
+  const handleDismissNotification = async (id: string) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'dismiss' }),
+      });
+      const target = notifications.find((n) => n.id === id);
+      if (target && !target.read) {
+        setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+      }
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } catch (e) {
+      console.warn('Failed to dismiss notification:', e);
+    }
+  };
+
+  const handleDismissAllNotifications = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true, action: 'dismiss' }),
+      });
+      setNotifications([]);
+      setUnreadNotifCount(0);
+    } catch (e) {
+      console.warn('Failed to dismiss all notifications:', e);
     }
   };
 
@@ -447,11 +485,36 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchGmailStatus = fetchConnectors;
-
   // ----------------------------------------------------
   // Lifecycle Initializer
   // ----------------------------------------------------
+
+  const refreshAllWorkspaceData = async () => {
+    try {
+      const meRes = await fetch('/api/auth/me');
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.user && meData.workspace) {
+          setUser(meData.user);
+          setWorkspace(meData.workspace);
+        }
+      }
+      await Promise.all([
+        fetchBriefs(),
+        fetchSources(),
+        fetchAccessLogs(),
+        fetchActions(),
+        fetchSchedules(),
+        fetchNotifications(),
+        fetchFlags(),
+        fetchTelemetry(),
+        fetchConnectors(),
+        fetchAnalytics(),
+      ]);
+    } catch (e) {
+      console.warn('Failed to refresh workspace data:', e);
+    }
+  };
 
   useEffect(() => {
     async function init() {
@@ -538,6 +601,102 @@ export default function DashboardPage() {
     }, 50);
   };
 
+  const subscribeToBriefProgress = (
+    briefId: string,
+    callbacks: {
+      onProgress: (steps: any[]) => void;
+      onPublished: () => void | Promise<void>;
+      onFailed: (error?: string) => void | Promise<void>;
+    }
+  ) => {
+    let isTerminated = false;
+    let eventSource: EventSource | null = null;
+    let pollInterval: any = null;
+
+    const cleanup = () => {
+      isTerminated = true;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    function startPolling() {
+      if (pollInterval || isTerminated) return;
+      pollInterval = setInterval(async () => {
+        if (isTerminated) {
+          clearInterval(pollInterval);
+          return;
+        }
+        try {
+          const res = await fetch(`/api/briefs/${briefId}/progress`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.progress && Array.isArray(data.progress)) {
+              callbacks.onProgress(data.progress);
+            }
+            if (data.status === 'published') {
+              cleanup();
+              callbacks.onPublished();
+            } else if (data.status === 'failed') {
+              cleanup();
+              callbacks.onFailed(data.error);
+            }
+          }
+        } catch (e) {
+          console.warn('[Progress Poll Fallback Error]:', e);
+        }
+      }, 400);
+    }
+
+    // Try real-time SSE stream first (Audit M10)
+    try {
+      if (typeof window !== 'undefined' && window.EventSource) {
+        eventSource = new EventSource(`/api/briefs/${briefId}/stream`);
+
+        eventSource.onmessage = (event) => {
+          if (isTerminated) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.progress && Array.isArray(data.progress)) {
+              callbacks.onProgress(data.progress);
+            }
+            if (data.status === 'published') {
+              cleanup();
+              callbacks.onPublished();
+            } else if (data.status === 'failed') {
+              cleanup();
+              callbacks.onFailed(data.error);
+            }
+          } catch (err) {
+            console.warn('[SSE Parse Error]:', err);
+          }
+        };
+
+        eventSource.onerror = () => {
+          // Fall back to polling seamlessly if stream disconnects
+          if (!isTerminated && !pollInterval) {
+            if (eventSource) {
+              eventSource.close();
+              eventSource = null;
+            }
+            startPolling();
+          }
+        };
+      } else {
+        startPolling();
+      }
+    } catch {
+      startPolling();
+    }
+
+    return cleanup;
+  };
+
   const handleEnqueueBrief = async (question: string, briefMode: 'home' | 'world' = 'home') => {
     if (!question.trim()) return;
     setIsGenerating(true);
@@ -558,36 +717,27 @@ export default function DashboardPage() {
 
       const briefId = data.briefId;
 
-      // Poll progress until published or failed
-      const interval = setInterval(async () => {
-        try {
-          const progRes = await fetch(`/api/briefs/${briefId}/progress`);
-          if (progRes.ok) {
-            const pData = await progRes.json();
-            if (pData.progress) {
-              setGenerationSteps(pData.progress);
-            }
-            if (pData.status === 'published') {
-              clearInterval(interval);
-              setIsGenerating(false);
-              setQueryPrompt('');
-              await Promise.all([
-                fetchBriefs(),
-                fetchAccessLogs(),
-                fetchActions(),
-                fetchTelemetry(),
-              ]);
-              setSelectedBriefId(briefId);
-            } else if (pData.status === 'failed') {
-              clearInterval(interval);
-              setIsGenerating(false);
-              alert('Brief generation failed: ' + (pData.error || 'Validation error'));
-            }
-          }
-        } catch (e) {
-          console.warn('Progress poll error:', e);
-        }
-      }, 400);
+      // Stream progress via SSE with automatic polling fallback (Audit M10)
+      subscribeToBriefProgress(briefId, {
+        onProgress: (steps) => {
+          setGenerationSteps(steps);
+        },
+        onPublished: async () => {
+          setIsGenerating(false);
+          setQueryPrompt('');
+          await Promise.all([
+            fetchBriefs(),
+            fetchAccessLogs(),
+            fetchActions(),
+            fetchTelemetry(),
+          ]);
+          setSelectedBriefId(briefId);
+        },
+        onFailed: (err) => {
+          setIsGenerating(false);
+          alert('Brief generation failed: ' + (err || 'Validation error'));
+        },
+      });
     } catch (err: any) {
       alert('Error: ' + err.message);
       setIsGenerating(false);
@@ -623,35 +773,26 @@ export default function DashboardPage() {
           },
         ]);
 
-        // Poll progress until published or failed
-        const interval = setInterval(async () => {
-          try {
-            const progRes = await fetch(`/api/briefs/${childId}/progress`);
-            if (progRes.ok) {
-              const pData = await progRes.json();
-              if (pData.progress) {
-                setGenerationSteps(pData.progress);
-              }
-              if (pData.status === 'published') {
-                clearInterval(interval);
-                setIsGenerating(false);
-                await Promise.all([
-                  fetchBriefs(),
-                  fetchAccessLogs(),
-                  fetchActions(),
-                  fetchTelemetry(),
-                ]);
-                setSelectedBriefId(childId);
-              } else if (pData.status === 'failed') {
-                clearInterval(interval);
-                setIsGenerating(false);
-                alert('Brief regeneration failed: ' + (pData.error || 'Validation error'));
-              }
-            }
-          } catch (e) {
-            console.warn('Regeneration progress poll error:', e);
-          }
-        }, 500);
+        // Stream progress via SSE (Audit M10)
+        subscribeToBriefProgress(childId, {
+          onProgress: (steps) => {
+            setGenerationSteps(steps);
+          },
+          onPublished: async () => {
+            setIsGenerating(false);
+            await Promise.all([
+              fetchBriefs(),
+              fetchAccessLogs(),
+              fetchActions(),
+              fetchTelemetry(),
+            ]);
+            setSelectedBriefId(childId);
+          },
+          onFailed: (err) => {
+            setIsGenerating(false);
+            alert('Brief regeneration failed: ' + (err || 'Validation error'));
+          },
+        });
       } else {
         alert(data.error || 'Failed to regenerate brief');
       }
@@ -681,66 +822,49 @@ export default function DashboardPage() {
         return;
       }
 
-      // Optimistically update local state to queued and clear error
-      setBriefs((prev) =>
-        prev.map((b) => (b.id === targetId ? { ...b, status: 'queued', error: null } : b))
-      );
-      if (briefDetail?.brief?.id === targetId) {
-        setBriefDetail({
-          ...briefDetail,
-          brief: { ...briefDetail.brief, status: 'queued', error: null },
-        });
-      }
-
       setIsGenerating(true);
       setGenerationSteps([
         {
           step: 'queued',
           timestamp: new Date().toISOString(),
-          message: 'Retried brief re-enqueued for background processing',
+          message: 'Queued brief retry for processing',
         },
       ]);
 
-      // Poll progress until published or failed
-      const interval = setInterval(async () => {
-        try {
-          const progRes = await fetch(`/api/briefs/${targetId}/progress`);
-          if (progRes.ok) {
-            const pData = await progRes.json();
-            if (pData.progress) {
-              setGenerationSteps(pData.progress);
-            }
-            if (pData.status === 'published') {
-              clearInterval(interval);
-              setIsGenerating(false);
-              setActionLoading(false);
-              await Promise.all([
-                fetchBriefs(),
-                fetchAccessLogs(),
-                fetchActions(),
-                fetchTelemetry(),
-              ]);
-              const bRes = await fetch(`/api/briefs/${targetId}`);
-              if (bRes.ok) {
-                const bData = await bRes.json();
-                setBriefDetail(bData);
-              }
-            } else if (pData.status === 'failed') {
-              clearInterval(interval);
-              setIsGenerating(false);
-              setActionLoading(false);
-              await Promise.all([fetchBriefs()]);
-              const bRes = await fetch(`/api/briefs/${targetId}`);
-              if (bRes.ok) {
-                const bData = await bRes.json();
-                setBriefDetail(bData);
-              }
-            }
+      // Stream progress via SSE (Audit M10)
+      subscribeToBriefProgress(targetId, {
+        onProgress: (steps) => {
+          setGenerationSteps(steps);
+        },
+        onPublished: async () => {
+          setIsGenerating(false);
+          setActionLoading(false);
+          await Promise.all([
+            fetchBriefs(),
+            fetchAccessLogs(),
+            fetchActions(),
+            fetchTelemetry(),
+          ]);
+          const bRes = await fetch(`/api/briefs/${targetId}`);
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            setBriefDetail(bData);
           }
-        } catch (e) {
-          console.warn('Retry progress poll error:', e);
-        }
-      }, 500);
+        },
+        onFailed: async (err) => {
+          setIsGenerating(false);
+          setActionLoading(false);
+          await Promise.all([fetchBriefs()]);
+          const bRes = await fetch(`/api/briefs/${targetId}`);
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            setBriefDetail(bData);
+          }
+          if (err) {
+            alert('Brief retry failed: ' + err);
+          }
+        },
+      });
     } catch (err: any) {
       alert('Error retrying brief: ' + err.message);
       setActionLoading(false);
@@ -877,6 +1001,11 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!newScheduleQuestion.trim() || !newScheduleCron.trim()) {
       alert('Please provide a question template and cron expression');
+      return;
+    }
+    const templateValidation = validateQuestionTemplate(newScheduleQuestion);
+    if (!templateValidation.valid) {
+      alert(`Invalid Question Template:\n\n${templateValidation.errors.join('\n')}`);
       return;
     }
     setIsSubmittingSchedule(true);
@@ -1488,6 +1617,7 @@ export default function DashboardPage() {
       theme={theme}
       onToggleTheme={toggleTheme}
       isDemo={isDemo}
+      onWorkspaceSwitched={refreshAllWorkspaceData}
     >
       {/* ======================================================== */}
       {/* SECTION: BRIEFS ARCHIVE                                   */}
@@ -2381,8 +2511,36 @@ export default function DashboardPage() {
                 <div className="dash-card dash-brief-content">
                   {currentBrief?.markdown ? (
                     <div>
+                      {/* Executive Summary (TL;DR) Banner (Audit E1) */}
+                      {(currentBrief.summary || currentBrief.markdown.includes('> **TL;DR:**')) && (
+                        <div
+                          style={{
+                            marginBottom: '22px',
+                            padding: '14px 18px',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%)',
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Sparkles size={15} color="#10b981" />
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981' }}>
+                              Executive Summary (TL;DR)
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '0.92rem', lineHeight: '1.55', color: 'var(--text)', fontWeight: 500, margin: 0 }}>
+                            {currentBrief.summary || currentBrief.markdown.match(/> \*\*TL;DR:\*\* (.*)/)?.[1] || ''}
+                          </p>
+                        </div>
+                      )}
+
                       {currentBrief.markdown.split('\n\n').map((block: string, idx: number) => {
                         if (block.startsWith('# ')) return null; // Main title in header
+                        if (block.startsWith('> **TL;DR:**')) return null; // Rendered in top banner
                         if (block.startsWith('## ')) {
                           const lines = block.split('\n');
                           const heading = lines[0].replace('## ', '');
@@ -3128,6 +3286,17 @@ export default function DashboardPage() {
                   <span>Mark all as read</span>
                 </button>
               )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleDismissAllNotifications}
+                  className="dash-btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171' }}
+                  title="Dismiss all notifications from list"
+                >
+                  <Trash2 size={13} />
+                  <span>Clear all</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -3198,10 +3367,10 @@ export default function DashboardPage() {
                               style={{
                                 fontSize: '0.68rem',
                                 background: isPublished
-                                  ? 'rgba(16, 185, 129, 0.1)'
-                                  : isFailed
-                                  ? 'rgba(239, 68, 68, 0.1)'
-                                  : 'rgba(59, 130, 246, 0.1)',
+                                    ? 'rgba(16, 185, 129, 0.1)'
+                                    : isFailed
+                                    ? 'rgba(239, 68, 68, 0.1)'
+                                    : 'rgba(59, 130, 246, 0.1)',
                                 color: isPublished ? '#10b981' : isFailed ? '#ef4444' : '#3b82f6',
                               }}
                             >
@@ -3214,9 +3383,14 @@ export default function DashboardPage() {
                           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
                             {notif.message}
                           </p>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
-                            {new Date(notif.created_at).toLocaleString()}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                            <span>Received: {new Date(notif.created_at).toLocaleString()}</span>
+                            {notif.read_at && (
+                              <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={11} /> Read {new Date(notif.read_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -3244,6 +3418,14 @@ export default function DashboardPage() {
                             <Check size={13} />
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDismissNotification(notif.id)}
+                          className="dash-icon-btn"
+                          style={{ padding: '5px 6px', color: 'var(--text-subtle)' }}
+                          title="Dismiss notification"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -3976,10 +4158,40 @@ export default function DashboardPage() {
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Question Template</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Question Template</label>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Click tag to insert</span>
+                </div>
+
+                {/* Tag insertion chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {SUPPORTED_TEMPLATE_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        setNewScheduleQuestion((prev) => `${prev ? prev + ' ' : ''}{{${tag}}}`);
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        color: '#10b981',
+                        fontSize: '0.7rem',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontFamily: 'var(--font-mono)',
+                      }}
+                      title={`Insert {{${tag}}}`}
+                    >
+                      + {`{{${tag}}}`}
+                    </button>
+                  ))}
+                </div>
+
                 <textarea
-                  placeholder="e.g. What are the key blockers and outstanding deliverables since last week?"
+                  placeholder="e.g. Executive summary for {{date}} at {{time}} ({{timezone}})"
                   value={newScheduleQuestion}
                   onChange={(e) => setNewScheduleQuestion(e.target.value)}
                   rows={3}
@@ -3993,6 +4205,63 @@ export default function DashboardPage() {
                     fontSize: '0.85rem',
                   }}
                 />
+
+                {/* Validation Warnings */}
+                {(() => {
+                  if (!newScheduleQuestion.trim()) return null;
+                  const validation = validateQuestionTemplate(newScheduleQuestion);
+                  if (!validation.valid) {
+                    return (
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#f87171',
+                          fontSize: '0.75rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                          <AlertTriangle size={14} />
+                          <span>Invalid Template Syntax</span>
+                        </div>
+                        {validation.errors.map((err, i) => (
+                          <span key={i}>• {err}</span>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Live Rendered Preview */}
+                {newScheduleQuestion.trim().length > 0 && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--card-bg-subtle)',
+                      border: '1px solid var(--card-border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      <span style={{ fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Sparkles size={12} /> Live Template Preview
+                      </span>
+                      <span>Rendered with current time</span>
+                    </div>
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text)', fontStyle: 'italic', margin: 0 }}>
+                      "{renderQuestionTemplate(newScheduleQuestion, { timezone: 'UTC' })}"
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -4403,6 +4672,7 @@ export default function DashboardPage() {
             if (updatedUser) setUser(updatedUser);
             if (updatedWorkspace) setWorkspace(updatedWorkspace);
           }}
+          onWorkspaceSwitched={refreshAllWorkspaceData}
         />
       )}
 

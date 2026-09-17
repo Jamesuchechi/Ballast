@@ -1,7 +1,23 @@
 import crypto from 'crypto';
 import { query, queryOne } from '@/db/client';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'ballast_super_secret_session_key_for_dev_32b';
+/**
+ * Resolves the HMAC session secret key.
+ * Strictly prohibits hardcoded fallback secret in production (Security S2).
+ */
+export function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.BALLAST_ENCRYPTION_KEY;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[SECURITY FATAL] SESSION_SECRET (or BALLAST_ENCRYPTION_KEY) must be set in production mode. Hardcoded fallback session secrets are strictly prohibited.'
+      );
+    }
+    return 'ballast_super_secret_session_key_for_dev_32b';
+  }
+  return secret;
+}
+
 const COOKIE_NAME = 'ballast_session';
 
 export interface User {
@@ -48,8 +64,9 @@ export function signToken(payload: SessionPayload): string {
     ...payload,
     sessionVersion: payload.sessionVersion ?? 1,
   };
+  const secret = getSessionSecret();
   const data = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(data).digest('base64url');
   return `${data}.${sig}`;
 }
 
@@ -58,7 +75,8 @@ export function verifyToken(token: string): SessionPayload | null {
     const parts = token.split('.');
     if (parts.length !== 2) return null;
     const [data, sig] = parts;
-    const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('base64url');
+    const secret = getSessionSecret();
+    const expectedSig = crypto.createHmac('sha256', secret).update(data).digest('base64url');
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
       return null;
     }
@@ -369,4 +387,15 @@ export async function getAuthSession(
   return null;
 }
 
+export function getSessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict' as const,
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  };
+}
+
 export { COOKIE_NAME };
+

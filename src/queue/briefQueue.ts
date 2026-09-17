@@ -12,6 +12,22 @@ export interface BriefJobData {
   };
 }
 
+export const DEFAULT_BRIEF_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential' as const,
+    delay: 5000,
+  },
+  removeOnComplete: {
+    age: 86400, // 24 hours
+    count: 100,
+  },
+  removeOnFail: {
+    age: 86400 * 7, // 7 days
+    count: 200,
+  },
+};
+
 let briefQueueInstance: Queue<BriefJobData> | null = null;
 
 /**
@@ -22,20 +38,7 @@ export function getBriefQueue(): Queue<BriefJobData> {
     const connection = createRedisClient();
     briefQueueInstance = new Queue<BriefJobData>(BRIEF_QUEUE_NAME, {
       connection,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-        removeOnComplete: {
-          age: 86400, // 24 hours
-          count: 500,
-        },
-        removeOnFail: {
-          age: 86400 * 7, // 7 days
-        },
-      },
+      defaultJobOptions: DEFAULT_BRIEF_JOB_OPTIONS,
     });
   }
   return briefQueueInstance;
@@ -71,6 +74,7 @@ export async function enqueueBriefJob(
     },
     {
       jobId,
+      ...DEFAULT_BRIEF_JOB_OPTIONS,
     }
   );
 

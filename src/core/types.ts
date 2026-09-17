@@ -51,6 +51,7 @@ export interface DraftBriefEvidence {
 }
 
 export interface DraftBriefSections {
+  summary?: string;
   answer: string;
   what_i_used: {
     private: string[];
@@ -129,6 +130,7 @@ export interface PublishedEvidenceItem {
 }
 
 export interface PublishedBriefSections {
+  summary?: string;
   answer: string;
   what_i_used: {
     private: string[];
@@ -156,6 +158,7 @@ export interface BriefV1 {
   markdown: string;
   pdf_uri: string | null;
   error: string | null;
+  summary?: string | null;
   sections: PublishedBriefSections;
 }
 

@@ -1,6 +1,6 @@
 # Brief: What was our net revenue retention (NRR) rate in Q1 2026?
 
-As of: 2026-09-16T16:25:41.919Z
+As of: 2026-09-16T22:33:22.891Z
 Mode: home
 Status: published
 

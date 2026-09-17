@@ -32,12 +32,18 @@ tags:
     brief.markdown?.match(/## Answer\s*\n([\s\S]*?)(?=\n## |$)/i)?.[1]?.trim() ||
     '';
 
+  const summary = brief.summary || brief.sections?.summary;
   const uncertain = brief.sections?.uncertain || [];
   const openLoops = brief.sections?.open_loops || [];
   const actions = brief.sections?.actions || [];
   const didNotDo = brief.sections?.what_i_did_not_do || [];
 
   let body = `# Brief: ${title}\n\n`;
+
+  if (summary) {
+    body += `> [!abstract] TL;DR (Executive Summary)\n`;
+    body += `> ${summary}\n\n`;
+  }
 
   // 1. Answer Callout
   body += `> [!summary] Grounded Answer\n`;

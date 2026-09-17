@@ -64,18 +64,20 @@ export async function checkAndTriggerDueSchedules(): Promise<number> {
       id: string;
       workspace_id: string;
       cron: string;
+      timezone: string | null;
       name: string | null;
       last_triggered_at: string | null;
       last_run_brief_id: string | null;
     }>(
-      `SELECT id, workspace_id, cron, name, last_triggered_at, last_run_brief_id 
+      `SELECT id, workspace_id, cron, timezone, name, last_triggered_at, last_run_brief_id 
        FROM schedules 
        WHERE enabled = true`
     );
 
     for (const sched of schedules) {
       try {
-        const interval = CronExpressionParser.parse(sched.cron, { currentDate: now });
+        const tz = sched.timezone || 'UTC';
+        const interval = CronExpressionParser.parse(sched.cron, { currentDate: now, tz });
         const prevScheduled = interval.prev().toDate();
         const diffMs = now.getTime() - prevScheduled.getTime();
 

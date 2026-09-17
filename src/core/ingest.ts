@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { query, queryOne } from '@/db/client';
 import { chunkAndEmbedText } from './embeddings';
+import { scanBufferForMalware } from './scanner';
 // @ts-ignore - bypass index.js debug auto-run issue in pdf-parse
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 
@@ -189,28 +190,74 @@ export async function ingestDocument(options: IngestOptions): Promise<IngestResu
   // 1. Validate
   const { ext } = validateUpload(filename, buffer.length);
 
+  // 1.5 Scan for malware, viruses, and disguised binary/script payloads (M2)
+  const scanResult = await scanBufferForMalware(buffer, filename);
+  if (!scanResult.clean) {
+    try {
+      await query(
+        `INSERT INTO access_logs (workspace_id, action) VALUES ($1, $2)`,
+        [workspaceId, `source.malware_blocked:${scanResult.threatName || 'threat'}`]
+      );
+    } catch (logErr) {
+      console.error('[Scanner] Failed to write access log for blocked malware:', logErr);
+    }
+    throw new Error(
+      `[MALWARE DETECTED] File '${filename}' failed malware/virus scan: ${scanResult.threatName} - ${scanResult.details}`
+    );
+  }
+
   // 2. Compute SHA-256 checksum for deduplication (FR2.10)
   const checksum = createHash('sha256').update(buffer).digest('hex');
 
-  // Check if identical source already exists in this workspace
-  const existingSource = await queryOne<{ id: string }>(
-    `SELECT id FROM sources WHERE workspace_id = $1 AND checksum = $2 LIMIT 1`,
-    [workspaceId, checksum]
+  // Check if identical or updated source already exists in this workspace by external_id (Task D3)
+  const existingSource = await queryOne<{ id: string; checksum: string }>(
+    `SELECT id, checksum FROM sources WHERE workspace_id = $1 AND connector = 'upload' AND external_id = $2 LIMIT 1`,
+    [workspaceId, filename]
   );
 
   if (existingSource) {
-    const chunkRows = await query<{ count: string }>(
-      `SELECT COUNT(*)::text as count FROM chunks WHERE source_id = $1`,
-      [existingSource.id]
+    if (existingSource.checksum === checksum) {
+      const chunkRows = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM chunks WHERE source_id = $1`,
+        [existingSource.id]
+      );
+      const count = parseInt(chunkRows[0]?.count || '0', 10);
+      return {
+        sourceId: existingSource.id,
+        checksum,
+        filename,
+        chunkCount: count,
+        sizeBytes: buffer.length,
+        deduplicated: true,
+      };
+    }
+
+    // File re-uploaded with updated content: extract text, update source, replace old chunks
+    const extractedText = await extractTextFromBuffer(buffer, ext, filename, mimeType);
+    const rawUri = `upload://${workspaceId}/${filename}_${checksum.slice(0, 8)}`;
+    await query(
+      `UPDATE sources SET checksum = $2, raw_uri = $3, synced_at = NOW(), meta = $4::jsonb WHERE id = $1`,
+      [
+        existingSource.id,
+        checksum,
+        rawUri,
+        JSON.stringify({ filename, size: buffer.length, mimeType }),
+      ]
     );
-    const count = parseInt(chunkRows[0]?.count || '0', 10);
+    await query(`DELETE FROM chunks WHERE source_id = $1`, [existingSource.id]);
+    const chunkCount = await chunkAndEmbedText({
+      workspaceId,
+      sourceId: existingSource.id,
+      text: extractedText,
+      sourceName: filename,
+    });
     return {
       sourceId: existingSource.id,
       checksum,
       filename,
-      chunkCount: count,
+      chunkCount,
       sizeBytes: buffer.length,
-      deduplicated: true,
+      deduplicated: false,
     };
   }
 

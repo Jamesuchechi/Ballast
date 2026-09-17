@@ -337,21 +337,40 @@ export class GmailConnector implements SourceConnector {
       const syncWindowStart = new Date(Date.now() - windowDays * 86400000).toISOString();
 
       for (const item of items) {
-        // Check for deduplication by checksum (FR2.10)
-        const existing = await queryOne<{ id: string }>(
-          `SELECT id FROM sources 
-           WHERE workspace_id = $1 AND connector = 'gmail' AND checksum = $2`,
-          [workspaceId, item.checksum]
+        // Check for deduplication by external_id (FR2.10, Task D3)
+        const existing = await queryOne<{ id: string; checksum: string }>(
+          `SELECT id, checksum FROM sources 
+           WHERE workspace_id = $1 AND connector = 'gmail' AND external_id = $2`,
+          [workspaceId, item.externalId]
         );
 
         if (existing) {
-          await query(
-            `UPDATE sources 
-             SET synced_at = NOW(), sync_window_start = $2 
-             WHERE id = $1`,
-            [existing.id, syncWindowStart]
-          );
-          unchangedCount++;
+          if (existing.checksum === item.checksum) {
+            await query(
+              `UPDATE sources 
+               SET synced_at = NOW(), sync_window_start = $2 
+               WHERE id = $1`,
+              [existing.id, syncWindowStart]
+            );
+            unchangedCount++;
+          } else {
+            // Document content updated: re-fetch, update source, replace old chunks
+            const doc = await this.fetch(workspaceId, item.externalId);
+            await query(
+              `UPDATE sources 
+               SET checksum = $2, meta = $3::jsonb, synced_at = NOW(), sync_window_start = $4 
+               WHERE id = $1`,
+              [existing.id, doc.checksum, JSON.stringify(doc.meta), syncWindowStart]
+            );
+            await query(`DELETE FROM chunks WHERE source_id = $1`, [existing.id]);
+            await chunkAndEmbedText({
+              workspaceId,
+              sourceId: existing.id,
+              text: doc.content,
+              sourceName: doc.meta.subject || doc.externalId,
+            });
+            syncedCount++;
+          }
         } else {
           // Fetch document content from live API or sample
           const doc = await this.fetch(workspaceId, item.externalId);

@@ -3,6 +3,7 @@ import type { BriefMode } from './types';
 
 export const DEFAULT_BRIEF_COST_CAP = 0.05; // $0.05 per brief ceiling (FR8.3)
 export const COST_PER_WEB_QUERY = 0.01;
+export const DEFAULT_WEB_MAX_RESULTS = 10;
 
 export interface ToolRouterContext {
   workspaceId: string;
@@ -10,6 +11,11 @@ export interface ToolRouterContext {
   mode: BriefMode;
   currentCost: number;
   costCap?: number;
+  maxResults?: number;
+}
+
+export interface ExecuteWebSearchOptions {
+  maxResults?: number;
 }
 
 export interface WebSearchToolResult {
@@ -21,11 +27,13 @@ export interface WebSearchToolResult {
 
 export class ToolRouter {
   /**
-   * Executes web search tool with strict mode guards and per-brief cost cap (FR3.4, FR8.3, NFR1.6).
+   * Executes web search tool with strict mode guards, per-brief cost cap,
+   * and configurable result limit (FR3.4, FR8.3, NFR1.6).
    */
   async executeWebSearch(
     queryText: string,
-    context: ToolRouterContext
+    context: ToolRouterContext,
+    options?: ExecuteWebSearchOptions
   ): Promise<WebSearchToolResult> {
     const { workspaceId, mode, currentCost, costCap = DEFAULT_BRIEF_COST_CAP } = context;
 
@@ -47,11 +55,22 @@ export class ToolRouter {
       };
     }
 
-    // 3. Execute search and snapshot storage
+    // 3. Resolve maxResults: explicit options -> context -> ENV WEB_SEARCH_MAX_RESULTS -> default (5)
+    const envMaxResults = process.env.WEB_SEARCH_MAX_RESULTS
+      ? parseInt(process.env.WEB_SEARCH_MAX_RESULTS, 10)
+      : undefined;
+    const parsedMaxResults =
+      options?.maxResults ??
+      context.maxResults ??
+      (envMaxResults && !isNaN(envMaxResults) ? envMaxResults : undefined) ??
+      DEFAULT_WEB_MAX_RESULTS;
+    const maxResults = Math.max(1, Math.min(parsedMaxResults, 20)); // Bounded between 1 and 20
+
+    // 4. Execute search and snapshot storage
     const snapshots = await webConnector.searchAndSnapshot({
       workspaceId,
       query: queryText,
-      maxResults: 3,
+      maxResults,
     });
 
     return {

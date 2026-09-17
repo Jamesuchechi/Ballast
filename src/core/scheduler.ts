@@ -8,6 +8,7 @@ export interface ScheduleRow {
   id: string;
   workspace_id: string;
   cron: string;
+  timezone?: string;
   question_template: string;
   mode: 'home' | 'world';
   last_run_brief_id: string | null;
@@ -25,19 +26,27 @@ export interface RunScheduleResult {
   status: string;
 }
 
-/**
- * Resolves question template into dynamic prompt text
- */
-export function renderQuestionTemplate(template: string): string {
-  const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
-  return template.replace(/\{\{\s*date\s*\}\}/gi, dateStr);
-}
+export {
+  SUPPORTED_TEMPLATE_TAGS,
+  type SupportedTemplateTag,
+  type ValidationResult,
+  type TimezoneFormattedDate,
+  type RenderQuestionTemplateOptions,
+  formatInTimezone,
+  validateQuestionTemplate,
+  renderQuestionTemplate,
+  previewQuestionTemplate,
+} from '@/lib/templateValidator';
+
+import {
+  renderQuestionTemplate,
+  validateQuestionTemplate,
+} from '@/lib/templateValidator';
 
 /**
  * Executes a schedule run (FR7.1, FR7.2, FR7.3, FR7.4, FR8.1).
  * Chained via parent_brief_id pointing to schedule.last_run_brief_id.
- * Enforces Operator plan and brief quota.
+ * Enforces Operator plan, brief quota, and resolves prompt in schedule timezone.
  */
 export async function runSchedule(
   scheduleId: string
@@ -71,7 +80,17 @@ export async function runSchedule(
     throw new Error(quotaCheck.error || 'Monthly brief quota exceeded for workspace');
   }
 
-  const question = renderQuestionTemplate(schedule.question_template);
+  // Validate template syntax and tags (M5)
+  const templateValidation = validateQuestionTemplate(schedule.question_template);
+  if (!templateValidation.valid) {
+    throw new Error(
+      `Invalid question template for schedule ${scheduleId}: ${templateValidation.errors.join('; ')}`
+    );
+  }
+
+  const question = renderQuestionTemplate(schedule.question_template, {
+    timezone: schedule.timezone || 'UTC',
+  });
   const parentBriefId = schedule.last_run_brief_id; // Chaining recurrence (FR7.3)
   const briefId = crypto.randomUUID();
 
@@ -101,12 +120,6 @@ export async function runSchedule(
       schedule.mode,
       JSON.stringify(initProgress),
     ]
-  );
-
-  // Update schedule's last_run_brief_id to point to the newly created run
-  await query(
-    `UPDATE schedules SET last_run_brief_id = $1 WHERE id = $2`,
-    [briefId, schedule.id]
   );
 
   // Send schedule run notification

@@ -30,6 +30,7 @@
     "markdown": { "type": "string" },
     "pdf_uri": { "type": ["string", "null"] },
     "error": { "type": ["string", "null"] },
+    "summary": { "type": ["string", "null"] },
     "sections": {
       "type": "object",
       "required": [
@@ -42,6 +43,7 @@
         "what_i_did_not_do"
       ],
       "properties": {
+        "summary": { "type": "string" },
         "answer": { "type": "string" },
         "what_i_used": {
           "type": "object",

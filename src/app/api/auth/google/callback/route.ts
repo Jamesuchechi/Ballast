@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findOrCreateGoogleUser, COOKIE_NAME } from '@/lib/auth';
+import { findOrCreateGoogleUser, COOKIE_NAME, getSessionCookieOptions } from '@/lib/auth';
 import { getGoogleAuthRedirectUri } from '@/lib/url';
+import { attachCsrfCookie } from '@/lib/csrf';
 
 export async function GET(req: NextRequest) {
   const loginUrl = new URL('/login', req.url);
@@ -94,13 +95,8 @@ export async function GET(req: NextRequest) {
     const destinationUrl = new URL(targetPath, req.url);
     const response = NextResponse.redirect(destinationUrl);
 
-    response.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
-    });
+    response.cookies.set(COOKIE_NAME, token, getSessionCookieOptions());
+    attachCsrfCookie(response);
 
     // Clear temporary OAuth state cookie
     response.cookies.delete('google_oauth_state');

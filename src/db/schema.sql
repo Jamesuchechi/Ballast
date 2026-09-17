@@ -99,9 +99,12 @@ CREATE TABLE IF NOT EXISTS briefs (
   schedule_id UUID,
   published_at TIMESTAMPTZ,
   error TEXT,
+  summary TEXT,
   template_version TEXT NOT NULL DEFAULT 'v1',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE briefs ADD COLUMN IF NOT EXISTS summary TEXT;
+
 
 -- 7. citations
 CREATE TABLE IF NOT EXISTS citations (
@@ -151,6 +154,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   cron TEXT NOT NULL,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
   question_template TEXT NOT NULL,
   mode TEXT NOT NULL DEFAULT 'home' CHECK (mode IN ('home', 'world')),
   last_run_brief_id UUID REFERENCES briefs(id) ON DELETE SET NULL,
@@ -160,6 +164,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE schedules ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';
 ALTER TABLE schedules ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMPTZ;
 
 -- Foreign key for briefs.schedule_id now that schedules exists
@@ -215,6 +220,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   read BOOLEAN NOT NULL DEFAULT false,
+  read_at TIMESTAMPTZ,
+  dismissed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -222,10 +229,17 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_sources_workspace ON sources(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_workspace_connector_external ON sources(workspace_id, connector, external_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_workspace ON chunks(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id);
 CREATE INDEX IF NOT EXISTS idx_briefs_workspace ON briefs(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_briefs_parent ON briefs(parent_brief_id);
 CREATE INDEX IF NOT EXISTS idx_citations_brief ON citations(brief_id);
 CREATE INDEX IF NOT EXISTS idx_actions_brief ON actions(brief_id);
 CREATE INDEX IF NOT EXISTS idx_runs_brief ON runs(brief_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_workspace ON notifications(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_active ON notifications(workspace_id, created_at DESC) WHERE dismissed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);
+CREATE INDEX IF NOT EXISTS idx_access_logs_source ON access_logs(source_id);
+CREATE INDEX IF NOT EXISTS idx_access_logs_workspace ON access_logs(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_tokens_workspace_connector_active ON oauth_tokens(workspace_id, connector) WHERE revoked_at IS NULL;

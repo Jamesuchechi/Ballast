@@ -1,13 +1,23 @@
 import crypto from 'node:crypto';
 import { query, queryOne } from '@/db/client';
 
-const MASTER_KEY_SEED =
-  process.env.BALLAST_ENCRYPTION_KEY ||
-  process.env.SESSION_SECRET ||
-  'ballast_default_aes_256_gcm_master_key_seed_2026';
+/**
+ * Resolves the 32-byte (256-bit) AES-256-GCM encryption key.
+ * Strictly prohibits hardcoded fallback keys in production (Security S1).
+ */
+export function getEncryptionKey(): Buffer {
+  const seed = process.env.BALLAST_ENCRYPTION_KEY || process.env.SESSION_SECRET;
+  if (!seed) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[SECURITY FATAL] BALLAST_ENCRYPTION_KEY (or SESSION_SECRET) must be set in production mode. Hardcoded fallback keys are strictly prohibited.'
+      );
+    }
+    return crypto.createHash('sha256').update('ballast_default_aes_256_gcm_master_key_seed_2026').digest();
+  }
+  return crypto.createHash('sha256').update(seed).digest();
+}
 
-// Derive deterministic 32-byte (256-bit) key for AES-256-GCM
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(MASTER_KEY_SEED).digest();
 const ALGORITHM = 'aes-256-gcm';
 
 export interface EncryptedPayloadEnvelope {
@@ -23,7 +33,8 @@ export interface EncryptedPayloadEnvelope {
  */
 export function encryptString(plaintext: string): string {
   const iv = crypto.randomBytes(12); // Standard 96-bit IV for GCM
-  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  const key = getEncryptionKey();
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
 
   let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
   ciphertext += cipher.final('hex');
@@ -46,7 +57,8 @@ export function decryptString(encryptedPayload: string): string {
   const iv = Buffer.from(ivHex, 'hex');
   const tag = Buffer.from(tagHex, 'hex');
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  const key = getEncryptionKey();
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
 
   let plaintext = decipher.update(ciphertextHex, 'hex', 'utf8');
@@ -81,33 +93,22 @@ export async function storeEncryptedToken(
   const serialized = JSON.stringify(tokenData);
   const encryptedPayload = encryptString(serialized);
 
-  // Check if existing token row exists
-  const existing = await queryOne<StoredOAuthTokenRow>(
-    `SELECT id FROM oauth_tokens WHERE workspace_id = $1 AND connector = $2 AND revoked_at IS NULL`,
-    [workspaceId, connector]
+  const rows = await query<{ id: string }>(
+    `INSERT INTO oauth_tokens (
+      workspace_id, connector, encrypted_payload, scopes, requires_reconnect, last_refresh_error
+    ) VALUES ($1, $2, $3, $4::jsonb, false, null)
+    ON CONFLICT (workspace_id, connector) WHERE revoked_at IS NULL
+    DO UPDATE SET 
+      encrypted_payload = EXCLUDED.encrypted_payload,
+      scopes = EXCLUDED.scopes,
+      requires_reconnect = false,
+      last_refresh_error = null,
+      created_at = NOW()
+    RETURNING id`,
+    [workspaceId, connector, encryptedPayload, JSON.stringify(scopes)]
   );
 
-  if (existing) {
-    await query(
-      `UPDATE oauth_tokens 
-       SET encrypted_payload = $1, 
-           scopes = $2::jsonb, 
-           requires_reconnect = false, 
-           last_refresh_error = null, 
-           created_at = NOW() 
-       WHERE id = $3`,
-      [encryptedPayload, JSON.stringify(scopes), existing.id]
-    );
-    return existing.id;
-  } else {
-    const rows = await query<{ id: string }>(
-      `INSERT INTO oauth_tokens (
-        workspace_id, connector, encrypted_payload, scopes, requires_reconnect
-      ) VALUES ($1, $2, $3, $4::jsonb, false) RETURNING id`,
-      [workspaceId, connector, encryptedPayload, JSON.stringify(scopes)]
-    );
-    return rows[0].id;
-  }
+  return rows[0].id;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

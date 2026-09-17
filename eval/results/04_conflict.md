@@ -1,12 +1,14 @@
 # Brief: When is the enterprise tier launch scheduled?
 
-As of: 2026-09-16T16:25:41.898Z
+As of: 2026-09-16T22:33:22.868Z
 Mode: home
 Status: published
 
 ## Answer
 - The enterprise tier general availability launch is scheduled for October 15 across all regions.
 - Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.
+
+*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*
 
 ## What I used
 ### Private
@@ -34,4 +36,5 @@ Status: published
 
 ## What I did not do
 - Did not perform actions without verified user approval.
+- Did not arbitrarily resolve cross-source disagreements or silently pick a winner.
 - No unverified claims published. Withheld ungrounded assumptions.

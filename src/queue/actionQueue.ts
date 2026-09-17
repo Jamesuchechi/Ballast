@@ -9,6 +9,22 @@ export interface ActionJobData {
   workspaceId: string;
 }
 
+export const DEFAULT_ACTION_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential' as const,
+    delay: 5000,
+  },
+  removeOnComplete: {
+    age: 86400, // 24 hours
+    count: 100,
+  },
+  removeOnFail: {
+    age: 86400 * 7, // 7 days
+    count: 200,
+  },
+};
+
 let actionQueueInstance: Queue<ActionJobData> | null = null;
 
 /**
@@ -19,20 +35,7 @@ export function getActionQueue(): Queue<ActionJobData> {
     const connection = createRedisClient();
     actionQueueInstance = new Queue<ActionJobData>(ACTION_QUEUE_NAME, {
       connection,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-        removeOnComplete: {
-          age: 86400, // 24 hours
-          count: 500,
-        },
-        removeOnFail: {
-          age: 86400 * 7, // 7 days
-        },
-      },
+      defaultJobOptions: DEFAULT_ACTION_JOB_OPTIONS,
     });
   }
   return actionQueueInstance;
@@ -55,6 +58,7 @@ export async function enqueueActionJob(
     },
     {
       jobId: `action-${actionId}`,
+      ...DEFAULT_ACTION_JOB_OPTIONS,
     }
   );
 

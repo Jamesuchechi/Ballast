@@ -1,25 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createUserWithWorkspace, COOKIE_NAME } from '@/lib/auth';
-import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+import { createUserWithWorkspace, COOKIE_NAME, getSessionCookieOptions } from '@/lib/auth';
+import { checkCompoundRateLimit, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+import { verifyCsrf, attachCsrfCookie } from '@/lib/csrf';
 
 export async function POST(req: NextRequest) {
   try {
-    const clientIp = getClientIp(req);
-    const rateLimit = await checkRateLimit({
-      key: `auth:signup:${clientIp}`,
-      limit: 5,
-      windowSeconds: 60,
-    });
+    // 1. CSRF Protection (M1)
+    const csrfCheck = verifyCsrf(req);
+    if (!csrfCheck.valid) {
+      return NextResponse.json(
+        { error: csrfCheck.error || 'CSRF validation failed' },
+        { status: 403 }
+      );
+    }
 
+    const clientIp = getClientIp(req);
+    const body = await req.json().catch(() => ({}));
+    const { email, password, name, workspaceName } = body;
+
+    const rateLimitsToCheck = [
+      {
+        key: `auth:signup:ip:${clientIp}`,
+        limit: 10,
+        windowSeconds: 60,
+      },
+    ];
+
+    if (email && typeof email === 'string') {
+      const normalizedEmail = email.trim().toLowerCase();
+      rateLimitsToCheck.push({
+        key: `auth:signup:email:${normalizedEmail}`,
+        limit: 5,
+        windowSeconds: 60,
+      });
+    }
+
+    const rateLimit = await checkCompoundRateLimit(rateLimitsToCheck);
     if (!rateLimit.success) {
       return rateLimitResponse(
         rateLimit,
         'Too many account creation attempts. Please wait 60 seconds before trying again.'
       );
     }
-
-    const body = await req.json();
-    const { email, password, name, workspaceName } = body;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -48,14 +70,9 @@ export async function POST(req: NextRequest) {
       message: 'Account and workspace created successfully',
     });
 
-    // Set secure HTTP-only session cookie
-    response.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
-    });
+    // Set secure HTTP-only SameSite=Strict session cookie
+    response.cookies.set(COOKIE_NAME, token, getSessionCookieOptions());
+    attachCsrfCookie(response);
 
     return response;
   } catch (err: any) {

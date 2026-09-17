@@ -112,151 +112,252 @@ Previously, `callOpenAICompatible` for the `openrouter` provider used a hardcode
 
 ## 🔴 Security Concerns
 
-### S1. Default encryption key is a hardcoded string
-**Files:** [`tokenStore.ts`](file:///home/jamesuchechi/Projects/Ballast/src/connectors/tokenStore.ts#L4-L10), [`objectStore.ts`](file:///home/jamesuchechi/Projects/Ballast/src/storage/objectStore.ts#L23-L29)
-```ts
-'ballast_default_aes_256_gcm_master_key_seed_2026'
-```
-This is a fallback when `BALLAST_ENCRYPTION_KEY` is not set. In production, if this env var is missing, all encrypted data uses a known-plaintext key. The code warns about this in `.env.example`, but at runtime there's no hard failure or warning.
+### S1. Default encryption key is a hardcoded string [RESOLVED]
+**Files:** [`tokenStore.ts`](file:///home/jamesuchechi/Projects/Ballast/src/connectors/tokenStore.ts#L4-L20), [`objectStore.ts`](file:///home/jamesuchechi/Projects/Ballast/src/storage/objectStore.ts#L22-L40)
+Previously, both the OAuth token store and encrypted object store silently fell back to the hardcoded string `'ballast_default_aes_256_gcm_master_key_seed_2026'` when `BALLAST_ENCRYPTION_KEY` was missing, which risked encrypting data with a known-plaintext key in production without warning.
 
-**Fix:** In production (`NODE_ENV=production`), throw immediately if `BALLAST_ENCRYPTION_KEY` is not set rather than silently falling back.
+**Resolution:** Implemented `getEncryptionKey()` in both `src/connectors/tokenStore.ts` and `src/storage/objectStore.ts`. In production (`NODE_ENV=production`), missing encryption keys now throw a fatal exception (`[SECURITY FATAL] BALLAST_ENCRYPTION_KEY (or SESSION_SECRET) must be set in production mode. Hardcoded fallback keys are strictly prohibited.`) rather than silently falling back. Tested and verified via `test/security_encryption_key.test.ts` and `test/phase8_security_hardening.test.ts`.
 
-### S2. Default session secret is a hardcoded string
-**File:** [`auth.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/auth.ts#L4)
-Same issue — silent fallback to `'ballast_super_secret_session_key_for_dev_32b'` in production if `SESSION_SECRET` is missing.
+### S2. Default session secret is a hardcoded string [RESOLVED]
+**File:** [`auth.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/auth.ts#L4-L20)
+Previously, `auth.ts` silently fell back to the hardcoded string `'ballast_super_secret_session_key_for_dev_32b'` when `SESSION_SECRET` was omitted, risking HMAC forgery in production if the secret was misconfigured.
 
-### S3. `rejectUnauthorized: false` in production
-**File:** [`client.ts`](file:///home/jamesuchechi/Projects/Ballast/src/db/client.ts#L34)
-```ts
-ssl: requiresSsl ? { rejectUnauthorized: false } : undefined,
-```
-This disables TLS certificate validation — the connection is encrypted but not authenticated. A MITM could intercept database traffic. This is common for quick setups with self-signed certs, but worth noting.
+**Resolution:** Implemented `getSessionSecret()` in `src/lib/auth.ts`. In production (`NODE_ENV=production`), missing `SESSION_SECRET` (or `BALLAST_ENCRYPTION_KEY`) throws a fatal error (`[SECURITY FATAL] SESSION_SECRET (or BALLAST_ENCRYPTION_KEY) must be set in production mode. Hardcoded fallback session secrets are strictly prohibited.`) rather than silently falling back. Updated `signToken` and `verifyToken` to use `getSessionSecret()`. Verified via `test/security_session_secret.test.ts` and `test/session_invalidation.test.ts`.
 
-**Fix:** Configure proper CA certificates for production or use `rejectUnauthorized: true` with the correct CA cert from your DB provider.
+### S3. `rejectUnauthorized: false` in production [RESOLVED]
+**File:** [`client.ts`](file:///home/jamesuchechi/Projects/Ballast/src/db/client.ts#L22-L65)
+Previously, PostgreSQL connections defaulted to `{ rejectUnauthorized: false }`, disabling TLS certificate chain validation and leaving database network traffic vulnerable to MITM attacks.
 
-### S4. Rate limiting is per-IP, easily bypassed
-**File:** [`rateLimit.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/rateLimit.ts#L38-L49)
-`x-forwarded-for` is trusted as the client IP. Behind a proxy you control, this is fine. But if the proxy is misconfigured or requests bypass it, an attacker can spoof the header.
+**Resolution:** Implemented `getDatabaseSslConfig()` in `src/db/client.ts` to enforce strict TLS certificate validation (`rejectUnauthorized: true`) by default for SSL connections. Added support for custom CA certificates via `DATABASE_CA_CERT` or `PGSSLROOTCERT` (both raw PEM strings and file paths), while providing an explicit opt-out (`DB_SSL_REJECT_UNAUTHORIZED=false`) for self-signed local development. Verified against production Neon database and via unit test in `test/security_ssl_config.test.ts`.
 
-### S5. XSS risk in email template
+### S4. Rate limiting is per-IP, easily bypassed [RESOLVED]
+**File:** [`rateLimit.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/rateLimit.ts#L35-L85), [`login/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/auth/login/route.ts), [`signup/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/auth/signup/route.ts)
+Previously, rate limiting relied strictly on raw `x-forwarded-for` strings without IP format validation or account-level compound protections, allowing malicious header spoofing or rotating IP credential stuffing attacks.
+
+**Resolution:** Hardened `getClientIp` in `src/lib/rateLimit.ts` with strict proxy header precedence (`cf-connecting-ip` -> `x-vercel-forwarded-for` -> `x-real-ip` -> `x-forwarded-for`) and strict `net.isIP()` validation. Implemented `checkCompoundRateLimit` to evaluate multiple rate limit dimensions simultaneously. Updated sensitive authentication routes (`POST /api/auth/login` and `POST /api/auth/signup`) to enforce dual-layer rate limiting: per-IP (10 req/min) and per-target-account email (5 req/min). Verified via `test/security_rate_limit.test.ts`.
+
+### S5. XSS risk in email template [RESOLVED]
 **File:** [`emailService.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/emailService.ts#L97-L107)
-User-controlled strings (`params.title`, `params.question`) are interpolated directly into HTML without escaping:
-```ts
-<h1>...${params.title}...</h1>
-<p>...${params.question}...</p>
-```
-If a user's brief title contains `<script>` tags, this could execute in email clients that render JS (rare, but possible with some clients).
+User-controlled strings (`params.title`, `params.question`, `params.summaryOrError`, `params.viewUrl`) were interpolated directly into HTML without escaping.
 
-**Fix:** HTML-escape all user-controlled strings before template interpolation.
+**Fix:** Implemented `escapeHtml` in `src/core/emailService.ts` to sanitize special HTML characters (`&`, `<`, `>`, `"`, `'`). All user-controlled fields interpolated into email templates are passed through `escapeHtml()` prior to rendering. Verified via `test/security_email_xss.test.ts`.
 
-### S6. `actions` table `type` constraint doesn't include all types used in code
-**Schema:** The CHECK constraint in `actions` is `type IN ('email_draft', 'issue_draft', 'comment_draft', 'task')`. This is correct and matches the code. ✓
+### S6. `actions` table `type` constraint doesn't include all types used in code [RESOLVED]
+**Schema:** The CHECK constraint in `actions` is `type IN ('email_draft', 'issue_draft', 'comment_draft', 'task')`. Verified against PostgreSQL database catalog and TypeScript definitions in [`src/core/actionExecutor.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/actionExecutor.ts) via `test/security_actions_type_constraint.test.ts`. ✓
 
 ---
 
 ## 🟡 Design Gaps & Technical Debt
 
-### D1. `pipeline.ts` and `pipelineWorker.ts` are near-duplicates
-**Files:** [`pipeline.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipeline.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts)
-`pipeline.ts` is a stateless, eval-friendly version. `pipelineWorker.ts` is the production version with DB persistence, BullMQ, notifications. They share a lot of identical logic (answer construction, conflict surfacing, action sanitization). If you fix a bug in one, you need to fix it in the other.
+### D1. `pipeline.ts` and `pipelineWorker.ts` are near-duplicates [RESOLVED]
+**Files:** [`pipeline.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipeline.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`assembler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/assembler.ts)
+`pipeline.ts` is the stateless eval pipeline and `pipelineWorker.ts` is the production queue/DB worker. Previously, both files maintained separate duplicated copies of brief assembly logic (answer construction, conflict surfacing, action sanitization, and publish validation).
 
-**Fix:** Extract shared logic into a pure `assembleBrief(draft, criticOut, ...)` function that both can call.
+**Resolution:** Extracted all shared brief assembly and validation logic into a pure, deterministic `assembleBrief(options)` module in `src/core/assembler.ts`. Refactored both `src/core/pipeline.ts` and `src/core/pipelineWorker.ts` to consume `assembleBrief`, eliminating code duplication while preserving exact schema validation and fail-closed safety. Verified with 100% pass rate in `test/brief_assembler.test.ts` and full eval scorecard suite.
 
-### D2. All actions are inserted as `email_draft` regardless of content
-**File:** [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts#L412-L425)
-```ts
-type, payload\n) VALUES ($1, $2, 'email_draft', $3)
-```
-The action type is hardcoded to `'email_draft'` for all proposed actions — even ones that should be `task` or `issue_draft`. The Writer can propose "create a GitHub issue" in `sections.actions`, but it always gets stored as `email_draft`.
+### D2. All actions are inserted as `email_draft` regardless of content [RESOLVED]
+**Files:** [`actionExecutor.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/actionExecutor.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`writer.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/writer.ts)
+Previously, the action type was hardcoded to `'email_draft'` for all proposed actions inserted during pipeline runs, causing in-app tasks, GitHub issue drafts, and comment drafts to be misclassified.
 
-**Fix:** The Writer's action format should include a structured type (e.g., `{type: 'issue_draft', repo: '...', body: '...'}`) and the pipeline should parse and route accordingly.
+**Resolution:** Implemented `parseProposedAction(rawAction)` in `src/core/actionExecutor.ts` to parse, classify, and normalize proposed action strings (prefixed key-value tags, natural language patterns, and JSON objects) into `'email_draft' | 'issue_draft' | 'comment_draft' | 'task'` with structured payload attributes (`to`, `subject`, `body`, `repo`, `issue_number`, `title`, `summary`). Refactored `pipelineWorker.ts` to insert actions using `parsed.type` and `parsed.payload`. Updated `writer.ts` prompt guidelines for structured action generation. Verified with 100% pass rate in `test/action_routing.test.ts` and `test/action_execution.test.ts`.
 
-### D3. `sources` table has a `UNIQUE` on `(workspace_id, external_id)` but schema shows none
-**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql) — there's no `UNIQUE(workspace_id, external_id)` constraint on `sources`. The `ingest.ts` deduplication relies on `checksum` match only. Two sources with the same `external_id` but different checksums (e.g., updated files) can coexist — which is intentional. But two connector syncs of the same email thread with the same `external_id` will create duplicate sources. The connectors should check `external_id` not just `checksum`.
+### D3. `sources` table has a `UNIQUE` on `(workspace_id, connector, external_id)` [RESOLVED]
+**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`007_add_unique_constraint_to_sources.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/007_add_unique_constraint_to_sources.sql)
+Previously, `sources` lacked a unique constraint on `(workspace_id, connector, external_id)`. Deduplication in `ingest.ts` and sync logic across connectors (Gmail, GitHub, Drive, Slack, Calendar, Notion, Web) was prone to race conditions and duplicate source records when re-syncing existing external IDs.
 
-### D4. The `chunks` table has no index on `source_id`
-**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql#L219-L229)
-Indexes exist for `workspace_id` and `source_id` on other tables, but `chunks` only has `idx_chunks_workspace`. Deleting a source requires `DELETE FROM chunks WHERE source_id = $1` (via CASCADE) — without an index on `source_id`, this is a sequential scan on potentially millions of chunk rows.
+**Resolution:** Applied migration `007_add_unique_constraint_to_sources.sql` and updated `schema.sql` with `CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_workspace_connector_external ON sources(workspace_id, connector, external_id)`. Refactored all connectors (`gmail.ts`, `github.ts`, `drive.ts`, `calendar.ts`, `slack.ts`, `notion.ts`, `web.ts`) and `ingest.ts` to query sources by `(workspace_id, connector, external_id)`: if checksum is unchanged, only update `synced_at`; if content changed, update source metadata and checksum, delete obsolete chunks (`DELETE FROM chunks WHERE source_id = $id`), and re-embed fresh chunk vectors. Added comprehensive automated test suite in `test/source_deduplication.test.ts` (4/4 passed).
 
-**Fix:** Add `CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id)`.
+### D4. The `chunks` table has no index on `source_id` [RESOLVED]
+**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`008_add_idx_chunks_source.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/008_add_idx_chunks_source.sql)
+Previously, `chunks` only possessed `idx_chunks_workspace`. Operations that deleted a source (`DELETE FROM chunks WHERE source_id = $1` on source re-sync or cascade delete) required sequential scans across all workspace chunk rows.
 
-### D5. `access_logs` has no index on `action` or `source_id`
-**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql#L229)
-The retention pass queries `WHERE action LIKE 'retention_global_pass:%'`. With no index on `action`, this is a full table scan of `access_logs` every hour.
+**Resolution:** Applied migration `008_add_idx_chunks_source.sql` and updated `schema.sql` with `CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id)`. Verified index definition in PostgreSQL catalog and fast source chunk lookup/deletion via automated test suite in `test/chunks_source_index.test.ts` (2/2 passed).
 
-**Fix:** Add `CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action)` and `CREATE INDEX IF NOT EXISTS idx_access_logs_source ON access_logs(source_id)`.
+### D5. `access_logs` has no index on `action` or `source_id` [RESOLVED]
+**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`009_add_idx_access_logs.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/009_add_idx_access_logs.sql)
+Previously, `access_logs` lacked indexes on `action`, `source_id`, and `workspace_id`. Periodic retention passes (`WHERE action LIKE 'retention_global_pass:%'`), access log audit views, and source deletion/cascade operations resulted in full sequential table scans.
 
-### D6. `oauth_tokens` has no UNIQUE constraint on `(workspace_id, connector)`
-**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql#L194-L205)
-`storeEncryptedToken` checks for existing rows and does an UPDATE if found — but relies on `ORDER BY created_at DESC LIMIT 1` to pick the right row. If two token-store calls race, you could end up with two rows for the same workspace+connector (both with `revoked_at IS NULL`).
+**Resolution:** Applied migration `009_add_idx_access_logs.sql` and updated `schema.sql` with `CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action)`, `CREATE INDEX IF NOT EXISTS idx_access_logs_source ON access_logs(source_id)`, and `CREATE INDEX IF NOT EXISTS idx_access_logs_workspace ON access_logs(workspace_id)`. Verified index definitions in PostgreSQL catalog and retention query lookup via automated test suite in `test/access_logs_indexes.test.ts` (3/3 passed).
 
-**Fix:** Add `UNIQUE(workspace_id, connector)` (filtered by `revoked_at IS NULL`) or use `ON CONFLICT (workspace_id, connector) DO UPDATE`.
+### D6. `oauth_tokens` has no UNIQUE constraint on `(workspace_id, connector)` [RESOLVED]
+**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`010_add_unique_constraint_to_oauth_tokens.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/010_add_unique_constraint_to_oauth_tokens.sql)
+**File:** [`tokenStore.ts`](file:///home/jamesuchechi/Projects/Ballast/src/connectors/tokenStore.ts#L87-L115)
+Previously, `oauth_tokens` lacked a unique constraint on active workspace connectors. Concurrent token store operations could produce duplicate active rows, and lookups had to rely on non-deterministic fallback ordering.
 
-### D7. No transaction wrapping in `pipelineWorker.ts`
-The pipeline persists citations, actions, runs, and the final brief status in multiple sequential queries. A crash between any two steps leaves the DB in a partially committed state (e.g., citations inserted but `status` still `running`).
+**Resolution:** Applied migration `010_add_unique_constraint_to_oauth_tokens.sql` creating partial unique index `idx_oauth_tokens_workspace_connector_active` on `(workspace_id, connector) WHERE revoked_at IS NULL`. Refactored `storeEncryptedToken` in `src/connectors/tokenStore.ts` to perform an atomic PostgreSQL upsert using `ON CONFLICT (workspace_id, connector) WHERE revoked_at IS NULL DO UPDATE ... RETURNING id`. Verified concurrent storage race condition safety and historical revocation retention in `test/oauth_tokens_unique_constraint.test.ts` (5/5 passed).
 
-**Fix:** Wrap the persistence phase (citations + actions + runs + status update) in a PostgreSQL transaction.
+### D7. No transaction wrapping in `pipelineWorker.ts` [RESOLVED]
+**Files:** [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts#L290-L405), [`client.ts`](file:///home/jamesuchechi/Projects/Ballast/src/db/client.ts#L119-L144)
+Previously, the brief pipeline persisted citations, actions, brief status updates, and runs telemetry across multiple sequential, un-isolated queries. A database disconnection or runtime error midway left the database in an inconsistent state with orphaned actions or unfinalized briefs.
 
-### D8. `toolRouter.ts` only supports 3 web results
-**File:** [`toolRouter.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/toolRouter.ts#L51-L55)
-`maxResults: 3` is hardcoded. For complex World mode queries this may be insufficient. Should be configurable.
+**Resolution:** Implemented `withTransaction` in `src/db/client.ts` to manage isolated PostgreSQL client transactions with automatic `BEGIN`, `COMMIT`, and `ROLLBACK` on errors. Refactored `pipelineWorker.ts` to wrap the entire brief persistence phase (actions insertion, citations storage, brief published status update, and runs telemetry) inside `withTransaction`. Verified atomic commits and clean rollbacks without orphaned rows in `test/pipeline_worker_transaction.test.ts` (2/2 passed).
 
-### D9. Template-only cron scheduler — no timezone support
-**File:** [`scheduler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scheduler.ts#L31-L35)
-`renderQuestionTemplate` only supports `{{date}}`. If users in non-UTC timezones set a "9am daily" cron, the date shown in the question may be wrong (yesterday vs today). Also, `CronExpressionParser` in the worker (`worker.ts`) uses server time, not workspace timezone.
+### D8. `toolRouter.ts` only supports 3 web results [RESOLVED]
+**File:** [`toolRouter.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/toolRouter.ts#L22-L75)
+Previously, `ToolRouter.executeWebSearch` had `maxResults: 3` hardcoded, restricting broader web queries in World mode.
 
-### D10. The `briefQueue` and `actionQueue` don't set BullMQ job options
+**Resolution:** Updated `ToolRouter` and `ToolRouterContext` to support configurable `maxResults` via method option (`options.maxResults`), context object (`context.maxResults`), or environment variable (`WEB_SEARCH_MAX_RESULTS`), with a default limit of `DEFAULT_WEB_MAX_RESULTS = 5` and range clamping `[1, 20]`. Verified default handling, explicit limits, environment variable overrides, Home mode hard gating, and cost cap circuit breaking in `test/tool_router_config.test.ts` (6/6 passed).
+
+### D9. Template-only cron scheduler — no timezone support [RESOLVED]
+**Schema:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`011_add_timezone_to_schedules.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/011_add_timezone_to_schedules.sql)
+**Files:** [`scheduler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scheduler.ts), [`worker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/worker.ts), [`route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/schedules/route.ts)
+Previously, `renderQuestionTemplate` only supported `{{date}}` formatted via UTC server time, and `worker.ts` evaluated crons using raw server time without respecting user/workspace timezones.
+
+**Resolution:**
+1. Applied migration `011_add_timezone_to_schedules.sql` and updated `schema.sql` adding `timezone TEXT NOT NULL DEFAULT 'UTC'` column to `schedules`.
+2. Implemented `formatInTimezone` and enhanced `renderQuestionTemplate` in `src/core/scheduler.ts` with support for all template tags: `{{date}}`, `{{today}}`, `{{yesterday}}`, `{{time}}`, `{{datetime}}`, `{{timestamp}}`, `{{day_of_week}}`, `{{weekday}}`, `{{month}}`, `{{year}}`, `{{timezone}}`.
+3. Updated `worker.ts` to pass schedule `tz` to `CronExpressionParser.parse(sched.cron, { currentDate: now, tz })`.
+4. Updated schedules API routes (`GET`, `POST`, `PATCH`) to support specifying and updating schedule timezones.
+5. Verified with 100% pass rate in `test/scheduler_timezone.test.ts` (5/5 passed).
+
+### D10. The `briefQueue` and `actionQueue` don't set BullMQ job options [RESOLVED]
 **Files:** [`briefQueue.ts`](file:///home/jamesuchechi/Projects/Ballast/src/queue/briefQueue.ts), [`actionQueue.ts`](file:///home/jamesuchechi/Projects/Ballast/src/queue/actionQueue.ts)
-No `attempts`, `backoff`, or `removeOnComplete`/`removeOnFail` settings. BullMQ defaults to 0 retries. If the worker crashes during a brief job, the job is marked failed immediately with no retry.
+Previously, BullMQ queues lacked explicit job options, defaulting to 0 attempts (no retry on transient worker crashes or timeouts) and unbounded completed/failed job accumulation in Redis.
 
-**Fix:** Set `attempts: 3`, `backoff: { type: 'exponential', delay: 5000 }`, and `removeOnComplete: { count: 100 }` in the job options.
+**Resolution:** Configured `DEFAULT_BRIEF_JOB_OPTIONS` and `DEFAULT_ACTION_JOB_OPTIONS` across `briefQueue.ts` and `actionQueue.ts` with `attempts: 3`, `backoff: { type: 'exponential', delay: 5000 }`, `removeOnComplete: { age: 86400, count: 100 }`, and `removeOnFail: { age: 86400 * 7, count: 200 }`. Applied options at both the Queue level (`defaultJobOptions`) and per-job enqueue (`queue.add()`). Verified with 100% pass rate in `test/queue_job_options.test.ts` (3/3 passed).
 
 ---
 
 ## 🟠 Missing Features for MVP
 
-### M1. No CSRF protection
-Auth routes (`POST /api/auth/login`, `POST /api/auth/signup`) are not CSRF-protected. The session cookie doesn't have `SameSite=Strict`. Depending on browser behavior, cross-site form submissions could abuse authenticated endpoints.
+### M1. No CSRF protection [RESOLVED]
+**Files:** [`csrf.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/csrf.ts), [`auth.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/auth.ts), [`login/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/auth/login/route.ts), [`signup/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/auth/signup/route.ts)
+Previously, authentication routes (`/api/auth/login`, `/api/auth/signup`) and session cookies lacked explicit CSRF protection and were configured with `SameSite=Lax`, creating vulnerability to cross-site request forgery and form submission abuse.
 
-**Fix:** Add `SameSite=Strict` to the session cookie and a CSRF token for state-mutating requests.
+**Resolution:**
+1. Configured all authentication and profile session cookies with `SameSite=Strict`, `HttpOnly=true`, and `Secure` via `getSessionCookieOptions()` in `src/lib/auth.ts`.
+2. Implemented `src/lib/csrf.ts` providing cryptographic HMAC-signed CSRF tokens, `verifyCsrf()` origin & referer validation against canonical origins, and double-submit token validation.
+3. Created dedicated endpoint `GET /api/auth/csrf` for client token issuance.
+4. Enforced CSRF origin and token validation on mutating authentication routes (`POST /api/auth/login` and `POST /api/auth/signup`).
+5. Verified with 100% pass rate in `test/csrf_protection.test.ts` (5/5 passed).
 
-### M2. No file virus/malware scanning
-**File:** [`ingest.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/ingest.ts)
-TODO.md explicitly lists "Virus scanning on uploads" under Later/Optional. But accepting raw PDF/image uploads without scanning is a real risk for a multi-tenant product.
+### M2. No file virus/malware scanning [RESOLVED]
+**Files:** [`scanner.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scanner.ts), [`ingest.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/ingest.ts), [`upload/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/upload/route.ts)
+Previously, uploads were accepted into vector stores and source storage without scanning for embedded viruses, malicious PDF scripts, or disguised executable binaries.
+
+**Resolution:**
+1. Created multi-layer heuristic and signature scanner in `src/core/scanner.ts`:
+   - Standard EICAR antivirus test signature detection.
+   - Disguised binary executable detection (Windows PE `MZ`, Linux `ELF`, macOS `Mach-O`, Java bytecode).
+   - Malicious PDF exploit vector detection (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFiles`).
+   - Disguised shell/script payload detection in non-script formats (e.g. bash/PowerShell masquerading as `.png`/`.jpg`).
+   - Socket connection support for external ClamAV daemon (`CLAMAV_HOST`/`CLAMAV_PORT`).
+2. Integrated `scanBufferForMalware` into `ingestDocument` in `src/core/ingest.ts`. Upon threat detection, execution halts, an audit trail is recorded to `access_logs` (`source.malware_blocked`), and a detailed error is thrown.
+3. Enhanced `src/app/api/sources/upload/route.ts` to respond with HTTP 422 (`malwareDetected: true`) and error details.
+4. Added and verified end-to-end tests in `test/malware_scanner.test.ts` (8/8 passed).
 
 ### M3. No email verification on signup
 Users can sign up with any email address they don't own. This is fine for MVP but becomes a problem when you start sending email notifications to unverified addresses.
 
-### M4. No multi-workspace switching in the UI
-The auth system supports multiple workspaces per user (`workspace_members` table, `authenticateUser` picks the primary workspace). But there's no UI to switch between workspaces. Users with multiple workspaces are stuck in whichever one was picked at login.
+### M4. No multi-workspace switching in the UI [RESOLVED]
+**Files:** [`workspaces/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/workspaces/route.ts), [`workspaces/switch/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/workspaces/switch/route.ts), [`Sidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/Sidebar.tsx), [`ProfileView.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ProfileView.tsx), [`DashboardLayout.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/DashboardLayout.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+Previously, users belonging to multiple workspaces in `workspace_members` were locked into whichever workspace was assigned at login with no UI or API endpoints to switch active workspace or create new ones.
 
-### M5. Schedule `question_template` has no validation
-**File:** [`scheduler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scheduler.ts)
+**Resolution:**
+1. Created `GET /api/workspaces` returning all workspaces associated with the authenticated user, their role, member count, plan tier, and active flag.
+2. Created `POST /api/workspaces` allowing users to create new organizations/workspaces with automatic `owner` membership assignment and immediate active session transition.
+3. Created `POST /api/workspaces/switch` with membership authorization checks, signing and setting a new `ballast_session` cookie for the selected workspace.
+4. Added an interactive workspace switcher dropdown in `Sidebar.tsx` with active checkmarks, role badges, one-click switching, and inline "+ Create new workspace" input.
+5. Added a dedicated "Workspaces & Organizations" management section in `ProfileView.tsx` with organization details, member counts, and switching controls.
+6. Wired `onWorkspaceSwitched` in `DashboardLayout` and `page.tsx` to automatically refetch all workspace-specific data (briefs, sources, schedules, access logs, actions, notifications, flags, telemetry, analytics) without requiring manual page reload.
+7. Verified with 100% pass rate in `test/workspace_switching.test.ts` (4/4 passed).
+
+### M5. Schedule `question_template` has no validation [RESOLVED]
+**Files:** [`templateValidator.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/templateValidator.ts), [`scheduler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scheduler.ts), [`route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/schedules/route.ts), [`[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/schedules/%5Bid%5D/route.ts), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
 Templates like `{{date}}` are silently passed through if unrecognized. A template with a typo (`{{Date}}`) will be treated as a literal string. No template preview in the UI.
 
-### M6. No retry on failed schedules
-If a scheduled brief fails, the schedule's `last_run_brief_id` still gets updated to the failed brief. The next run will chain from a failed parent — the `parentBrief` context in the Writer will have `markdown = null` (or failed state), potentially corrupting the chain context.
+**Fix:**
+1. Created unified `src/lib/templateValidator.ts` defining `SUPPORTED_TEMPLATE_TAGS` (`date`, `today`, `yesterday`, `time`, `datetime`, `timestamp`, `day_of_week`, `weekday`, `month`, `year`, `timezone`), case-insensitive tag evaluation, `validateQuestionTemplate()`, `renderQuestionTemplate()`, and `previewQuestionTemplate()`.
+2. Re-exported and enforced template validation in `src/core/scheduler.ts` inside `runSchedule()`.
+3. Integrated `validateQuestionTemplate` in `POST /api/schedules` and `PATCH /api/schedules/[id]` to reject invalid tags with descriptive 400 error payloads.
+4. Added interactive Schedule Modal UI enhancements in `src/app/app/page.tsx`:
+   - Quick one-click tag insertion chips (`+ {{date}}`, `+ {{today}}`, etc.).
+   - Real-time client-side tag validation warnings with actionable error lists.
+   - Real-time Live Template Preview box showing what the prompt will render to with current time.
+5. Verified with 100% pass rate in `test/scheduler_template_validation.test.ts` (6/6 passed).
 
-**Fix:** Only update `last_run_brief_id` when the brief is successfully published.
+### M6. No retry on failed schedules [RESOLVED]
+**Files:** [`scheduler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/scheduler.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts)
+If a scheduled brief fails, the schedule's `last_run_brief_id` was previously updated prematurely at queue time to the unverified brief. When that run failed, subsequent scheduled runs would chain from a failed parent with `markdown = null`, corrupting the version lineage.
 
-### M7. `notifications` table has no `read_at` timestamp
-**Schema:** The `read` column is a boolean. There's no timestamp of when it was read, no notification dismissal, no bulk-clear. The in-app notification UX will be limited.
+**Fix:**
+1. Removed premature `UPDATE schedules SET last_run_brief_id` from `runSchedule()` in `src/core/scheduler.ts`.
+2. Moved `last_run_brief_id` advancement inside the publication transaction in `src/core/pipelineWorker.ts` so schedules only advance to new parent briefs upon successful publication.
+3. If a scheduled brief fails or errors, `schedules.last_run_brief_id` safely retains the last successfully published brief. The subsequent scheduled run automatically retries chaining against the verified baseline without context corruption.
+4. Verified with 100% pass rate in `test/scheduler_failed_run_chaining.test.ts` (5/5 passed) and `test/phase7_scheduling_retention.test.ts`.
 
-### M8. No webhook support
-Connectors sync on a schedule (or on-demand). There's no webhook receiver for real-time triggers (new Slack message, new GitHub PR). This means brief generation always lags the source by the sync interval.
+### M7. `notifications` table has no `read_at` timestamp [RESOLVED]
+**Files:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`012_add_read_at_and_dismissed_to_notifications.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/012_add_read_at_and_dismissed_to_notifications.sql), [`notifications.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/notifications.ts), [`route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/notifications/route.ts), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+The `read` column was previously a bare boolean without a timestamp of when it was read, and there was no support for notification dismissal or bulk-clearing.
 
-### M9. The world mode only fetches 3 web results (`maxResults: 3`)
-For a "grounded OS" positioning, 3 web snapshots is quite thin. Complex questions may need more context.
+**Fix:**
+1. Created database migration `012_add_read_at_and_dismissed_to_notifications.sql` adding `read_at TIMESTAMPTZ`, `dismissed_at TIMESTAMPTZ`, and a partial index `idx_notifications_active (workspace_id, created_at DESC) WHERE dismissed_at IS NULL`.
+2. Updated `src/core/notifications.ts` functions (`markNotificationRead`, `markAllNotificationsRead`) to set `read_at = COALESCE(read_at, NOW())`.
+3. Added `dismissNotification()`, `dismissAllNotifications()`, `deleteNotification()`, and `deleteAllNotifications()` in `src/core/notifications.ts`.
+4. Upgraded `/api/notifications` route:
+   - `GET` supports `?include_dismissed=true` and limits.
+   - `PATCH` supports `{ id, action: 'read' | 'dismiss' }` and `{ all: true, action: 'read' | 'dismiss' }`.
+   - `DELETE` supports `?id=...` and `?all=true` for permanent deletion.
+5. Upgraded Notifications UI in `src/app/app/page.tsx`:
+   - Visual `✓ Read [timestamp]` indicator displayed on read notifications.
+   - "Clear all" button to dismiss all notifications in one click.
+   - Per-notification individual dismiss (Trash icon) button.
+   - Optimistic state updates for instant responsive UI feedback.
+6. Verified with 100% pass rate in `test/notifications_read_at_dismissal.test.ts` (7/7 passed).
 
-### M10. No streaming for brief generation progress
-The `progress` field in the brief is JSONB appended server-side. The client has to **poll** to see updates. There's no SSE or WebSocket stream. This means the progress UI has a polling delay (visible as "stepping" rather than smooth progress).
+### M8. No webhook support [RESOLVED]
+**Files:** [`webhookHandler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/webhookHandler.ts), [`[provider]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/webhooks/%5Bprovider%5D/route.ts)
+Connectors previously relied solely on cron polling or manual sync, causing brief generation to lag incoming changes until the next sync interval.
+
+**Fix:**
+1. Created real-time webhook receiver service `src/core/webhookHandler.ts`:
+   - Built HMAC SHA-256 signature verification for GitHub (`X-Hub-Signature-256`) and Slack (`X-Slack-Signature` with 5-minute replay attack protection window).
+   - Built handlers for GitHub events (`pull_request`, `issues`, `issue_comment`, `push`) and Slack Events (`message`, `url_verification` challenge).
+   - Idempotent real-time vector ingestion (`ingestWebhookDocument`): deduplicates unchanged content, updates modified source rows with obsolete chunk pruning, and embeds fresh chunk vectors immediately.
+   - Comprehensive audit trails recorded in `access_logs` (`webhook_sync:<connector>:<external_id>`).
+2. Implemented API route `src/app/api/webhooks/[provider]/route.ts` handling:
+   - `/api/webhooks/github`
+   - `/api/webhooks/slack` (including URL verification handshake)
+   - `/api/webhooks/generic`
+3. Verified with 100% pass rate in `test/webhooks_realtime_sync.test.ts` (8/8 passed).
+
+### M9. The world mode only fetches 3 web results (`maxResults: 3`) [RESOLVED]
+**Files:** [`web.ts`](file:///home/jamesuchechi/Projects/Ballast/src/connectors/web.ts), [`toolRouter.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/toolRouter.ts)
+World mode previously hardcoded fetching only 3 web snapshots, which was insufficient context for complex multi-faceted questions.
+
+**Fix:**
+1. Increased `DEFAULT_WEB_MAX_RESULTS` from 3 to 10 in both `src/connectors/web.ts` and `src/core/toolRouter.ts`.
+2. Expanded live search fetching across Wikipedia API and DuckDuckGo RelatedTopics in `fetchLiveWebPages` to return up to `maxResults` rich contextual snapshots.
+3. Supported flexible overrides via explicit call options (`options.maxResults`), context object (`context.maxResults`), or environment variable (`WEB_SEARCH_MAX_RESULTS`), bounded between `[1, 20]` with safety clamping.
+4. Verified with 100% pass rate in `test/web_search_max_results.test.ts` (5/5 passed) and `test/tool_router_config.test.ts` (6/6 passed).
+
+### M10. No streaming for brief generation progress [RESOLVED]
+**Files:** [`progressBroadcaster.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/progressBroadcaster.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`stream/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/stream/route.ts), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+The client previously had to poll `/api/briefs/[id]/progress` with `setInterval(..., 400)`, causing visible stepping delays and unnecessary network requests.
+
+**Fix:**
+1. Created `src/core/progressBroadcaster.ts` real-time pub/sub event broadcaster supporting high-throughput per-brief listeners.
+2. Updated `appendProgress()` in `src/core/pipelineWorker.ts` to broadcast real-time event payloads synchronously to subscribers on every state transition (`retrieving_private`, `drafting`, `verifying`, `rendering`, `published`, `failed`).
+3. Created Server-Sent Events (SSE) streaming route `GET /api/briefs/[id]/stream` returning `text/event-stream` with initial state delivery, real-time chunk streaming, and clean client disconnection teardown.
+4. Added `subscribeToBriefProgress()` in `src/app/app/page.tsx` utilizing native `EventSource` for sub-millisecond progress updates, with automated seamless polling fallback if SSE is unavailable or interrupted.
+5. Verified with 100% pass rate in `test/brief_progress_streaming.test.ts` (3/3 passed).
 
 ---
 
 ## 💡 Enhancements & New Features to Build (Post-MVP)
 
-### E1. **Brief Summarization / TL;DR mode**
-Right now briefs can be long and structured. A one-sentence TL;DR (grounded in keep-claims only) at the top would dramatically improve skim-ability. This could be a Writer instruction: include a `summary` field with max 2 sentences.
+### E1. **Brief Summarization / TL;DR mode** [RESOLVED]
+**Files:** [`types.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/types.ts), [`writer.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/writer.ts), [`assembler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/assembler.ts), [`renderer.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/renderer.ts), [`pipeline.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipeline.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`exporters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/exporters.ts), [`013_add_summary_to_briefs.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/013_add_summary_to_briefs.sql), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+Briefs were previously long and structured without a fast executive takeaway.
+
+**Fix:**
+1. Added `summary?: string` to `DraftBriefSections`, `PublishedBriefSections`, and `BriefV1` in `src/core/types.ts` and `eval/schema/brief.v1.json`.
+2. Instructed Writer in `src/core/writer.ts` to output a 1-2 sentence executive summary (TL;DR) strictly grounded in verified facts/quotes.
+3. Updated `assembleBrief` in `src/core/assembler.ts` to synthesize a grounded 1-2 sentence TL;DR strictly from verified Critic `keep` claims (with safe refusal on empty evidence).
+4. Added TL;DR blockquote rendering (`> **TL;DR:** ...`) in `src/core/renderer.ts` and Obsidian export in `src/core/exporters.ts` while preserving all 8 mandatory markdown headings and character claim spans.
+5. Created database migration `013_add_summary_to_briefs.sql` adding `summary TEXT` column to PostgreSQL `briefs` table and persisted in worker and API routes.
+6. Designed modern glassmorphic Executive Summary (TL;DR) callout banner in dashboard UI preview (`src/app/app/page.tsx`).
+7. Verified with 100% pass rate in `test/brief_summarization_tldr.test.ts` (6/6 passed).
 
 ### E2. **Brief Digest / Weekly Summary Email**
 Instead of sending a notification per brief, aggregate all briefs published in the last 7 days into a digest email. This is more useful than per-brief emails for users with multiple schedules.
@@ -313,7 +414,7 @@ Pre-built question templates: "Weekly team status", "Project health check", "Com
 | No index on `access_logs(action)` | Slow retention pass check |
 | No `starred BOOLEAN` on `briefs` | Feature M7 not possible |
 | No `session_version` on `users` | Session invalidation not possible |
-| No `read_at TIMESTAMPTZ` on `notifications` | Analytics on notification engagement |
+| No `read_at TIMESTAMPTZ` on `notifications` [RESOLVED] | Analytics on notification engagement (Resolved in Migration 012) |
 | No `timezone TEXT` on `workspaces` | Cron jobs always fire in server timezone |
 | No `last_error_at TIMESTAMPTZ` on `sources` | Can't tell if error is old/stale |
 
@@ -346,7 +447,7 @@ Pre-built question templates: "Weekly team status", "Project health check", "Com
 4. Wrap pipeline persistence in a transaction
 5. Hard-fail if `BALLAST_ENCRYPTION_KEY` or `SESSION_SECRET` is not set in production
 6. Add `idx_chunks_source` DB index
-7. Fix scheduled brief chaining to only update `last_run_brief_id` on success
+7. Fix scheduled brief chaining to only update `last_run_brief_id` on success [DONE]
 8. Fix real token counting from LLM API responses
 
 **🟡 Should fix for polish:**

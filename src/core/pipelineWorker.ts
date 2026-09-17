@@ -1,21 +1,17 @@
-import { query, queryOne } from '@/db/client';
+import { query, queryOne, withTransaction } from '@/db/client';
 import { retrievePrivateChunks, retrieveWebChunks } from './retrieval';
 import { toolRouter, DEFAULT_BRIEF_COST_CAP } from './toolRouter';
 import { runWriter } from './writer';
 import { runCritic } from './critic';
 import { llmCall, estimateLLMCost, type LLMUsage } from './llm';
-import { renderBriefMarkdown } from './renderer';
-import { validateForPublish } from './validator';
+import { assembleBrief } from './assembler';
+import { parseProposedAction } from './actionExecutor';
 import { renderAndStorePdf } from './pdfRenderer';
 import { createNotification } from './notifications';
 import { sendBriefEmailNotification } from './emailService';
 import type {
   BriefV1,
-  CitationRecord,
   CriticInput,
-  CriticLog,
-  PublishedEvidenceItem,
-  PublishedBriefSections,
   RetrievedQuote,
   UncheckedConnector,
 } from './types';
@@ -41,8 +37,11 @@ export const CANONICAL_STEPS = [
   'published',
 ] as const;
 
+import { progressBroadcaster } from './progressBroadcaster';
+
 /**
  * Appends a step to briefs.progress JSONB column in PostgreSQL
+ * and broadcasts real-time events for SSE streaming (Audit M10)
  */
 export async function appendProgress(
   briefId: string,
@@ -50,19 +49,34 @@ export async function appendProgress(
   message?: string,
   meta?: Record<string, any>
 ): Promise<void> {
+  const timestamp = new Date().toISOString();
   const entry: WorkerProgressEntry = {
     step,
-    timestamp: new Date().toISOString(),
+    timestamp,
     message,
     meta,
   };
 
-  await query(
+  const updated = await queryOne<{ status: string; progress: any; error: string | null }>(
     `UPDATE briefs 
      SET progress = COALESCE(progress, '[]'::jsonb) || $2::jsonb 
-     WHERE id = $1`,
+     WHERE id = $1
+     RETURNING status, progress, error`,
     [briefId, JSON.stringify([entry])]
   );
+
+  // Broadcast real-time event to SSE listeners (M10)
+  progressBroadcaster.broadcast(briefId, {
+    briefId,
+    step,
+    message: message || step,
+    status: (step === 'published' || step === 'failed')
+      ? (step as any)
+      : ((updated?.status as any) || 'running'),
+    timestamp,
+    error: updated?.error || (step === 'failed' ? message : null),
+    progress: updated?.progress || [entry],
+  });
 }
 
 /**
@@ -187,15 +201,15 @@ export async function processQueuedBrief(
     // Load parent brief context if chained (FR7.1, FR7.3)
     let parentBriefData: { question: string; as_of?: string; summary?: string } | null = null;
     if (parentBriefId) {
-      const parentRow = await queryOne<{ question: string; markdown: string; as_of: string }>(
-        `SELECT question, markdown, as_of FROM briefs WHERE id = $1`,
+      const parentRow = await queryOne<{ question: string; markdown: string; as_of: string; summary: string | null }>(
+        `SELECT question, markdown, as_of, summary FROM briefs WHERE id = $1`,
         [parentBriefId]
       );
       if (parentRow) {
         parentBriefData = {
           question: parentRow.question,
           as_of: parentRow.as_of,
-          summary: parentRow.markdown ? parentRow.markdown.slice(0, 400) : undefined,
+          summary: parentRow.summary || (parentRow.markdown ? parentRow.markdown.slice(0, 400) : undefined),
         };
       }
     }
@@ -257,163 +271,33 @@ export async function processQueuedBrief(
         llmCall(prompt, sysPrompt, { role: 'critic', onUsage: trackUsage }),
     });
 
-    const criticLog: CriticLog = {
-      claims_in: draft.sections.evidence.length,
-      claims_kept: criticOut.keep.length,
-      claims_dropped: criticOut.drop.length,
-      keep: criticOut.keep,
-      drop: criticOut.drop,
-      conflicts: criticOut.conflicts,
-      missing: criticOut.missing,
-      did_not: criticOut.did_not,
-    };
-
     // Step: validating (Publish Validator Gate)
     await appendProgress(briefId, 'validating', 'validating assertions…');
 
-    const quoteMap = new Map(allQuotes.map((q) => [q.id, q]));
-    const evidenceItems: PublishedEvidenceItem[] = [];
-
-    for (const k of criticOut.keep) {
-      const citations: CitationRecord[] = k.citation_ids
-        .map((id) => quoteMap.get(id))
-        .filter((q): q is RetrievedQuote => q !== undefined)
-        .map((q) => ({
-          id: q.id,
-          source_id: q.source_id,
-          source_class: q.source_class,
-          citation_type: 'support' as const,
-          quote: q.quote,
-          url: q.url,
-        }));
-
-      evidenceItems.push({
-        claim: k.claim,
-        citations,
-      });
-    }
-
-    // Empty evidence path (FR4.9): if keep is empty, publish with empty Answer and filled Uncertain
-    const hasEvidence = evidenceItems.length > 0;
-    let answerText = '';
-    if (!hasEvidence) {
-      answerText = 'No citable evidence was found in the indexed corpus to answer this query.\nAsserted claims were withheld to prevent ungrounded hallucinations.';
-    } else {
-      // Synthesize answer strictly from verified keep claims (never raw writer draft)
-      const answerBullets = criticOut.keep.map((k) => `- ${k.claim}`);
-      answerText = answerBullets.slice(0, 10).join('\n');
-      if (criticOut.conflicts.length > 0) {
-        answerText += '\n\n*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*';
-      }
-    }
-
-    const uncertainList = hasEvidence
-      ? [...draft.sections.uncertain]
-      : [
-          ...draft.sections.uncertain,
-          'Private corpus does not contain documented statements directly answering the question.',
-        ];
-
-    // Surface conflicts into Uncertain section (FR4.5)
-    for (const c of criticOut.conflicts) {
-      const conflictDesc = `Conflict detected: ${c.topic} between cited sources.`;
-      if (!uncertainList.includes(conflictDesc)) {
-        uncertainList.push(conflictDesc);
-      }
-    }
-
-    const didNotList = [
-      ...draft.sections.what_i_did_not_do,
-      'Did not publish ungrounded or unsourced assertions.',
-    ];
-
-    if (criticOut.conflicts.length > 0) {
-      didNotList.push('Did not arbitrarily resolve cross-source disagreements or silently pick a winner.');
-    }
-
-    // Explain circuit breaker if tripped (FR8.3)
-    if (circuitBroken && circuitBrokenReason) {
-      didNotList.push(circuitBrokenReason);
-    }
-
-    // Filter actions against dropped claims / prompt injections
-    const sanitizedActions: string[] = [];
-    const droppedTexts = criticOut.drop.map((d) => d.claim.toLowerCase());
-    for (const act of draft.sections.actions) {
-      const isDropped = droppedTexts.some((d) => act.toLowerCase().includes(d) || d.includes(act.toLowerCase()));
-      if (isDropped) {
-        didNotList.push(`Refused ungrounded/injected action draft: "${act}"`);
-      } else {
-        sanitizedActions.push(act);
-      }
-    }
-
-    // Merge critic did_not entries
-    for (const d of criticOut.did_not) {
-      if (!didNotList.includes(d)) {
-        didNotList.push(d);
-      }
-    }
-
-    const uncheckedBullets = [
-      ...draft.sections.what_i_used.unchecked,
-      ...uncheckedList.map(
-        (u) => `${u.connector.charAt(0).toUpperCase() + u.connector.slice(1)} could not be checked: ${u.error}`
-      ),
-    ];
-
-    const privateSourceLabels = Array.from(
-      new Set(allSources.filter((s) => s.class === 'private').map((s) => s.id))
-    );
-    const webSourceLabels = Array.from(
-      new Set(allSources.filter((s) => s.class === 'web').map((s) => s.id))
-    );
-
-    const publishedSections: PublishedBriefSections = {
-      answer: answerText,
-      what_i_used: {
-        private: privateSourceLabels.length > 0 ? privateSourceLabels : draft.sections.what_i_used.private,
-        web: webSourceLabels.length > 0 ? webSourceLabels : draft.sections.what_i_used.web,
-        unchecked: uncheckedBullets,
-      },
-      evidence: evidenceItems,
-      uncertain: uncertainList,
-      open_loops: draft.sections.open_loops,
-      actions: sanitizedActions,
-      what_i_did_not_do: didNotList,
-    };
-
-    const renderRes = renderBriefMarkdown({
-      title: draft.title || `Brief: ${question}`,
-      as_of: new Date().toISOString(),
-      mode,
-      status: 'published',
-      sections: publishedSections,
-    });
-    const markdown = renderRes.markdown;
-
-    // Attach computed claim spans from markdown rendering to citations
-    for (const item of evidenceItems) {
-      const span = renderRes.claimSpans.get(item.claim);
-      if (span) {
-        for (const cit of item.citations) {
-          cit.claim_span = span;
-        }
-      }
-    }
-
-    const validatorRes = validateForPublish({
-      markdown,
-      evidence: evidenceItems,
-      mode,
-      criticOutput: criticOut,
+    const assembled = assembleBrief({
+      draft,
+      criticOut,
+      retrieved: allQuotes,
+      sources: allSources,
       unchecked: uncheckedList,
-      sections: publishedSections,
+      question,
+      mode,
+      circuitBroken,
+      circuitBrokenReason,
     });
 
-    if (!validatorRes.valid) {
+    const {
+      criticLog,
+      evidenceItems,
+      sanitizedActions,
+      markdown,
+      sections: publishedSections,
+      quoteMap,
+    } = assembled;
+
+    if (!assembled.validation.valid) {
       // Fail closed (FR4.10)
-      throw new Error(`Publish validation rejected: ${validatorRes.errors.join('; ')}`);
+      throw new Error(`Publish validation rejected: ${assembled.validation.errors.join('; ')}`);
     }
 
     // Step: rendering
@@ -422,117 +306,130 @@ export async function processQueuedBrief(
 
     // Step: proposing_actions
     await appendProgress(briefId, 'proposing_actions', 'proposing action drafts…');
-    if (sanitizedActions.length > 0) {
-      for (const act of sanitizedActions) {
-        await query(
-          `INSERT INTO actions (
-            brief_id, workspace_id, type, payload
-          ) VALUES ($1, $2, 'email_draft', $3)`,
-          [
-            briefId,
-            workspaceId,
-            JSON.stringify({
-              summary: act,
-              created_at: new Date().toISOString(),
-            }),
-          ]
-        );
-      }
-    }
 
-    // Persist Citations (Support - with authentic source_class: 'private' | 'web')
-    for (const item of evidenceItems) {
-      for (const cit of item.citations) {
-        await query(
-          `INSERT INTO citations (
-            workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            workspaceId,
-            briefId,
-            cit.source_id || null,
-            cit.source_class,
-            cit.citation_type,
-            JSON.stringify(cit.claim_span || { start: 0, end: 0 }),
-            cit.quote,
-            cit.url || null,
-          ]
-        );
-      }
-    }
-
-    // Persist Conflict Citations (FR4.5)
-    for (const c of criticOut.conflicts) {
-      for (const citId of c.citation_ids) {
-        const q = quoteMap.get(citId);
-        if (q) {
-          await query(
-            `INSERT INTO citations (
-              workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
-            ) VALUES ($1, $2, $3, $4, 'conflict', $5, $6, $7)`,
+    // Atomic persistence phase (D7): Wrap actions, citations, brief status, and runs telemetry in a transaction
+    await withTransaction(async (txClient) => {
+      // 1. Propose Actions
+      if (sanitizedActions.length > 0) {
+        for (const act of sanitizedActions) {
+          const parsed = parseProposedAction(act);
+          await txClient.query(
+            `INSERT INTO actions (
+              brief_id, workspace_id, type, payload
+            ) VALUES ($1, $2, $3, $4)`,
             [
-              workspaceId,
               briefId,
-              q.source_id || null,
-              q.source_class,
-              JSON.stringify({ start: 0, end: 0 }),
-              q.quote,
-              q.url || null,
+              workspaceId,
+              parsed.type,
+              JSON.stringify(parsed.payload),
             ]
           );
         }
       }
-    }
 
-    // Persist Unchecked Citations (FR2.6, NFR4.1)
-    for (const u of uncheckedList) {
-      await query(
-        `INSERT INTO citations (
-          workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
-        ) VALUES ($1, $2, null, 'private', 'unchecked', $3, $4, null)`,
+      // 2. Persist Citations (Support - with authentic source_class: 'private' | 'web')
+      for (const item of evidenceItems) {
+        for (const cit of item.citations) {
+          await txClient.query(
+            `INSERT INTO citations (
+              workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              workspaceId,
+              briefId,
+              cit.source_id || null,
+              cit.source_class,
+              cit.citation_type,
+              JSON.stringify(cit.claim_span || { start: 0, end: 0 }),
+              cit.quote,
+              cit.url || null,
+            ]
+          );
+        }
+      }
+
+      // 3. Persist Conflict Citations (FR4.5)
+      for (const c of criticOut.conflicts) {
+        for (const citId of c.citation_ids) {
+          const q = quoteMap.get(citId);
+          if (q) {
+            await txClient.query(
+              `INSERT INTO citations (
+                workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
+              ) VALUES ($1, $2, $3, $4, 'conflict', $5, $6, $7)`,
+              [
+                workspaceId,
+                briefId,
+                q.source_id || null,
+                q.source_class,
+                JSON.stringify({ start: 0, end: 0 }),
+                q.quote,
+                q.url || null,
+              ]
+            );
+          }
+        }
+      }
+
+      // 4. Persist Unchecked Citations (FR2.6, NFR4.1)
+      for (const u of uncheckedList) {
+        await txClient.query(
+          `INSERT INTO citations (
+            workspace_id, brief_id, source_id, source_class, citation_type, claim_span, quote, url
+          ) VALUES ($1, $2, null, 'private', 'unchecked', $3, $4, null)`,
+          [
+            workspaceId,
+            briefId,
+            JSON.stringify({ start: 0, end: 0 }),
+            `${u.connector} could not be checked: ${u.error}`,
+          ]
+        );
+      }
+
+      // 5. Update brief status to published
+      await txClient.query(
+        `UPDATE briefs SET 
+          status = 'published',
+          markdown = $2,
+          pdf_uri = $3,
+          published_at = NOW(),
+          summary = $4
+         WHERE id = $1`,
+        [briefId, markdown, pdfUri, assembled.summary || null]
+      );
+
+      // 5b. Advance schedule's last_run_brief_id ONLY on successful publication (Audit M6)
+      await txClient.query(
+        `UPDATE schedules SET last_run_brief_id = $1 WHERE id = (
+          SELECT schedule_id FROM briefs WHERE id = $1 AND schedule_id IS NOT NULL
+        )`,
+        [briefId]
+      );
+
+      // 6. Persist runs telemetry with real accumulated token usage and actual cost (FR8.1, FR8.3, NFR6.1)
+      const duration = Date.now() - startTime;
+      const tokensIn = totalTokensIn > 0 ? totalTokensIn : Math.ceil((question.length * 3 + 450) / 4);
+      const tokensOut = totalTokensOut > 0 ? totalTokensOut : Math.ceil(markdown.length / 4);
+      const finalRunCost = Number((totalCost + totalLLMCost).toFixed(6));
+
+      await txClient.query(
+        `INSERT INTO runs (
+          brief_id, workspace_id, tokens_in, tokens_out, cost, latency_ms,
+          tools_called, circuit_broken, critic_log
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
-          workspaceId,
           briefId,
-          JSON.stringify({ start: 0, end: 0 }),
-          `${u.connector} could not be checked: ${u.error}`,
+          workspaceId,
+          tokensIn,
+          tokensOut,
+          finalRunCost,
+          duration,
+          JSON.stringify(toolsCalled),
+          circuitBroken,
+          JSON.stringify(criticLog),
         ]
       );
-    }
-
-    // Step: published
-    const duration = Date.now() - startTime;
-    await query(
-      `UPDATE briefs SET 
-        status = 'published',
-        markdown = $2,
-        pdf_uri = $3,
-        published_at = NOW()
-       WHERE id = $1`,
-      [briefId, markdown, pdfUri]
-    );
-
-    // Persist runs telemetry with real accumulated token usage and actual cost (FR8.1, FR8.3, NFR6.1)
-    const tokensIn = totalTokensIn > 0 ? totalTokensIn : Math.ceil((question.length * 3 + 450) / 4);
-    const tokensOut = totalTokensOut > 0 ? totalTokensOut : Math.ceil(markdown.length / 4);
-    const finalRunCost = Number((totalCost + totalLLMCost).toFixed(6));
-
-    await query(
-      `INSERT INTO runs (
-        brief_id, workspace_id, tokens_in, tokens_out, cost, latency_ms,
-        tools_called, circuit_broken, critic_log
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        briefId,
-        workspaceId,
-        tokensIn,
-        tokensOut,
-        finalRunCost,
-        duration,
-        JSON.stringify(toolsCalled),
-        circuitBroken,
-        JSON.stringify(criticLog),
-      ]
-    );
+    });
 
     await appendProgress(briefId, 'published', 'Brief successfully published');
 
@@ -556,6 +453,7 @@ export async function processQueuedBrief(
       type: 'brief_published',
       title: draft.title || `Brief: ${question}`,
       question,
+      summaryOrError: assembled.summary,
       claimCount: publishedSections.evidence?.length || 0,
       pdfUri,
     }).catch((emailErr) => console.warn('[Email Dispatch Publish Error]:', emailErr));
@@ -574,6 +472,7 @@ export async function processQueuedBrief(
       markdown,
       sections: publishedSections,
       pdf_uri: pdfUri,
+      summary: assembled.summary || null,
       error: null,
     };
 

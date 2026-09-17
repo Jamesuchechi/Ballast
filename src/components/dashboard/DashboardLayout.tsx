@@ -36,6 +36,7 @@ export interface DashboardLayoutProps {
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   isDemo?: boolean;
+  onWorkspaceSwitched?: () => void;
 }
 
 export function DashboardLayout({
@@ -67,6 +68,7 @@ export function DashboardLayout({
   theme,
   onToggleTheme,
   isDemo = false,
+  onWorkspaceSwitched,
 }: DashboardLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
@@ -111,6 +113,7 @@ export function DashboardLayout({
           actionLoading={actionLoading}
           onLogout={onLogout}
           isDemo={isDemo}
+          onWorkspaceSwitched={onWorkspaceSwitched}
         />
 
         {/* Center Main Stage */}

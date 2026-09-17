@@ -20,12 +20,23 @@ export function getStorageRoot(): string {
   return path.resolve(process.cwd(), '.storage');
 }
 
-const MASTER_KEY_SEED =
-  process.env.BALLAST_ENCRYPTION_KEY ||
-  process.env.SESSION_SECRET ||
-  'ballast_default_aes_256_gcm_master_key_seed_2026';
+/**
+ * Resolves the 32-byte (256-bit) AES-256-GCM encryption key.
+ * Strictly prohibits hardcoded fallback keys in production (Security S1).
+ */
+export function getEncryptionKey(): Buffer {
+  const seed = process.env.BALLAST_ENCRYPTION_KEY || process.env.SESSION_SECRET;
+  if (!seed) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[SECURITY FATAL] BALLAST_ENCRYPTION_KEY (or SESSION_SECRET) must be set in production mode. Hardcoded fallback keys are strictly prohibited.'
+      );
+    }
+    return crypto.createHash('sha256').update('ballast_default_aes_256_gcm_master_key_seed_2026').digest();
+  }
+  return crypto.createHash('sha256').update(seed).digest();
+}
 
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(MASTER_KEY_SEED).digest();
 const ALGORITHM = 'aes-256-gcm';
 const ENVELOPE_MAGIC = Buffer.from('BALLAST_ENC_V1:', 'utf8'); // 15 bytes magic header
 
@@ -360,7 +371,8 @@ export class ObjectStore {
     const cleanKey = this.cleanKey(key);
     const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8');
     const iv = crypto.randomBytes(12); // 96-bit IV
-    const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+    const keyBuffer = getEncryptionKey();
+    const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
 
     const ciphertext = Buffer.concat([cipher.update(buffer), cipher.final()]);
     const tag = cipher.getAuthTag(); // 16 bytes auth tag
@@ -394,7 +406,8 @@ export class ObjectStore {
       offset += 16;
       const ciphertext = rawFile.subarray(offset);
 
-      const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+      const keyBuffer = getEncryptionKey();
+      const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv);
       decipher.setAuthTag(tag);
 
       const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);

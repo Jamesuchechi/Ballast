@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthSession, COOKIE_NAME, verifyPassword, hashPassword, invalidateUserSessions, signToken } from '@/lib/auth';
+import { getAuthSession, COOKIE_NAME, getSessionCookieOptions, verifyPassword, hashPassword, invalidateUserSessions, signToken } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
 
 export async function GET(req: NextRequest) {
@@ -202,13 +202,7 @@ export async function PUT(req: NextRequest) {
         sessionVersion: payload.sessionVersion,
         exp,
       });
-      res.cookies.set(COOKIE_NAME, newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60,
-      });
+      res.cookies.set(COOKIE_NAME, newToken, getSessionCookieOptions());
     }
 
     return res;

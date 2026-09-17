@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result, { status: 201 });
   } catch (err: any) {
     console.error('[API /api/sources/upload error]:', err);
+    if (err.message && err.message.includes('[MALWARE DETECTED]')) {
+      return NextResponse.json(
+        { error: err.message, malwareDetected: true },
+        { status: 422 }
+      );
+    }
     return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
   }
 }

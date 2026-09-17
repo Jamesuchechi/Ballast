@@ -40,9 +40,22 @@ function getAppUrl(): string {
 }
 
 /**
- * Builds HTML email template for published and failed briefs.
+ * HTML-escapes user-controlled strings to prevent HTML injection and XSS in email clients (Security S5).
  */
-function renderEmailHtml(params: {
+export function escapeHtml(str?: string | null): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Builds HTML email template for published and failed briefs with HTML-escaped content (Security S5).
+ */
+export function renderEmailHtml(params: {
   type: 'brief_published' | 'brief_failed';
   title: string;
   question: string;
@@ -52,8 +65,13 @@ function renderEmailHtml(params: {
 }): string {
   const isPublished = params.type === 'brief_published';
   const statusColor = isPublished ? '#10b981' : '#ef4444';
-  const statusLabel = isPublished ? 'Published & Verified' : 'Generation Failed';
-  const headerIcon = isPublished ? '✓' : '✗';
+  const statusLabel = isPublished ? 'Published &amp; Verified' : 'Generation Failed';
+  const headerIcon = isPublished ? '&#10003;' : '&#10007;';
+
+  const safeTitle = escapeHtml(params.title);
+  const safeQuestion = escapeHtml(params.question);
+  const safeSummaryOrError = escapeHtml(params.summaryOrError);
+  const safeViewUrl = escapeHtml(params.viewUrl);
 
   return `
 <!DOCTYPE html>
@@ -61,7 +79,7 @@ function renderEmailHtml(params: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${params.title}</title>
+  <title>${safeTitle}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;color:#f8fafc;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0f172a;padding:40px 16px;">
@@ -95,7 +113,7 @@ function renderEmailHtml(params: {
           <tr>
             <td style="padding:16px 32px 32px 32px;">
               <h1 style="margin:0 0 12px 0;font-size:20px;font-weight:600;line-height:1.4;color:#ffffff;">
-                ${params.title}
+                ${safeTitle}
               </h1>
 
               <div style="background-color:#0f172a;border-radius:8px;padding:16px;margin:20px 0;border:1px solid #334155;">
@@ -103,7 +121,7 @@ function renderEmailHtml(params: {
                   Target Question
                 </p>
                 <p style="margin:0;font-size:14px;color:#e2e8f0;line-height:1.5;">
-                  ${params.question}
+                  ${safeQuestion}
                 </p>
               </div>
 
@@ -123,7 +141,7 @@ function renderEmailHtml(params: {
                 The scheduled pipeline encountered an issue during synthesis:
                 <br>
                 <code style="display:block;margin-top:8px;padding:10px;background-color:#450a0a;border-radius:6px;color:#fecaca;font-size:12px;word-break:break-word;">
-                  ${params.summaryOrError || 'Pipeline generation failed.'}
+                  ${safeSummaryOrError || 'Pipeline generation failed.'}
                 </code>
               </p>
               `
@@ -133,7 +151,7 @@ function renderEmailHtml(params: {
               <table role="presentation" cellspacing="0" cellpadding="0" style="margin:28px 0 16px 0;">
                 <tr>
                   <td align="center" style="border-radius:8px;background-color:#3b82f6;">
-                    <a href="${params.viewUrl}" target="_blank" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+                    <a href="${safeViewUrl}" target="_blank" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
                       View Brief in Ballast &rarr;
                     </a>
                   </td>

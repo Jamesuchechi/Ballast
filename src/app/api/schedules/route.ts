@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
+import { validateQuestionTemplate } from '@/lib/templateValidator';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
          COALESCE(s.name, 'Untitled Schedule') as name,
          s.question_template,
          s.cron,
+         s.timezone,
          s.mode,
          s.enabled,
          s.created_at,
@@ -60,17 +62,29 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, question_template, cron, mode = 'home' } = body;
+    const { name, question_template, cron, timezone = 'UTC', mode = 'home' } = body;
 
     if (!question_template || !cron) {
       return NextResponse.json({ error: 'question_template and cron are required' }, { status: 400 });
     }
 
+    const validation = validateQuestionTemplate(question_template);
+    if (!validation.valid) {
+      return NextResponse.json(
+        {
+          error: `Invalid question template: ${validation.errors.join('; ')}`,
+          errors: validation.errors,
+          unrecognizedTags: validation.unrecognizedTags,
+        },
+        { status: 400 }
+      );
+    }
+
     const newSched = await queryOne(
-      `INSERT INTO schedules (workspace_id, name, question_template, cron, mode, enabled)
-       VALUES ($1, $2, $3, $4, $5, true)
+      `INSERT INTO schedules (workspace_id, name, question_template, cron, timezone, mode, enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
        RETURNING *`,
-      [workspaceId, name || 'New Brief Schedule', question_template, cron, mode]
+      [workspaceId, name || 'New Brief Schedule', question_template, cron, timezone, mode]
     );
 
     return NextResponse.json({ schedule: newSched }, { status: 201 });

@@ -27,6 +27,10 @@ export function renderBriefMarkdown(input: RenderInput): RenderResult {
   lines.push(`As of: ${input.as_of}`);
   lines.push(`Mode: ${input.mode}`);
   lines.push(`Status: ${input.status}`);
+  if (input.sections.summary) {
+    lines.push("");
+    lines.push(`> **TL;DR:** ${input.sections.summary.trim()}`);
+  }
   lines.push("");
 
   // Answer
