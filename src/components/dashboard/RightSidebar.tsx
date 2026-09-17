@@ -10,6 +10,7 @@ import {
   Lock,
   Activity,
 } from 'lucide-react';
+import { cleanHtmlAndTracking, humanizeSourceLabel } from '@/lib/formatters';
 
 export interface RightSidebarProps {
   isOpen: boolean;
@@ -179,7 +180,7 @@ export function RightSidebar({
                     </span>
                   </div>
 
-                  {/* Quote — clamped to 4 lines */}
+                  {/* Quote — clamped to 4 lines with humanized clean text */}
                   <blockquote style={{
                     fontSize: '0.76rem',
                     fontStyle: 'italic',
@@ -193,17 +194,15 @@ export function RightSidebar({
                     WebkitBoxOrient: 'vertical' as any,
                     overflow: 'hidden',
                     wordBreak: 'break-word',
-                    overflowWrap: 'break-word',
+                    overflowWrap: 'anywhere',
                   }}>
-                    &ldquo;{c.quote}&rdquo;
+                    &ldquo;{cleanHtmlAndTracking(c.quote)}&rdquo;
                   </blockquote>
 
                   {/* Source label row */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.62rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', gap: '6px' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
-                      {c.source_id
-                        ? (c.source_id.split('/').pop() || c.source_id).slice(0, 40)
-                        : 'system'}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', gap: '6px' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={c.source_id || 'system'}>
+                      {humanizeSourceLabel(c.source_id, c.source_class)}
                     </span>
                     <span style={{ color: '#10b981', fontWeight: 600, flexShrink: 0 }}>grounded</span>
                   </div>

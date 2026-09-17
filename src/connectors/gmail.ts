@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { google } from 'googleapis';
 import { query, queryOne } from '@/db/client';
 import { chunkAndEmbedText } from '@/core/embeddings';
+import { cleanHtmlAndTracking } from '@/lib/formatters';
 import { getDecryptedToken, revokeToken, getTokenStatus, storeEncryptedToken } from './tokenStore';
 import type {
   SourceConnector,
@@ -73,25 +74,26 @@ DevOps recommended running on the read replica first before applying to producti
  */
 function extractEmailBody(payload: any): string {
   if (!payload) return '';
+  let rawText = '';
   if (payload.body?.data) {
-    return Buffer.from(payload.body.data, 'base64url').toString('utf8');
-  }
-  if (payload.parts && Array.isArray(payload.parts)) {
+    rawText = Buffer.from(payload.body.data, 'base64url').toString('utf8');
+  } else if (payload.parts && Array.isArray(payload.parts)) {
     const textPart = payload.parts.find((p: any) => p.mimeType === 'text/plain');
     if (textPart?.body?.data) {
-      return Buffer.from(textPart.body.data, 'base64url').toString('utf8');
-    }
-    const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
-    if (htmlPart?.body?.data) {
-      const html = Buffer.from(htmlPart.body.data, 'base64url').toString('utf8');
-      return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-    for (const part of payload.parts) {
-      const nested = extractEmailBody(part);
-      if (nested) return nested;
+      rawText = Buffer.from(textPart.body.data, 'base64url').toString('utf8');
+    } else {
+      const htmlPart = payload.parts.find((p: any) => p.mimeType === 'text/html');
+      if (htmlPart?.body?.data) {
+        rawText = Buffer.from(htmlPart.body.data, 'base64url').toString('utf8');
+      } else {
+        for (const part of payload.parts) {
+          const nested = extractEmailBody(part);
+          if (nested) return nested;
+        }
+      }
     }
   }
-  return '';
+  return cleanHtmlAndTracking(rawText);
 }
 
 /**

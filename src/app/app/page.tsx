@@ -57,6 +57,11 @@ import {
   validateQuestionTemplate,
   renderQuestionTemplate,
 } from '@/lib/templateValidator';
+import {
+  cleanHtmlAndTracking,
+  humanizeSourceLabel,
+  parseAndHumanizeCitationLine,
+} from '@/lib/formatters';
 
 function computeUnifiedDiff(oldText: string, newText: string) {
   if (!oldText && !newText) return [];
@@ -2543,15 +2548,17 @@ export default function DashboardPage() {
                         if (block.startsWith('> **TL;DR:**')) return null; // Rendered in top banner
                         if (block.startsWith('## ')) {
                           const lines = block.split('\n');
-                          const heading = lines[0].replace('## ', '');
+                          const heading = lines[0].replace('## ', '').trim();
                           const rest = lines.slice(1);
                           return (
-                            <div key={idx} style={{ marginBottom: '24px' }}>
+                            <div key={idx} style={{ marginBottom: '24px', maxWidth: '100%', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                               <h2 className="dash-section-title">{heading}</h2>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '100%' }}>
                                 {rest.map((line, lineIdx) => {
                                   const trimmed = line.trim();
                                   if (!trimmed) return null;
+
+                                  // Subheadings (e.g. ### Private, ### Web)
                                   if (trimmed.startsWith('### ')) {
                                     return (
                                       <h3
@@ -2561,75 +2568,175 @@ export default function DashboardPage() {
                                           fontFamily: 'var(--font-mono)',
                                           textTransform: 'uppercase',
                                           color: 'var(--text-muted)',
-                                          marginTop: '10px',
+                                          marginTop: '12px',
                                           marginBottom: '4px',
                                           fontWeight: 600,
+                                          letterSpacing: '0.04em',
                                         }}
                                       >
                                         {trimmed.replace('### ', '')}
                                       </h3>
                                     );
-                                  } else if (trimmed.startsWith('- Claim: ')) {
-                                    const claimText = trimmed.replace(/^- Claim:\s*/, '');
+                                  }
+
+                                  // Verified Claims
+                                  if (trimmed.startsWith('- Claim: ') || trimmed.includes('- Claim: ')) {
+                                    const rawClaim = trimmed.replace(/^.*?-\s*Claim:\s*/i, '');
+                                    const cleanClaim = cleanHtmlAndTracking(rawClaim);
+                                    if (!cleanClaim) return null;
+
                                     return (
                                       <div
                                         key={lineIdx}
                                         style={{
-                                          padding: '8px 12px',
+                                          padding: '10px 14px',
                                           borderRadius: '8px',
                                           background: 'var(--card-bg-subtle)',
                                           border: '1px solid var(--card-border)',
-                                          fontSize: '0.85rem',
+                                          fontSize: '0.88rem',
                                           color: 'var(--text)',
                                           marginTop: '6px',
                                           display: 'flex',
                                           alignItems: 'center',
                                           justifyContent: 'space-between',
-                                          gap: '8px',
+                                          gap: '12px',
+                                          maxWidth: '100%',
+                                          overflowWrap: 'anywhere',
+                                          wordBreak: 'break-word',
                                         }}
                                       >
-                                        <div>
-                                          <strong style={{ color: '#10b981' }}>Claim:</strong> {claimText}
+                                        <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                                          <span style={{ color: '#10b981', fontWeight: 700, marginRight: '6px' }}>Claim:</span>
+                                          <span>{cleanClaim}</span>
                                         </div>
                                         <button
                                           onClick={() => {
-                                            setFlagClaimText(claimText);
+                                            setFlagClaimText(cleanClaim);
                                             setIsFlagModalOpen(true);
                                           }}
                                           className="dash-icon-btn"
                                           title="Flag claim (wrong or unsupported)"
+                                          style={{ flexShrink: 0 }}
                                         >
                                           <Flag size={13} color="var(--text-muted)" />
                                         </button>
                                       </div>
                                     );
-                                  } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                                    return (
-                                      <div key={lineIdx} className="dash-list-item">
-                                        {trimmed.replace(/^[-*]\s*/, '')}
-                                      </div>
-                                    );
-                                  } else if (trimmed.startsWith('  - ')) {
+                                  }
+
+                                  // Citation Quotes under claims (e.g. `  - [private] ...` or `[private] ... — "..."`)
+                                  if (
+                                    trimmed.startsWith('  - ') ||
+                                    trimmed.startsWith('- [private]') ||
+                                    trimmed.startsWith('- [web]') ||
+                                    trimmed.startsWith('• [private]') ||
+                                    trimmed.startsWith('• [web]') ||
+                                    (trimmed.includes(' — ') && (trimmed.includes('[private]') || trimmed.includes('[web]')))
+                                  ) {
+                                    const parsed = parseAndHumanizeCitationLine(trimmed);
+                                    if (!parsed.quote) return null;
+
                                     return (
                                       <div
                                         key={lineIdx}
                                         style={{
-                                          marginLeft: '16px',
-                                          fontSize: '0.8rem',
-                                          fontStyle: 'italic',
-                                          color: 'var(--text-muted)',
-                                          borderLeft: '2px solid rgba(16, 185, 129, 0.4)',
-                                          paddingLeft: '8px',
-                                          marginTop: '2px',
+                                          marginLeft: '12px',
+                                          padding: '8px 12px',
+                                          borderRadius: '6px',
+                                          background: 'rgba(255, 255, 255, 0.02)',
+                                          borderLeft: `2px solid ${parsed.sourceClass === 'web' ? '#06b6d4' : '#10b981'}`,
+                                          marginTop: '4px',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '4px',
+                                          maxWidth: '100%',
+                                          overflowWrap: 'anywhere',
+                                          wordBreak: 'break-word',
                                         }}
                                       >
-                                        {trimmed.replace(/^\s*-\s*/, '')}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
+                                          <span
+                                            style={{
+                                              color: parsed.sourceClass === 'web' ? '#06b6d4' : '#10b981',
+                                              fontWeight: 600,
+                                              textTransform: 'uppercase',
+                                            }}
+                                          >
+                                            {parsed.sourceClass === 'web' ? 'Web Source' : 'Your Files'}
+                                          </span>
+                                          {parsed.sourceLabel && (
+                                            <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                              &bull; {parsed.sourceLabel}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <blockquote
+                                          style={{
+                                            fontSize: '0.82rem',
+                                            fontStyle: 'italic',
+                                            color: 'var(--text-muted)',
+                                            margin: 0,
+                                            lineHeight: '1.5',
+                                            overflowWrap: 'anywhere',
+                                            wordBreak: 'break-word',
+                                          }}
+                                        >
+                                          &ldquo;{parsed.quote}&rdquo;
+                                        </blockquote>
                                       </div>
                                     );
                                   }
+
+                                  // Action item checkboxes (e.g. `- [ ] ...`)
+                                  if (trimmed.startsWith('- [ ] ') || trimmed.startsWith('- [x] ')) {
+                                    const isDone = trimmed.startsWith('- [x] ');
+                                    const actionText = cleanHtmlAndTracking(trimmed.replace(/^-\s*\[[ xX]?\]\s*/, ''));
+                                    if (!actionText) return null;
+
+                                    return (
+                                      <div
+                                        key={lineIdx}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'flex-start',
+                                          gap: '8px',
+                                          padding: '6px 10px',
+                                          borderRadius: '6px',
+                                          background: 'var(--card-bg-subtle)',
+                                          border: '1px solid var(--card-border)',
+                                          fontSize: '0.86rem',
+                                          color: 'var(--text)',
+                                          overflowWrap: 'anywhere',
+                                          wordBreak: 'break-word',
+                                        }}
+                                      >
+                                        <CheckSquare size={15} color={isDone ? '#10b981' : 'var(--text-muted)'} style={{ marginTop: '2px', flexShrink: 0 }} />
+                                        <span style={{ textDecoration: isDone ? 'line-through' : 'none', color: isDone ? 'var(--text-muted)' : 'var(--text)' }}>
+                                          {actionText}
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+
+                                  // Bullet points
+                                  if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                                    const cleanText = cleanHtmlAndTracking(trimmed.replace(/^[-*]\s*/, ''));
+                                    if (!cleanText) return null;
+
+                                    return (
+                                      <div key={lineIdx} className="dash-list-item" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                                        {cleanText}
+                                      </div>
+                                    );
+                                  }
+
+                                  // Plain text paragraphs
+                                  const cleanParagraph = cleanHtmlAndTracking(trimmed);
+                                  if (!cleanParagraph) return null;
+
                                   return (
-                                    <p key={lineIdx} style={{ fontSize: '0.88rem', lineHeight: '1.6', color: 'var(--text)' }}>
-                                      {trimmed}
+                                    <p key={lineIdx} style={{ fontSize: '0.88rem', lineHeight: '1.6', color: 'var(--text)', margin: '4px 0', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                                      {cleanParagraph}
                                     </p>
                                   );
                                 })}
@@ -2637,9 +2744,13 @@ export default function DashboardPage() {
                             </div>
                           );
                         }
+
+                        const cleanBlock = cleanHtmlAndTracking(block);
+                        if (!cleanBlock) return null;
+
                         return (
-                          <p key={idx} style={{ fontSize: '0.88rem', lineHeight: '1.6', color: 'var(--text)' }}>
-                            {block}
+                          <p key={idx} style={{ fontSize: '0.88rem', lineHeight: '1.6', color: 'var(--text)', margin: '8px 0', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                            {cleanBlock}
                           </p>
                         );
                       })}
@@ -2687,69 +2798,80 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {briefDetail.citations.map((c: any, idx: number) => (
-                        <div
-                          key={c.id || idx}
-                          style={{
-                            padding: '12px 14px',
-                            borderRadius: '8px',
-                            background: 'var(--card-bg-subtle)',
-                            border: '1px solid var(--card-border)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '6px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span
-                              className="dash-badge"
-                              style={{
-                                background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                color: c.source_class === 'web' ? '#06b6d4' : '#10b981',
-                                border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
-                                fontWeight: 700,
-                              }}
-                            >
-                              [{c.source_class || 'private'}] &bull; {c.citation_type || 'support'}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setFlagClaimText(c.quote || '');
-                                setFlagCitationId(c.id);
-                                setIsFlagModalOpen(true);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontSize: '0.72rem',
-                                color: 'var(--text-muted)',
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              <Flag size={12} />
-                              <span>Flag Citation</span>
-                            </button>
-                          </div>
-                          <blockquote
+                      {briefDetail.citations.map((c: any, idx: number) => {
+                        const cleanQuoteText = cleanHtmlAndTracking(c.quote || '');
+                        const sourceLabel = humanizeSourceLabel(c.url || c.source_id, c.source_class);
+
+                        return (
+                          <div
+                            key={c.id || idx}
                             style={{
-                              fontSize: '0.85rem',
-                              fontStyle: 'italic',
-                              color: 'var(--text)',
-                              borderLeft: `2px solid ${c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
-                              paddingLeft: '10px',
-                              margin: '4px 0',
+                              padding: '14px 16px',
+                              borderRadius: '10px',
+                              background: 'var(--card-bg-subtle)',
+                              border: '1px solid var(--card-border)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px',
+                              maxWidth: '100%',
+                              overflowWrap: 'anywhere',
+                              wordBreak: 'break-word',
                             }}
                           >
-                            “{c.quote}”
-                          </blockquote>
-                          <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
-                            ID: {c.id} {c.url ? `• Source: ${c.url}` : ''}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                              <span
+                                className="dash-badge"
+                                style={{
+                                  background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                  color: c.source_class === 'web' ? '#06b6d4' : '#10b981',
+                                  border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {c.source_class === 'web' ? 'Web Source' : 'Your Files'} &bull; {c.citation_type || 'support'}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setFlagClaimText(cleanQuoteText);
+                                  setFlagCitationId(c.id);
+                                  setIsFlagModalOpen(true);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.72rem',
+                                  color: 'var(--text-muted)',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <Flag size={12} />
+                                <span>Flag Citation</span>
+                              </button>
+                            </div>
+                            <blockquote
+                              style={{
+                                fontSize: '0.85rem',
+                                fontStyle: 'italic',
+                                color: 'var(--text)',
+                                borderLeft: `2px solid ${c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
+                                paddingLeft: '10px',
+                                margin: '4px 0',
+                                lineHeight: '1.55',
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              &ldquo;{cleanQuoteText}&rdquo;
+                            </blockquote>
+                            <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                              Source: {sourceLabel}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
