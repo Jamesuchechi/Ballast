@@ -2,6 +2,7 @@ import type {
   BriefMode,
   DraftBrief,
   RetrievedQuote,
+  ConflictResolutionMemory,
 } from "./types";
 import { formatDelimitedSources, type SourceBlock } from "./sourceFormatter";
 import { extractJsonFromLlm } from "./llm";
@@ -16,6 +17,7 @@ export interface WriterOptions {
     as_of?: string;
     summary?: string;
   } | null;
+  resolvedConflicts?: ConflictResolutionMemory[];
   llmCall?: (prompt: string, systemPrompt: string) => Promise<string>;
 }
 
@@ -25,7 +27,7 @@ export interface WriterOptions {
  * Source corpus is passed ONLY as delimited XML data blocks, never merged into instructions (NFR1.1).
  */
 export async function runWriter(options: WriterOptions): Promise<DraftBrief> {
-  const { question, mode, sources, retrieved, parentBrief, llmCall } = options;
+  const { question, mode, sources, retrieved, parentBrief, resolvedConflicts, llmCall } = options;
 
   if (llmCall) {
     const delimitedSources = formatDelimitedSources(sources);
@@ -42,6 +44,7 @@ Rules:
 - In "evidence", each claim MUST cite the relevant quote ID(s) from the retrieved quotes.
 - What I used: categorize source IDs accurately into private, web, and unchecked.
 - If a prior brief context is provided, highlight what progressed, changed, or slipped since that prior brief.
+- If user-confirmed conflict resolutions are provided, treat those confirmed facts as authoritative ground truth.
 - Output strictly valid JSON matching the DraftBrief structure:
 {
   "title": "Brief: <concise question or title>",
@@ -64,7 +67,14 @@ Prior Summary: ${parentBrief.summary || 'None'}
 Task: Analyze what progressed, changed, or slipped since the last brief.`
       : '';
 
-    const userPrompt = `Question: ${question}${parentBriefSection}
+    const resolvedConflictsSection = resolvedConflicts && resolvedConflicts.length > 0
+      ? `\n\nPrior User-Confirmed Resolutions (Authoritative ground truth confirmed by user):\n` +
+        resolvedConflicts
+          .map((rc) => `- Authoritative Source confirmed by user (${rc.connector || 'source'}): "${rc.quote || rc.user_note || rc.topic}"`)
+          .join('\n')
+      : '';
+
+    const userPrompt = `Question: ${question}${parentBriefSection}${resolvedConflictsSection}
 
 Retrieved Grounding Quotes:
 ${retrievedQuotesList || "None"}

@@ -70,12 +70,33 @@ export interface DraftBrief {
   sections: DraftBriefSections;
 }
 
+export type ConflictResolutionStatus =
+  | "unresolved"
+  | "confirmed_accurate"
+  | "dismissed"
+  | "superseded";
+
+export interface ConflictResolutionMemory {
+  id: string;
+  workspace_id: string;
+  brief_id?: string | null;
+  citation_id?: string | null;
+  source_id?: string | null;
+  topic: string;
+  resolution_type: "confirmed_accurate" | "dismissed" | "superseded";
+  user_note?: string | null;
+  quote?: string | null;
+  connector?: string | null;
+  created_at: string;
+}
+
 export interface CriticInput {
   question: string;
   mode: BriefMode;
   retrieved: RetrievedQuote[];
   draft_brief: DraftBrief;
   unchecked: UncheckedConnector[];
+  resolved_conflicts?: ConflictResolutionMemory[];
 }
 
 export type DropReason = "unsourced" | "off-mode" | "injection" | "other";
@@ -122,6 +143,10 @@ export interface CitationRecord {
   source_id?: string | null;
   url?: string | null;
   claim_span?: ClaimSpan;
+  resolution_status?: ConflictResolutionStatus;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  resolution_note?: string | null;
 }
 
 export interface PublishedEvidenceItem {

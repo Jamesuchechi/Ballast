@@ -288,17 +288,36 @@ export function ActionDraftCard({ act, onApprove, disabled = false }: ActionDraf
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: 'var(--surface-hover)',
+                  background: payload.resolved_contact ? 'rgba(99, 102, 241, 0.12)' : 'var(--surface-hover)',
                   padding: '4px 10px',
                   borderRadius: '6px',
                   fontSize: '0.78rem',
                   color: 'var(--text)',
-                  border: '1px solid var(--border)',
+                  border: payload.resolved_contact ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--border)',
                 }}
               >
-                <User size={12} color="var(--text-muted)" />
+                <User size={12} color={payload.resolved_contact ? '#818cf8' : 'var(--text-muted)'} />
                 <span style={{ color: 'var(--text-muted)' }}>To:</span>
                 <span style={{ fontWeight: 500 }}>{to}</span>
+                {payload.resolved_contact && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      padding: '1px 5px',
+                      borderRadius: '3px',
+                      background: 'rgba(99, 102, 241, 0.2)',
+                      color: '#a5b4fc',
+                      marginLeft: '2px',
+                    }}
+                    title={`Auto-resolved from ${payload.resolved_contact.source} contacts (matched "${payload.resolved_contact.query}")`}
+                  >
+                    {payload.resolved_contact.source === 'calendar'
+                      ? '📅 Calendar Contact'
+                      : payload.resolved_contact.source === 'gmail'
+                      ? '✉️ Gmail Contact'
+                      : '👤 Workspace Member'}
+                  </span>
+                )}
               </div>
             )}
 

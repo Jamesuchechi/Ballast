@@ -101,9 +101,12 @@ CREATE TABLE IF NOT EXISTS briefs (
   error TEXT,
   summary TEXT,
   template_version TEXT NOT NULL DEFAULT 'v1',
+  starred BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE briefs ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE briefs ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_briefs_starred ON briefs(workspace_id, starred);
 
 
 -- 7. citations
@@ -117,6 +120,28 @@ CREATE TABLE IF NOT EXISTS citations (
   quote TEXT NOT NULL,
   source_id UUID REFERENCES sources(id) ON DELETE SET NULL,
   url TEXT,
+  resolution_status TEXT NOT NULL DEFAULT 'unresolved',
+  resolved_at TIMESTAMPTZ,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  resolution_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE citations ADD COLUMN IF NOT EXISTS resolution_status TEXT NOT NULL DEFAULT 'unresolved';
+ALTER TABLE citations ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+ALTER TABLE citations ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE citations ADD COLUMN IF NOT EXISTS resolution_note TEXT;
+
+-- 7b. conflict_resolutions (Feature E9)
+CREATE TABLE IF NOT EXISTS conflict_resolutions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  brief_id UUID REFERENCES briefs(id) ON DELETE CASCADE,
+  citation_id UUID REFERENCES citations(id) ON DELETE CASCADE,
+  source_id UUID REFERENCES sources(id) ON DELETE SET NULL,
+  topic TEXT NOT NULL,
+  resolution_type TEXT NOT NULL CHECK (resolution_type IN ('confirmed_accurate', 'dismissed', 'superseded')),
+  user_note TEXT,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -241,5 +266,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_workspace ON notifications(workspac
 CREATE INDEX IF NOT EXISTS idx_notifications_active ON notifications(workspace_id, created_at DESC) WHERE dismissed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);
 CREATE INDEX IF NOT EXISTS idx_access_logs_source ON access_logs(source_id);
-CREATE INDEX IF NOT EXISTS idx_access_logs_workspace ON access_logs(workspace_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_tokens_workspace_connector_active ON oauth_tokens(workspace_id, connector) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_conflict_resolutions_workspace ON conflict_resolutions(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conflict_resolutions_citation ON conflict_resolutions(citation_id);
+CREATE INDEX IF NOT EXISTS idx_citations_resolution ON citations(brief_id, resolution_status);

@@ -419,22 +419,84 @@ Previously, Ballast had no mechanism to share published briefs externally with c
 5. Integrated [`ShareBriefModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ShareBriefModal.tsx) into the dashboard brief viewer action bar with duration presets, 1-click clipboard copy, and public preview links.
 6. Verified with 100% pass rate in `test/brief_sharing.test.ts` (6/6 passed).
 
-### E6. **Mention @names in Actions**
-When the Writer proposes an action like "Draft email to Elena", auto-resolve the recipient from calendar/Gmail contacts if possible. The action executor already builds RFC 2822 messages — just needs the `to` to be resolved.
+### E6. **Mention @names in Actions** [RESOLVED]
+**Files:** [`contactResolver.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/contactResolver.ts), [`actionExecutor.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/actionExecutor.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`ActionDraftCard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ActionDraftCard.tsx), [`action_mention_resolution.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/action_mention_resolution.test.ts)
+Previously, when the Writer proposed action drafts like "Draft email to Elena" or used `@name` mentions (e.g. `@Elena`, `@alex.chen`), the action parser either kept unresolved name strings or defaulted `to` to `'team@example.com'`, leading to unusable or malformed email drafts.
 
-### E7. **Brief Bookmarks / Star**
-Let users mark briefs as important. A simple `starred BOOLEAN` column on `briefs` and a "starred" filter in the brief list. Low effort, high perceived value.
+**Resolution:**
+1. Created contact resolution engine [`src/core/contactResolver.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/contactResolver.ts) providing:
+   - `getWorkspaceContacts(workspaceId)`: Aggregates contacts across Gmail messages (`meta.from`, `meta.to`), Calendar events (`meta.organizer`, `meta.attendees`), and registered workspace members.
+   - `resolveContactEmail(queryName, contacts)`: Performs hierarchical matching across exact email, full name, username/local part (`alex.chen`), first name (`Elena`), and token matches.
+   - `extractMentionedNames(text)`: Detects explicit `@mentions` and recipient phrases (*"Draft email to Elena"*, *"to=@alex.chen"*).
+2. Integrated auto-resolution into [`src/core/actionExecutor.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/actionExecutor.ts):
+   - `parseProposedAction`: Auto-resolves `@names` and recipient targets into validated RFC 2822 email addresses and records `resolved_contact` metadata.
+   - `executeAction`: Ensures un-resolved recipients are matched against workspace contacts before assembling base64 MIME envelopes.
+3. Updated [`src/core/pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts) to query workspace contacts and pass them into action proposing during brief publication.
+4. Upgraded [`src/components/dashboard/ActionDraftCard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ActionDraftCard.tsx) to display resolved recipient names, emails, and source badges (📅 Calendar Contact, ✉️ Gmail Contact, 👤 Workspace Member).
+5. Verified with 100% pass rate in `test/action_mention_resolution.test.ts` (6/6 passed) and full regression verification across `test/action_execution.test.ts` and `test/action_routing.test.ts`.
 
-### E8. **Source health dashboard**
-A view showing all connected sources, their last sync time, last error, and how many chunks each has indexed. `access_logs` already tracks this — it just needs a UI surface. Users need visibility into what the system knows.
+### E7. **Brief Bookmarks / Star** [RESOLVED]
+**Files:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`briefs/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/route.ts), [`briefs/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/route.ts), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`brief_star_bookmark.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/brief_star_bookmark.test.ts)
+Previously, users could not mark high-priority briefs as bookmarks or filter the workspace history to display only starred research documents.
 
-### E9. **Conflict resolution workflow**
-When the Critic flags a conflict (`citation_type=conflict`), there's no UI for the user to mark which source is correct. Adding a "I confirm Source A is accurate" action would:
-1. Update the flag with resolution
-2. Feed that decision back as context in the next scheduled brief
+**Resolution:**
+1. Added `starred BOOLEAN NOT NULL DEFAULT false` column to `briefs` table in [`src/db/schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql) with composite index `idx_briefs_starred` on `(workspace_id, starred)`.
+2. Enhanced `GET /api/briefs` to return `starred` status and support `?starred=true` filtering.
+3. Implemented `PATCH /api/briefs/[id]` in [`src/app/api/briefs/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/route.ts) allowing users to star/unstar briefs with full workspace authorization checks.
+4. Upgraded dashboard UI in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx):
+   - Added **Starred** filter tab (`⭐ Starred (N)`) in the brief selector header with real-time count.
+   - Added interactive star icon toggle on individual brief selector pills for 1-click bookmarking.
+   - Added prominent **Star / Bookmark Brief** toggle button in the main brief view action bar next to Export and Share actions.
+   - Implemented optimistic UI state updates with automatic error rollback.
+5. Verified with 100% pass rate in `test/brief_star_bookmark.test.ts` (6/6 passed).
 
-### E10. **LLM response caching (Redis)**
-Brief questions that are identical or near-identical within a 24-hour window could skip re-generation and serve from cache. This would dramatically reduce LLM cost for scheduled daily briefs asking the same question.
+### E8. **Source health dashboard** [RESOLVED]
+**Files:** [`src/app/api/sources/health/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/health/route.ts), [`src/components/dashboard/SourceHealthDashboard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/SourceHealthDashboard.tsx), [`src/components/dashboard/Sidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/Sidebar.tsx), [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+Previously, users lacked real-time visibility into the health of connected integrations, vector chunk indexing density, last synchronization timestamps, and sync failure diagnostics.
+
+**Resolution:**
+1. Created `GET /api/sources/health` API endpoint in [`src/app/api/sources/health/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/health/route.ts) that aggregates:
+   - System-wide knowledge summary metrics (total sources, total indexed vector chunks, active vs healthy vs error connector counts, and latest sync timestamp).
+   - Per-connector status breakdowns for all supported services (`gmail`, `calendar`, `drive`, `github`, `slack`, `notion`, `upload`, `web`).
+   - Recent ingestion, indexing, and sync access events from `access_logs`.
+   - Comprehensive source records with individual chunk counts, trust boundaries, and error messages.
+2. Built rich, interactive `SourceHealthDashboard` component in [`src/components/dashboard/SourceHealthDashboard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/SourceHealthDashboard.tsx):
+   - **Top KPI Cards**: Displays overall system health badge, ingested sources count, indexed vector chunk metrics (with average chunks/source), and relative last-sync freshness.
+   - **Per-Connector Health Grid**: Individual service cards with health badges (`Healthy`, `Sync Error`, `Not Configured`), chunk metrics, last error alerts, and 1-click on-demand re-sync triggers.
+   - **Live Ingestion & Sync Audit Feed**: Real-time event log from `access_logs` tracking document syncs, indexing passes, and retrieval operations.
+   - **Indexed Sources & Chunk Inspector Table**: Searchable, filterable table with connector pills, trust boundary tags, error indicators, deletion controls, and an interactive **Vector Chunk Inspector Modal** showing raw chunk text, character counts, and ordinals.
+3. Added **Source Health & Index** navigation item in [`src/components/dashboard/Sidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/Sidebar.tsx) and linked between Marketplace and Source Health in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+4. Verified with automated test suite in `test/source_health_dashboard.test.ts` (5/5 passed) and full regression testing across E4-E8 (31/31 passed).
+
+### E9. **Conflict resolution workflow** (✅ Implemented & Verified)
+When the Critic flags a conflict (`citation_type=conflict`), there was previously no UI for the user to mark which source is correct.
+**Files:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`015_add_conflict_resolutions.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/015_add_conflict_resolutions.sql), [`conflictResolver.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/conflictResolver.ts), [`citations/[id]/resolve/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/citations/%5Bid%5D/resolve/route.ts), [`briefs/[id]/conflicts/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/conflicts/route.ts), [`RightSidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/RightSidebar.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`conflict_resolution_workflow.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/conflict_resolution_workflow.test.ts)
+
+**Resolution:**
+1. Added resolution tracking columns to `citations` (`resolution_status`, `resolved_at`, `resolved_by`, `resolution_note`) and created `conflict_resolutions` table with workspace indexes via migration `015_add_conflict_resolutions.sql`.
+2. Created core `conflictResolver.ts` module with `resolveConflictCitation` (updating citation state, writing audit log to `access_logs`, and recording durable workspace conflict memory), `getWorkspaceConflictMemory`, and `getBriefConflicts`.
+3. Created authenticated API endpoints `POST /api/citations/[id]/resolve` (supporting `'confirmed_accurate'`, `'dismissed'`, and `'superseded'`) and `GET /api/briefs/[id]/conflicts`.
+4. Connected workspace conflict memory into pipeline generation (`pipelineWorker.ts`):
+   - Passed verified conflict memory to `runWriter` to ground subsequent answers on user-verified authoritative facts.
+   - Connected conflict memory to `runCritic` (both LLM prompt and deterministic evaluator) to prevent re-flagging previously resolved discrepancies as active conflicts.
+5. Built interactive conflict resolution UI in `RightSidebar.tsx` (Context Inspector) and inline in `page.tsx` (Evidence Citations):
+   - Added amber `⚠ Discrepancy` alert pill with 1-click **"Confirm Accurate"** and **"Dismiss"** buttons.
+   - Added emerald `✓ Confirmed Authoritative` badge with notice: *"Saved to workspace memory for future briefs"*.
+6. Verified with automated test suite in `test/conflict_resolution_workflow.test.ts` (6/6 passed) and regression test suite across Phase 6 (6/6 passed).
+
+### E10. **LLM response caching (Redis)** (✅ Implemented & Verified)
+Brief questions that are identical or near-identical within a 24-hour window could skip re-generation and serve from cache, dramatically reducing LLM cost for scheduled daily briefs asking the same question.
+**Files:** [`llmCache.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llmCache.ts), [`llm.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llm.ts), [`analytics/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/analytics/route.ts), [`llm_redis_cache.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/llm_redis_cache.test.ts)
+
+**Resolution:**
+1. Created dedicated [`src/core/llmCache.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llmCache.ts) module with deterministic collision-resistant SHA-256 cache key hashing (`computeLLMCacheKey`) over prompt text, system instructions, role, model, and temperature.
+2. Built 24-hour TTL caching (`DEFAULT_LLM_CACHE_TTL_SECONDS = 86400`) backed by shared `ioredis` client with transparent in-memory LRU fallback for offline/development environments.
+3. Integrated caching directly into multi-provider fallback layer in [`src/core/llm.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/llm.ts):
+   - Transparent cache lookup on every `llmCall` before invoking external APIs.
+   - Asynchronous cache population on successful generation with token usage and model metadata.
+   - Support for `skipCache: true` and custom `cacheTTL` options in `LLMCallOptions`.
+4. Exposed real-time cache telemetry (hits, misses, hit rate percentage) via `getLLMCacheStats()` in the Analytics API [`src/app/api/analytics/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/analytics/route.ts).
+5. Verified with automated test suite in `test/llm_redis_cache.test.ts` (6/6 passed) and full regression tests across `test/cost_calculation.test.ts` (6/6 passed) and `test/llm.test.ts` (7/7 passed).
 
 ### E11. **Connector sync status webhooks (outbound)**
 Let users configure a webhook URL that Ballast calls when a brief is published. This enables integrations with tools like Make, Zapier, or n8n without building native integrations.

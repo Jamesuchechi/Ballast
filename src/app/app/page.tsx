@@ -44,10 +44,12 @@ import {
   Filter,
   CheckSquare,
   Share2,
+  Star,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { IntegrationsMarketplace, type ConnectorItem } from '@/components/dashboard/IntegrationsMarketplace';
+import { SourceHealthDashboard } from '@/components/dashboard/SourceHealthDashboard';
 import { ProfileView } from '@/components/dashboard/ProfileView';
 import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
 import { ShareBriefModal } from '@/components/dashboard/ShareBriefModal';
@@ -133,7 +135,7 @@ export default function DashboardPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationSteps, setGenerationSteps] = useState<any[]>([]);
   const [queryPrompt, setQueryPrompt] = useState('');
-  const [briefFilter, setBriefFilter] = useState<'all' | 'home' | 'world'>('all');
+  const [briefFilter, setBriefFilter] = useState<'all' | 'home' | 'world' | 'starred'>('all');
   const [actionLoading, setActionLoading] = useState(false);
   const [diffModalData, setDiffModalData] = useState<any>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
@@ -1267,11 +1269,39 @@ export default function DashboardPage() {
     return computeUnifiedDiff(briefDetail.parentBrief.markdown, currentBrief.markdown);
   }, [briefDetail, currentBrief]);
 
-  // Filtered briefs for selector tabs
+  // Filtered briefs for selector tabs (including Starred E7)
   const filteredBriefs = useMemo(() => {
+    if (briefFilter === 'starred') return briefs.filter((b) => !!b.starred);
     if (briefFilter === 'all') return briefs;
     return briefs.filter((b) => (b.mode || 'home') === briefFilter);
   }, [briefs, briefFilter]);
+
+  const handleToggleStar = async (briefId: string, currentStarred: boolean) => {
+    try {
+      const nextStarred = !currentStarred;
+      // Optimistic state update
+      setBriefs((prev) => prev.map((b) => (b.id === briefId ? { ...b, starred: nextStarred } : b)));
+      if (briefDetail?.brief?.id === briefId) {
+        setBriefDetail((prev: any) => prev ? { ...prev, brief: { ...prev.brief, starred: nextStarred } } : prev);
+      }
+
+      const res = await fetch(`/api/briefs/${briefId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ starred: nextStarred }),
+      });
+
+      if (!res.ok) {
+        // Revert on error
+        setBriefs((prev) => prev.map((b) => (b.id === briefId ? { ...b, starred: currentStarred } : b)));
+        if (briefDetail?.brief?.id === briefId) {
+          setBriefDetail((prev: any) => prev ? { ...prev, brief: { ...prev.brief, starred: currentStarred } } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle star status:', err);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -1735,6 +1765,19 @@ export default function DashboardPage() {
       onToggleTheme={toggleTheme}
       isDemo={isDemo}
       onWorkspaceSwitched={refreshAllWorkspaceData}
+      onResolveConflict={async (citationId, resolutionType) => {
+        if (selectedBriefId) {
+          try {
+            const res = await fetch(`/api/briefs/${selectedBriefId}`);
+            if (res.ok) {
+              const data = await res.json();
+              setBriefDetail(data);
+            }
+          } catch (err) {
+            console.error('Failed to reload brief detail:', err);
+          }
+        }
+      }}
     >
       {/* ======================================================== */}
       {/* SECTION: BRIEFS ARCHIVE                                   */}
@@ -2332,6 +2375,27 @@ export default function DashboardPage() {
                     >
                       World ({briefs.filter((b) => b.mode === 'world').length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setBriefFilter('starred')}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        border: '1px solid',
+                        borderColor: briefFilter === 'starred' ? '#f59e0b' : 'var(--card-border)',
+                        background: briefFilter === 'starred' ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                        color: briefFilter === 'starred' ? '#f59e0b' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Star size={11} fill={briefFilter === 'starred' ? '#f59e0b' : 'none'} />
+                      <span>Starred ({briefs.filter((b) => !!b.starred).length})</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2373,6 +2437,25 @@ export default function DashboardPage() {
                             textAlign: 'left',
                           }}
                         >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleStar(b.id, !!b.starred);
+                            }}
+                            title={b.starred ? 'Unstar brief' : 'Star brief (E7)'}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              color: b.starred ? '#f59e0b' : 'var(--text-muted)',
+                            }}
+                          >
+                            <Star size={13} fill={b.starred ? '#f59e0b' : 'none'} />
+                          </button>
                           <span
                             style={{
                               fontSize: '0.65rem',
@@ -2622,6 +2705,21 @@ export default function DashboardPage() {
                       >
                         <FileText size={14} />
                         <span>Notion</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStar(currentBrief.id, !!currentBrief.starred)}
+                        className="dash-btn-secondary"
+                        style={{
+                          color: currentBrief.starred ? '#f59e0b' : 'var(--text)',
+                          borderColor: currentBrief.starred ? 'rgba(245, 158, 11, 0.4)' : undefined,
+                          background: currentBrief.starred ? 'rgba(245, 158, 11, 0.12)' : undefined,
+                        }}
+                        title={currentBrief.starred ? 'Remove bookmark' : 'Bookmark this brief as important (E7)'}
+                      >
+                        <Star size={14} fill={currentBrief.starred ? '#f59e0b' : 'none'} />
+                        <span>{currentBrief.starred ? 'Starred' : 'Star'}</span>
                       </button>
 
                       <button
@@ -3004,37 +3102,130 @@ export default function DashboardPage() {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                              <span
-                                className="dash-badge"
-                                style={{
-                                  background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                  color: c.source_class === 'web' ? '#06b6d4' : '#10b981',
-                                  border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {c.source_class === 'web' ? 'Web Source' : 'Your Files'} &bull; {c.citation_type || 'support'}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  setFlagClaimText(cleanQuoteText);
-                                  setFlagCitationId(c.id);
-                                  setIsFlagModalOpen(true);
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  fontSize: '0.72rem',
-                                  color: 'var(--text-muted)',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Flag size={12} />
-                                <span>Flag Citation</span>
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span
+                                  className="dash-badge"
+                                  style={{
+                                    background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                    color: c.source_class === 'web' ? '#06b6d4' : '#10b981',
+                                    border: `1px solid ${c.source_class === 'web' ? 'rgba(6, 182, 212, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {c.source_class === 'web' ? 'Web Source' : 'Your Files'}
+                                </span>
+
+                                {c.citation_type === 'conflict' ? (
+                                  c.resolution_status === 'confirmed_accurate' ? (
+                                    <span
+                                      className="dash-badge"
+                                      style={{
+                                        background: 'rgba(16, 185, 129, 0.15)',
+                                        color: '#34d399',
+                                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ✓ Confirmed Authoritative
+                                    </span>
+                                  ) : c.resolution_status === 'dismissed' ? (
+                                    <span
+                                      className="dash-badge"
+                                      style={{
+                                        background: 'rgba(148, 163, 184, 0.15)',
+                                        color: 'var(--text-muted)',
+                                        border: '1px solid rgba(148, 163, 184, 0.3)',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Dismissed
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="dash-badge"
+                                      style={{
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        color: '#f59e0b',
+                                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ⚠ Conflict Discrepancy
+                                    </span>
+                                  )
+                                ) : (
+                                  <span
+                                    className="dash-badge"
+                                    style={{
+                                      background: 'rgba(16, 185, 129, 0.15)',
+                                      color: '#10b981',
+                                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    support
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {c.citation_type === 'conflict' && (!c.resolution_status || c.resolution_status === 'unresolved') && c.id && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const res = await fetch(`/api/citations/${encodeURIComponent(c.id)}/resolve`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ resolutionType: 'confirmed_accurate' }),
+                                        });
+                                        if (res.ok && selectedBriefId) {
+                                          const bRes = await fetch(`/api/briefs/${selectedBriefId}`);
+                                          if (bRes.ok) setBriefDetail(await bRes.json());
+                                        }
+                                      } catch (err) {
+                                        console.error('Error confirming conflict citation:', err);
+                                      }
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 600,
+                                      color: '#fff',
+                                      background: '#10b981',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      padding: '3px 8px',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    <span>Confirm Accurate</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => {
+                                    setFlagClaimText(cleanQuoteText);
+                                    setFlagCitationId(c.id);
+                                    setIsFlagModalOpen(true);
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '0.72rem',
+                                    color: 'var(--text-muted)',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <Flag size={12} />
+                                  <span>Flag Citation</span>
+                                </button>
+                              </div>
                             </div>
                             <blockquote
                               style={{
@@ -3282,6 +3473,23 @@ export default function DashboardPage() {
             'Real-time items synced from your connected accounts (Gmail, Google Calendar, Google Drive).'
           )}
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* SECTION: SOURCE HEALTH & KNOWLEDGE INDEX DASHBOARD       */}
+      {/* ======================================================== */}
+      {activeSection === 'source-health' && (
+        <SourceHealthDashboard
+          onNavigateMarketplace={() => setActiveSection('sources')}
+          onSyncConnector={async (connectorName) => {
+            const conn = connectors.find((c) => c.id === connectorName || c.name.toLowerCase() === connectorName.toLowerCase());
+            if (conn) {
+              await handleSyncConnector(conn);
+            } else {
+              await fetch(`/api/connectors/${connectorName}/sync`, { method: 'POST' }).catch(() => {});
+            }
+          }}
+        />
       )}
 
       {/* ======================================================== */}

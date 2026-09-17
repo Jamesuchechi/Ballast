@@ -27,6 +27,7 @@ import {
   User as UserIcon,
   Check,
   Building,
+  Layers,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { BallastLogo } from '@/components/brand/BallastLogo';
@@ -227,6 +228,11 @@ export function Sidebar({
           count: sourcesCount > 0 ? `${sourcesCount} live` : '0',
           badgeColor: sourcesCount > 0 ? 'rgba(16, 185, 129, 0.12)' : undefined,
           badgeText: sourcesCount > 0 ? '#10b981' : undefined,
+        },
+        {
+          id: 'source-health',
+          label: 'Source Health & Index',
+          icon: Layers,
         },
         {
           id: 'schedules',

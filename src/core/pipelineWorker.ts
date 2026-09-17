@@ -6,9 +6,11 @@ import { runCritic } from './critic';
 import { llmCall, estimateLLMCost, type LLMUsage } from './llm';
 import { assembleBrief } from './assembler';
 import { parseProposedAction } from './actionExecutor';
+import { getWorkspaceContacts } from './contactResolver';
 import { renderAndStorePdf } from './pdfRenderer';
 import { createNotification } from './notifications';
 import { sendBriefEmailNotification } from './emailService';
+import { getWorkspaceConflictMemory } from './conflictResolver';
 import type {
   BriefV1,
   CriticInput,
@@ -227,6 +229,9 @@ export async function processQueuedBrief(
       }
     };
 
+    // Load workspace conflict memory (Feature E9)
+    const resolvedConflicts = await getWorkspaceConflictMemory(workspaceId);
+
     // Step: drafting
     await appendProgress(briefId, 'drafting', 'drafting brief sections…');
     const draft = await runWriter({
@@ -235,6 +240,7 @@ export async function processQueuedBrief(
       sources: allSources,
       retrieved: allQuotes,
       parentBrief: parentBriefData,
+      resolvedConflicts,
       llmCall: (prompt, sysPrompt) =>
         llmCall(prompt, sysPrompt, { role: 'writer', onUsage: trackUsage }),
     });
@@ -263,6 +269,7 @@ export async function processQueuedBrief(
       retrieved: allQuotes,
       draft_brief: draft,
       unchecked: uncheckedList,
+      resolved_conflicts: resolvedConflicts,
     };
 
     const criticOut = await runCritic({
@@ -307,12 +314,15 @@ export async function processQueuedBrief(
     // Step: proposing_actions
     await appendProgress(briefId, 'proposing_actions', 'proposing action drafts…');
 
+    // Fetch workspace contacts for @name and recipient auto-resolution (E6)
+    const contacts = await getWorkspaceContacts(workspaceId);
+
     // Atomic persistence phase (D7): Wrap actions, citations, brief status, and runs telemetry in a transaction
     await withTransaction(async (txClient) => {
       // 1. Propose Actions
       if (sanitizedActions.length > 0) {
         for (const act of sanitizedActions) {
-          const parsed = parseProposedAction(act);
+          const parsed = parseProposedAction(act, { contacts, workspaceId });
           await txClient.query(
             `INSERT INTO actions (
               brief_id, workspace_id, type, payload

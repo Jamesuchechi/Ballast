@@ -4,6 +4,12 @@
  * role-based model dispatch (writer vs critic), exponential backoff, and typed errors.
  */
 
+import {
+  computeLLMCacheKey,
+  getCachedLLMResponse,
+  setCachedLLMResponse,
+} from './llmCache';
+
 export type LLMRole = 'writer' | 'critic';
 
 export interface LLMUsage {
@@ -24,6 +30,8 @@ export interface LLMCallOptions {
   maxTokens?: number;
   maxRetries?: number;
   preferredProvider?: 'gemini' | 'groq' | 'mistral' | 'openrouter';
+  skipCache?: boolean;
+  cacheTTL?: number;
   onUsage?: (usage: LLMUsage, meta: { provider: string; model: string }) => void;
 }
 
@@ -320,6 +328,27 @@ export async function llmCall(
 ): Promise<string> {
   const role = opts.role ?? 'writer';
   const maxRetries = opts.maxRetries ?? 2;
+  const skipCache = opts.skipCache ?? false;
+
+  // 1. Check Redis/in-memory cache unless skipCache is true (Feature E10)
+  const cacheKey = computeLLMCacheKey(prompt, systemPrompt, {
+    role,
+    temperature: opts.temperature,
+    preferredModel: opts.preferredProvider,
+  });
+
+  if (!skipCache) {
+    const cached = await getCachedLLMResponse(cacheKey);
+    if (cached && cached.text) {
+      if (opts.onUsage) {
+        opts.onUsage(cached.usage, {
+          provider: cached.provider,
+          model: cached.model,
+        });
+      }
+      return cached.text;
+    }
+  }
 
   // Build provider order with preferredProvider first if specified
   const order = [...DEFAULT_PROVIDER_ORDER];
@@ -361,6 +390,20 @@ export async function llmCall(
           if (result && result.text && result.text.trim().length > 0) {
             if (opts.onUsage) {
               opts.onUsage(result.usage, { provider: provider.name, model });
+            }
+            // Asynchronously store in 24-hour cache (Feature E10)
+            if (!skipCache) {
+              setCachedLLMResponse(
+                cacheKey,
+                {
+                  text: result.text,
+                  usage: result.usage,
+                  provider: provider.name,
+                  model,
+                  cachedAt: new Date().toISOString(),
+                },
+                opts.cacheTTL
+              ).catch(() => {});
             }
             return result.text;
           }
@@ -528,3 +571,14 @@ export function estimateLLMCost(
 
   return 0;
 }
+
+export {
+  computeLLMCacheKey,
+  getCachedLLMResponse,
+  setCachedLLMResponse,
+  getLLMCacheStats,
+  clearLLMCache,
+  DEFAULT_LLM_CACHE_TTL_SECONDS,
+  type CachedLLMPayload,
+  type LLMCacheStats,
+} from './llmCache';

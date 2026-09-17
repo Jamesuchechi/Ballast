@@ -10,14 +10,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const briefs = await query(
-      `SELECT id, workspace_id, parent_brief_id, question, mode, status, summary,
-              as_of, stale_after, progress, published_at, error, template_version, created_at
-       FROM briefs
-       WHERE workspace_id = $1
-       ORDER BY as_of DESC`,
-      [payload.workspaceId]
-    );
+    const { searchParams } = new URL(req.url);
+    const starredParam = searchParams.get('starred');
+    const modeParam = searchParams.get('mode');
+
+    let queryStr = `SELECT id, workspace_id, parent_brief_id, question, mode, status, summary,
+                           starred, as_of, stale_after, progress, published_at, error, template_version, created_at
+                    FROM briefs
+                    WHERE workspace_id = $1`;
+    const params: any[] = [payload.workspaceId];
+
+    if (starredParam === 'true') {
+      params.push(true);
+      queryStr += ` AND starred = $${params.length}`;
+    }
+
+    if (modeParam === 'home' || modeParam === 'world') {
+      params.push(modeParam);
+      queryStr += ` AND mode = $${params.length}`;
+    }
+
+    queryStr += ` ORDER BY as_of DESC`;
+
+    const briefs = await query(queryStr, params);
 
     return NextResponse.json({ briefs });
   } catch (err: any) {

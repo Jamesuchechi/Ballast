@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/db/client';
 import { getWorkspaceMonthlyBriefUsage, PLAN_LIMITS } from '@/core/usage';
+import { getLLMCacheStats } from '@/core/llmCache';
 
 export async function GET(req: NextRequest) {
   try {
@@ -190,6 +191,7 @@ export async function GET(req: NextRequest) {
         limit: monthlyBriefLimit,
         percent: quotaPercent,
       },
+      cache: await getLLMCacheStats(),
       timeline: timeline.map((t) => ({
         day: t.day,
         count: parseInt(t.count, 10),

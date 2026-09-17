@@ -74,3 +74,50 @@ export async function GET(
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const payload = await getAuthSession(req);
+
+    if (!payload || !payload.workspaceId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(id)) {
+      return NextResponse.json({ error: 'Brief not found' }, { status: 404 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    if (body.starred === undefined) {
+      return NextResponse.json({ error: 'Missing starred boolean value' }, { status: 400 });
+    }
+
+    const isStarred = Boolean(body.starred);
+
+    const updated = await queryOne(
+      `UPDATE briefs 
+       SET starred = $1 
+       WHERE id = $2 AND workspace_id = $3 
+       RETURNING *`,
+      [isStarred, id, payload.workspaceId]
+    );
+
+    if (!updated) {
+      return NextResponse.json({ error: 'Brief not found in workspace' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      brief: updated,
+    });
+  } catch (err: any) {
+    console.error('Update brief error:', err);
+    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
+  }
+}

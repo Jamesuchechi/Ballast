@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   ShieldCheck,
@@ -9,6 +9,11 @@ import {
   FileCheck,
   Lock,
   Activity,
+  CheckCircle2,
+  AlertTriangle,
+  Check,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { cleanHtmlAndTracking, humanizeSourceLabel } from '@/lib/formatters';
 
@@ -20,6 +25,7 @@ export interface RightSidebarProps {
   runs?: any;
   activeClaimHighlight?: string | null;
   onSelectCitation?: (citation: any) => void;
+  onResolveConflict?: (citationId: string, resolutionType: 'confirmed_accurate' | 'dismissed') => Promise<void> | void;
 }
 
 export function RightSidebar({
@@ -30,7 +36,47 @@ export function RightSidebar({
   runs,
   activeClaimHighlight,
   onSelectCitation,
+  onResolveConflict,
 }: RightSidebarProps) {
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolvedMap, setResolvedMap] = useState<Record<string, { status: string; note?: string }>>({});
+
+  const handleResolveConflictAction = async (
+    e: React.MouseEvent,
+    citationId: string,
+    resolutionType: 'confirmed_accurate' | 'dismissed'
+  ) => {
+    e.stopPropagation();
+    if (!citationId) return;
+
+    try {
+      setResolvingId(citationId);
+      const res = await fetch(`/api/citations/${encodeURIComponent(citationId)}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolutionType }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to resolve conflict');
+      }
+
+      setResolvedMap((prev) => ({
+        ...prev,
+        [citationId]: { status: resolutionType },
+      }));
+
+      if (onResolveConflict) {
+        await onResolveConflict(citationId, resolutionType);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error resolving conflict');
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   if (!isOpen) return null;
 
   /** Format large token numbers into readable short form e.g. 7832 → "~7.8K" */
@@ -125,89 +171,232 @@ export function RightSidebar({
 
           {citations.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
-              {citations.map((c: any, idx: number) => (
-                <div
-                  key={c.id || idx}
-                  onClick={() => onSelectCitation && onSelectCitation(c)}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '8px',
-                    background: 'var(--card-bg-subtle)',
-                    border: '1px solid var(--card-border)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    transition: 'border-color 0.15s ease',
-                    /* Prevent ANY child from escaping the card */
-                    overflow: 'hidden',
-                    minWidth: 0,
-                    wordBreak: 'break-word',
-                    overflowWrap: 'break-word',
-                  }}
-                >
-                  {/* Badge row */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontSize: '0.6rem',
-                      fontFamily: 'var(--font-mono)',
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background: c.citation_type === 'conflict'
-                        ? 'rgba(245, 158, 11, 0.15)'
-                        : 'rgba(16, 185, 129, 0.15)',
-                      color: c.citation_type === 'conflict' ? '#f59e0b' : '#34d399',
-                      border: `1px solid ${c.citation_type === 'conflict' ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)'}`,
-                      textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {c.citation_type === 'conflict' ? '⚠ Conflict' : '✓ Confirmed'}
-                    </span>
-                    <span style={{
-                      fontSize: '0.6rem',
-                      fontFamily: 'var(--font-mono)',
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                      color: c.source_class === 'web' ? '#06b6d4' : '#34d399',
-                      border: `1px solid ${c.source_class === 'web' ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.3)'}`,
-                      textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {c.source_class === 'web' ? 'From Web' : 'Your Files'}
-                    </span>
-                  </div>
+              {citations.map((c: any, idx: number) => {
+                const resolutionStatus = resolvedMap[c.id]?.status || c.resolution_status || 'unresolved';
+                const isConflict = c.citation_type === 'conflict';
+                const isConfirmed = isConflict && resolutionStatus === 'confirmed_accurate';
+                const isDismissed = isConflict && resolutionStatus === 'dismissed';
+                const isUnresolved = isConflict && resolutionStatus === 'unresolved';
+                const isResolvingThis = resolvingId === c.id;
 
-                  {/* Quote — clamped to 4 lines with humanized clean text */}
-                  <blockquote style={{
-                    fontSize: '0.76rem',
-                    fontStyle: 'italic',
-                    color: 'var(--text)',
-                    borderLeft: `2px solid ${c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
-                    paddingLeft: '10px',
-                    margin: 0,
-                    lineHeight: '1.55',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 4,
-                    WebkitBoxOrient: 'vertical' as any,
-                    overflow: 'hidden',
-                    wordBreak: 'break-word',
-                    overflowWrap: 'anywhere',
-                  }}>
-                    &ldquo;{cleanHtmlAndTracking(c.quote)}&rdquo;
-                  </blockquote>
+                return (
+                  <div
+                    key={c.id || idx}
+                    onClick={() => onSelectCitation && onSelectCitation(c)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '8px',
+                      background: isConfirmed
+                        ? 'rgba(16, 185, 129, 0.04)'
+                        : isUnresolved
+                        ? 'rgba(245, 158, 11, 0.04)'
+                        : 'var(--card-bg-subtle)',
+                      border: `1px solid ${
+                        isConfirmed
+                          ? 'rgba(16, 185, 129, 0.35)'
+                          : isUnresolved
+                          ? 'rgba(245, 158, 11, 0.35)'
+                          : 'var(--card-border)'
+                      }`,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      overflow: 'hidden',
+                      minWidth: 0,
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
+                    {/* Badge row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                      {isConflict ? (
+                        isConfirmed ? (
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            textTransform: 'uppercase',
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                          }}>
+                            <Check size={10} /> Confirmed Authoritative
+                          </span>
+                        ) : isDismissed ? (
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(148, 163, 184, 0.15)',
+                            color: 'var(--text-muted)',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            textTransform: 'uppercase',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            Dismissed Discrepancy
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#f59e0b',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            textTransform: 'uppercase',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            ⚠ Discrepancy
+                          </span>
+                        )
+                      ) : (
+                        <span style={{
+                          fontSize: '0.6rem',
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          color: '#34d399',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          ✓ Confirmed
+                        </span>
+                      )}
 
-                  {/* Source label row */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', gap: '6px' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={c.source_id || 'system'}>
-                      {humanizeSourceLabel(c.source_id, c.source_class)}
-                    </span>
-                    <span style={{ color: '#10b981', fontWeight: 600, flexShrink: 0 }}>grounded</span>
+                      <span style={{
+                        fontSize: '0.6rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: c.source_class === 'web' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: c.source_class === 'web' ? '#06b6d4' : '#34d399',
+                        border: `1px solid ${c.source_class === 'web' ? 'rgba(6,182,212,0.4)' : 'rgba(16,185,129,0.3)'}`,
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {c.source_class === 'web' ? 'From Web' : 'Your Files'}
+                      </span>
+                    </div>
+
+                    {/* Quote — clamped to 4 lines with humanized clean text */}
+                    <blockquote style={{
+                      fontSize: '0.76rem',
+                      fontStyle: 'italic',
+                      color: 'var(--text)',
+                      borderLeft: `2px solid ${isConfirmed ? '#10b981' : isUnresolved ? '#f59e0b' : c.source_class === 'web' ? '#06b6d4' : '#10b981'}`,
+                      paddingLeft: '10px',
+                      margin: 0,
+                      lineHeight: '1.55',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 4,
+                      WebkitBoxOrient: 'vertical' as any,
+                      overflow: 'hidden',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      &ldquo;{cleanHtmlAndTracking(c.quote)}&rdquo;
+                    </blockquote>
+
+                    {/* Source label row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', gap: '6px' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={c.source_id || 'system'}>
+                        {humanizeSourceLabel(c.source_id, c.source_class)}
+                      </span>
+                      <span style={{ color: isConfirmed ? '#10b981' : '#10b981', fontWeight: 600, flexShrink: 0 }}>
+                        {isConfirmed ? 'authoritative memory' : 'grounded'}
+                      </span>
+                    </div>
+
+                    {/* Conflict Resolution Controls */}
+                    {isUnresolved && c.id && (
+                      <div
+                        style={{
+                          marginTop: '4px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          background: 'rgba(245, 158, 11, 0.08)',
+                          border: '1px dashed rgba(245, 158, 11, 0.3)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div style={{ fontSize: '0.68rem', color: '#f59e0b', fontWeight: 600 }}>
+                          Resolve Conflict:
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            disabled={isResolvingThis}
+                            onClick={(e) => handleResolveConflictAction(e, c.id, 'confirmed_accurate')}
+                            style={{
+                              flex: 1,
+                              padding: '5px 8px',
+                              borderRadius: '4px',
+                              background: '#10b981',
+                              color: '#fff',
+                              border: 'none',
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              cursor: isResolvingThis ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            {isResolvingThis ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Check size={11} />
+                            )}
+                            Confirm Accurate
+                          </button>
+                          <button
+                            disabled={isResolvingThis}
+                            onClick={(e) => handleResolveConflictAction(e, c.id, 'dismissed')}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '4px',
+                              background: 'transparent',
+                              color: 'var(--text-muted)',
+                              border: '1px solid var(--card-border)',
+                              fontSize: '0.68rem',
+                              fontWeight: 500,
+                              cursor: isResolvingThis ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isConfirmed && (
+                      <div style={{ fontSize: '0.66rem', color: '#10b981', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Sparkles size={11} /> Saved to workspace memory for future briefs
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ padding: '16px', borderRadius: '8px', border: '1px dashed var(--card-border)', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>

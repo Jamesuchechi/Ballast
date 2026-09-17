@@ -1,6 +1,12 @@
 import { query, queryOne } from '@/db/client';
 import { getAuthenticatedGmailClient } from '@/connectors/gmail';
 import { getDecryptedToken } from '@/connectors/tokenStore';
+import {
+  ContactInfo,
+  resolveContactEmail,
+  extractMentionedNames,
+  getWorkspaceContacts,
+} from './contactResolver';
 
 export type ActionType = 'email_draft' | 'issue_draft' | 'comment_draft' | 'task';
 
@@ -25,12 +31,22 @@ export interface ParsedProposedAction {
   payload: Record<string, any>;
 }
 
+export interface ParseActionOptions {
+  contacts?: ContactInfo[];
+  workspaceId?: string;
+}
+
 /**
  * Parses and classifies a raw action string or structured object into a strongly typed
  * Action draft with normalized payload for the actions table.
+ * Automatically resolves @name and contact mentions from workspace communications (E6).
  */
-export function parseProposedAction(rawAction: string | Record<string, any>): ParsedProposedAction {
+export function parseProposedAction(
+  rawAction: string | Record<string, any>,
+  options?: ParseActionOptions
+): ParsedProposedAction {
   const nowIso = new Date().toISOString();
+  const contacts = options?.contacts;
 
   // 1. If already an object or valid JSON string
   let obj: Record<string, any> | null = null;
@@ -67,8 +83,27 @@ export function parseProposedAction(rawAction: string | Record<string, any>): Pa
     };
 
     if (type === 'email_draft') {
-      payload.to = payload.to || payload.recipient || 'team@example.com';
-      payload.recipient = payload.to;
+      let rawTo = payload.to || payload.recipient || (payload.summary ? extractMentionedNames(payload.summary)[0] : null);
+      if (contacts && rawTo) {
+        const resolved = resolveContactEmail(rawTo, contacts);
+        if (resolved) {
+          payload.to = resolved.email;
+          payload.recipient = resolved.name ? `${resolved.name} <${resolved.email}>` : resolved.email;
+          payload.resolved_contact = {
+            name: resolved.name,
+            email: resolved.email,
+            source: resolved.source,
+            query: rawTo,
+          };
+        } else {
+          payload.to = rawTo;
+          payload.recipient = rawTo;
+        }
+      } else {
+        payload.to = payload.to || payload.recipient || 'team@example.com';
+        payload.recipient = payload.to;
+      }
+
       payload.subject = payload.subject || payload.title || 'Follow-up from Ballast Brief';
       payload.body = payload.body || payload.content || payload.summary || payload.text || 'Action item generated from Ballast brief.';
       if (payload.create_draft_only === undefined) {
@@ -202,13 +237,58 @@ export function parseProposedAction(rawAction: string | Record<string, any>): Pa
   // 5. Email Draft
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
   const emailMatch = str.match(emailRegex);
+  const mentionedNames = extractMentionedNames(str);
+  const emailToMatch = str.match(/(?:draft|send)?\s*(?:email|mail|message)\s+to\s+(@?[a-zA-Z0-9._-]+(?:\s+[a-zA-Z0-9._-]+)?)/i);
+
   if (
     prefixType === 'email_draft' ||
     prefixType === 'email' ||
     /\b(?:draft\s+email|send\s+email|email\s+to|mail\s+to)\b/i.test(str) ||
-    emailMatch
+    emailMatch ||
+    mentionedNames.length > 0
   ) {
-    const to = kvTo ? kvTo[1] : emailMatch ? emailMatch[1] : 'team@example.com';
+    let rawTarget = kvTo
+      ? kvTo[1]
+      : emailMatch
+      ? emailMatch[1]
+      : mentionedNames.length > 0
+      ? mentionedNames[0]
+      : emailToMatch
+      ? emailToMatch[1]
+      : null;
+
+    let to = 'team@example.com';
+    let recipientDisplay = 'team@example.com';
+    let resolvedContactMeta: Record<string, any> | undefined = undefined;
+
+    if (rawTarget) {
+      if (contacts) {
+        const resolved = resolveContactEmail(rawTarget, contacts);
+        if (resolved) {
+          to = resolved.email;
+          recipientDisplay = resolved.name ? `${resolved.name} <${resolved.email}>` : resolved.email;
+          resolvedContactMeta = {
+            name: resolved.name,
+            email: resolved.email,
+            source: resolved.source,
+            query: rawTarget,
+          };
+        } else if (rawTarget.includes('@') && /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(rawTarget)) {
+          to = rawTarget;
+          recipientDisplay = rawTarget;
+        } else {
+          to = rawTarget;
+          recipientDisplay = rawTarget;
+        }
+      } else if (rawTarget.includes('@') && /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(rawTarget)) {
+        to = rawTarget;
+        recipientDisplay = rawTarget;
+      } else {
+        to = rawTarget;
+        recipientDisplay = rawTarget;
+      }
+    }
+
     const subject = kvSubject
       ? (kvSubject[1] || kvSubject[2] || kvSubject[3] || '').trim()
       : '';
@@ -234,17 +314,23 @@ export function parseProposedAction(rawAction: string | Record<string, any>): Pa
       extractedBody = str;
     }
 
+    const payload: Record<string, any> = {
+      to,
+      recipient: recipientDisplay,
+      subject: extractedSubject,
+      body: extractedBody,
+      summary: str,
+      create_draft_only: true,
+      created_at: nowIso,
+    };
+
+    if (resolvedContactMeta) {
+      payload.resolved_contact = resolvedContactMeta;
+    }
+
     return {
       type: 'email_draft',
-      payload: {
-        to,
-        recipient: to,
-        subject: extractedSubject,
-        body: extractedBody,
-        summary: str,
-        create_draft_only: true,
-        created_at: nowIso,
-      },
+      payload,
     };
   }
 
@@ -434,18 +520,28 @@ async function executeEmailAction(
   let body = payload.body || payload.content || payload.summary || payload.text || payload.task || '';
   const isDraftOnly = payload.create_draft_only !== false; // Defaults to draft creation
 
-  if (!to) {
+  if (!to || to.startsWith('@') || !to.includes('@')) {
     try {
-      const member = await queryOne<{ email: string }>(
-        `SELECT u.email 
-         FROM users u 
-         JOIN workspace_members wm ON wm.user_id = u.id 
-         WHERE wm.workspace_id = $1 
-         ORDER BY (wm.role = 'owner') DESC, u.created_at ASC 
-         LIMIT 1`,
-        [action.workspace_id]
-      );
-      to = member?.email || 'team@example.com';
+      const contacts = await getWorkspaceContacts(action.workspace_id);
+      if (to) {
+        const resolved = resolveContactEmail(to, contacts);
+        if (resolved) {
+          to = resolved.email;
+        }
+      }
+
+      if (!to || !to.includes('@')) {
+        const member = await queryOne<{ email: string }>(
+          `SELECT u.email 
+           FROM users u 
+           JOIN workspace_members wm ON wm.user_id = u.id 
+           WHERE wm.workspace_id = $1 
+           ORDER BY (wm.role = 'owner') DESC, u.created_at ASC 
+           LIMIT 1`,
+          [action.workspace_id]
+        );
+        to = member?.email || 'team@example.com';
+      }
     } catch {
       to = 'team@example.com';
     }

@@ -37,6 +37,7 @@ export interface DashboardLayoutProps {
   onToggleTheme: () => void;
   isDemo?: boolean;
   onWorkspaceSwitched?: () => void;
+  onResolveConflict?: (citationId: string, resolutionType: 'confirmed_accurate' | 'dismissed') => Promise<void> | void;
 }
 
 export function DashboardLayout({
@@ -69,6 +70,7 @@ export function DashboardLayout({
   onToggleTheme,
   isDemo = false,
   onWorkspaceSwitched,
+  onResolveConflict,
 }: DashboardLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
@@ -147,6 +149,7 @@ export function DashboardLayout({
           brief={currentBrief}
           citations={citations}
           runs={runs}
+          onResolveConflict={onResolveConflict}
         />
       </div>
 

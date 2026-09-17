@@ -38,17 +38,9 @@ export async function POST(
     // Record audit trail entry
     try {
       await query(
-        `INSERT INTO access_logs (workspace_id, user_id, action, meta)
-         VALUES ($1, $2, 'brief_share:create', $3)`,
-        [
-          payload.workspaceId,
-          payload.userId,
-          JSON.stringify({
-            brief_id: brief.id,
-            expires_in_hours: expiresInHours,
-            expires_at: expiresAt,
-          }),
-        ]
+        `INSERT INTO access_logs (workspace_id, brief_id, action)
+         VALUES ($1, $2, 'brief_share:create')`,
+        [payload.workspaceId, brief.id]
       );
     } catch (logErr) {
       console.warn('[Audit Log Error]:', logErr);
