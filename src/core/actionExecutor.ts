@@ -62,9 +62,28 @@ export function parseProposedAction(rawAction: string | Record<string, any>): Pa
 
     const payload: Record<string, any> = {
       ...obj,
-      summary: obj.summary || obj.title || obj.body || obj.task || 'Action item',
+      summary: obj.summary || obj.title || obj.body || obj.task || obj.text || 'Action item',
       created_at: obj.created_at || nowIso,
     };
+
+    if (type === 'email_draft') {
+      payload.to = payload.to || payload.recipient || 'team@example.com';
+      payload.recipient = payload.to;
+      payload.subject = payload.subject || payload.title || 'Follow-up from Ballast Brief';
+      payload.body = payload.body || payload.content || payload.summary || payload.text || 'Action item generated from Ballast brief.';
+      if (payload.create_draft_only === undefined) {
+        payload.create_draft_only = true;
+      }
+    } else if (type === 'issue_draft') {
+      payload.repo = payload.repo || payload.repository || 'owner/repo';
+      payload.title = payload.title || payload.summary || payload.subject || 'Action item';
+      payload.body = payload.body || payload.content || payload.summary || 'Action item generated from Ballast brief.';
+    } else if (type === 'comment_draft') {
+      payload.repo = payload.repo || payload.repository || 'owner/repo';
+      payload.issue_number = payload.issue_number || payload.number || 1;
+      payload.body = payload.body || payload.content || payload.comment || payload.summary || 'Action comment from Ballast brief.';
+    }
+
     return { type, payload };
   }
 
@@ -410,13 +429,30 @@ async function executeEmailAction(
   options?: ExecuteActionOptions
 ): Promise<void> {
   const payload = typeof action.payload === 'string' ? JSON.parse(action.payload) : action.payload || {};
-  const to = payload.to || payload.recipient;
-  const subject = payload.subject || 'Follow-up from Ballast Brief';
-  const body = payload.body || payload.content || payload.summary || '';
-  const isDraftOnly = Boolean(payload.create_draft_only);
+  let to = payload.to || payload.recipient;
+  const subject = payload.subject || payload.title || 'Follow-up from Ballast Brief';
+  let body = payload.body || payload.content || payload.summary || payload.text || payload.task || '';
+  const isDraftOnly = payload.create_draft_only !== false; // Defaults to draft creation
 
-  if (!to || !body) {
-    throw new Error('Email action payload requires "to" recipient and "body" message text.');
+  if (!to) {
+    try {
+      const member = await queryOne<{ email: string }>(
+        `SELECT u.email 
+         FROM users u 
+         JOIN workspace_members wm ON wm.user_id = u.id 
+         WHERE wm.workspace_id = $1 
+         ORDER BY (wm.role = 'owner') DESC, u.created_at ASC 
+         LIMIT 1`,
+        [action.workspace_id]
+      );
+      to = member?.email || 'team@example.com';
+    } catch {
+      to = 'team@example.com';
+    }
+  }
+
+  if (!body) {
+    body = `Follow-up action item generated from Ballast brief:\n\n${subject}`;
   }
 
   const rawMessage = buildRfc2822Message(to, subject, body);
