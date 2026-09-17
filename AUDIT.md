@@ -359,17 +359,65 @@ Briefs were previously long and structured without a fast executive takeaway.
 6. Designed modern glassmorphic Executive Summary (TL;DR) callout banner in dashboard UI preview (`src/app/app/page.tsx`).
 7. Verified with 100% pass rate in `test/brief_summarization_tldr.test.ts` (6/6 passed).
 
-### E2. **Brief Digest / Weekly Summary Email**
-Instead of sending a notification per brief, aggregate all briefs published in the last 7 days into a digest email. This is more useful than per-brief emails for users with multiple schedules.
+### E2. **Brief Digest / Weekly Summary Email** [RESOLVED]
+**Files:** [`digestService.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/digestService.ts), [`emailService.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/emailService.ts), [`preferences/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/user/preferences/route.ts), [`digest/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/digest/route.ts), [`worker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/worker.ts), [`ProfileView.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ProfileView.tsx)
+Instead of relying solely on individual per-brief notifications, users and workspaces can receive a weekly consolidated intelligence digest roll-up of all briefs published over a 7-day lookback window.
 
-### E3. **Connector-level re-sync trigger from UI**
-Currently there's no "re-sync now" button visible in the connector card. Users who connect Gmail can't force a sync — they have to wait for the scheduled run. This is the #1 pain point in early user testing for sync-based products.
+**Resolution:**
+1. Created `src/core/digestService.ts` supporting:
+   - `buildWorkspaceDigest`: Aggregates all briefs published within the 7-day window, verified claims counts, and associated proposed/executed actions.
+   - `renderDigestEmailHtml` & `renderDigestEmailText`: Dark-mode, glassmorphic email templates with header date badges, key metrics strips (published briefs, verified claims, proposed actions), TL;DR summary quotes, direct brief links, and full `escapeHtml` sanitization (Security S5 compliance).
+   - `sendWorkspaceDigest`: Dispatches to opted-in workspace members via Resend (or simulation fallback) and logs delivery to `access_logs` (`action = 'digest_sent:weekly:<count>_briefs'`).
+   - `checkAndTriggerDueDigests`: Evaluates active workspaces for due weekly digests with 6-day double-send protection and zero-brief safety bypass.
+2. Updated `UserNotificationPreferences` in `src/core/emailService.ts` and `src/app/api/user/preferences/route.ts` with `digest_enabled`, `digest_frequency` ('weekly' | 'daily'), and `digest_day` ('monday', etc.).
+3. Created API route `src/app/api/digest/route.ts` supporting `GET` (live preview) and `POST` (on-demand test send).
+4. Integrated autonomous digest checking loop (`startDigestLoop`, `checkAndTriggerDueDigestsPass`, `stopDigestLoop`) in `src/worker.ts` with telemetry exposed via `/health`.
+5. Built **Email & Weekly Digest Notifications** card and interactive **Weekly Digest Preview Modal** in `src/components/dashboard/ProfileView.tsx`.
+6. Verified with 100% pass rate in `test/brief_digest_email.test.ts` (8/8 passed) and regression verification across `test/security_email_xss.test.ts`, `test/brief_summarization_tldr.test.ts`, and `test/phase9_polish.test.ts`.
 
-### E4. **Smart question suggestions**
-Based on the connected sources and recent brief history, suggest questions the user could ask. "You haven't checked on your Q3 deliverables in 7 days — want a status brief?" This drives engagement and demonstrates the product's value automatically.
+### E3. **Connector-level re-sync trigger from UI** [RESOLVED]
+**Files:** [`sync/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/connectors/%5Bid%5D/sync/route.ts), [`sync-all/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/connectors/sync-all/route.ts), [`resync/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/%5Bid%5D/resync/route.ts), [`ConnectorCard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ConnectorCard.tsx), [`IntegrationsMarketplace.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/IntegrationsMarketplace.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx)
+Previously, users had no prominent UI triggers to manually force on-demand re-syncing of connected integrations (Gmail, GitHub, Google Drive, Google Calendar, Slack, Notion) or individual source records, requiring users to wait for periodic scheduled cron runs. Error retry states were also absent.
 
-### E5. **Brief Sharing (read-only, expiring link)**
-Currently: "No public share links in v1." For MVP+, an expiring signed URL that shows a read-only version of the brief (no source details, just the markdown) would make the product shareable without requiring multi-user auth.
+**Resolution:**
+1. Enhanced single connector sync API route `POST /api/connectors/[id]/sync` to return structured metrics (`syncedCount`, `unchangedCount`, `durationMs`, formatted message) and record manual audit trail entries in `access_logs` (`action = 'connector_sync:manual:<id>'`).
+2. Created batch sync API route `POST /api/connectors/sync-all` to run isolated parallel sync passes across all connected workspace integrations, return aggregated statistics (`totalConnected`, `totalSynced`, `totalUnchanged`, per-connector `results` & `errors`), and record `action = 'connector_sync:manual:batch'`.
+3. Created individual source re-sync API route `POST /api/sources/[id]/resync` allowing users to re-fetch and re-embed specific documents/threads/pages from providers directly from the Evidence Knowledge table.
+4. Upgraded `ConnectorCard.tsx` with high-visibility **"Re-sync Now"** and **"Retry Sync"** buttons, distinct error retry states, and responsive spinning indicators.
+5. Upgraded `IntegrationsMarketplace.tsx` with a top-level **"Sync All Connected"** action button in the header and in-app feedback alerts with automatic duration and item count reporting.
+6. Replaced browser `alert()` popups with rich in-app toast notifications in `page.tsx` and added row-level source re-sync buttons in the Evidence table.
+7. Verified with 100% pass rate in `test/connector_resync_trigger.test.ts` (5/5 passed) and full regression verification across `test/brief_digest_email.test.ts` and `test/source_deduplication.test.ts`.
+
+### E4. **Smart question suggestions** [RESOLVED]
+**Files:** [`suggestions.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/suggestions.ts), [`route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/suggestions/route.ts), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`smart_question_suggestions.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/smart_question_suggestions.test.ts)
+Previously, the dashboard only showed static hardcoded suggestion prompt buttons that remained fixed regardless of what integrations users had connected, what evidence had been indexed, or how long ago prior briefs on key topics were generated.
+
+**Resolution:**
+1. Created smart suggestion engine [`src/core/suggestions.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/suggestions.ts) implementing `getSmartQuestionSuggestions(workspaceId, options)`:
+   - **Stale Brief Topic Follow-ups**: Analyzes recent published briefs in `briefs`. If a topic hasn't been checked in $\ge 5$–7 days, generates proactive follow-up suggestions (*"You haven't checked on your [topic] in X days — what is the current status and latest updates?"*).
+   - **Integration & Source-Aware Prompts**: Detects active connected integrations (`calendar`, `github`, `gmail`, `drive`, `slack`, `notion`, `upload`) and recent evidence in `sources.meta` to generate context-specific questions (e.g. meeting agenda prep for Calendar, active PR & deployment risks for GitHub, urgent client communications for Gmail, updated specs for Drive).
+   - **Multi-Source Synergy Prompts**: Generates cross-connector questions combining email decisions with calendar deadlines or comparing code PRs against spec documents.
+   - **Curated World Mode Prompts**: Surfacing relevant industry compliance (GDPR, SOC 2), webhook security standards, and API rate limit best practices.
+   - **Starter Discovery Fallbacks**: Providing high-yield starter queries for newly created workspaces.
+2. Implemented authenticated API endpoint `GET /api/suggestions?mode=home|world|all&limit=6` returning structured `{ suggestions, count }` payloads.
+3. Upgraded dashboard UI in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx):
+   - Dynamic smart suggestion pills with visual badges (⚡ Stale Topic, 📅 Calendar, 🐙 GitHub, ✉️ Gmail, 📁 Drive, 💬 Slack, 📝 Notion, 🌐 World).
+   - Hover tooltips detailing the specific context and evidence rationale behind each suggestion.
+   - 1-click prompt loading and automatic mode switching.
+   - Interactive refresh/shuffle button (`🔄`) to re-query fresh suggestion angles on demand.
+4. Verified with 100% pass rate in `test/smart_question_suggestions.test.ts` (6/6 passed).
+
+### E5. **Brief Sharing (read-only, expiring link)** [RESOLVED]
+**Files:** [`shareTokens.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/shareTokens.ts), [`share/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/share/route.ts), [`[token]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/share/%5Btoken%5D/route.ts), [`[token]/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/share/%5Btoken%5D/page.tsx), [`ShareBriefModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ShareBriefModal.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`brief_sharing.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/brief_sharing.test.ts)
+Previously, Ballast had no mechanism to share published briefs externally with colleagues, clients, or stakeholders without requiring full user registration, workspace invitation, and credential setup.
+
+**Resolution:**
+1. Implemented cryptographic share token generation and validation in [`src/lib/shareTokens.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/shareTokens.ts) using HMAC-SHA256 signatures with constant-time equality checks and configurable expiration intervals (24h, 3d, 7d, 30d).
+2. Created authenticated API route `POST /api/briefs/[id]/share` to verify workspace ownership, generate expiring tokens, record audit logs (`action = 'brief_share:create'`), and return `${origin}/share/${token}` links.
+3. Created public read-only API route `GET /api/share/[token]` to safely serve sanitized brief markdown, title, mode, and expiration without exposing internal source IDs, tokens, or member data (privacy guarantee).
+4. Created standalone public shared brief view in [`src/app/share/[token]/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/share/%5Btoken%5D/page.tsx) with formatted markdown sections, claim highlights, executive summary callouts, copy link, and print-to-PDF support.
+5. Integrated [`ShareBriefModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/ShareBriefModal.tsx) into the dashboard brief viewer action bar with duration presets, 1-click clipboard copy, and public preview links.
+6. Verified with 100% pass rate in `test/brief_sharing.test.ts` (6/6 passed).
 
 ### E6. **Mention @names in Actions**
 When the Writer proposes an action like "Draft email to Elena", auto-resolve the recipient from calendar/Gmail contacts if possible. The action executor already builds RFC 2822 messages — just needs the `to` to be resolved.

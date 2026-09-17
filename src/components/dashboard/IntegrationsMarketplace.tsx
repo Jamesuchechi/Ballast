@@ -25,26 +25,34 @@ interface IntegrationsMarketplaceProps {
   connectors: ConnectorItem[];
   uploadedCount: number;
   syncingConnectors: Record<string, boolean>;
+  isSyncingAll?: boolean;
   onConnect: (connector: ConnectorItem) => void;
   onSync: (connector: ConnectorItem) => void;
+  onSyncAll?: () => void | Promise<void>;
   onRevoke: (connector: ConnectorItem) => void;
   onSaveToken: (connectorId: string, token: string) => Promise<void>;
   onNavigateUploads: () => void;
   initialError?: string | null;
   initialMessage?: string | null;
+  syncFeedback?: { type: 'success' | 'error' | 'info'; message: string } | null;
+  onDismissFeedback?: () => void;
 }
 
 export function IntegrationsMarketplace({
   connectors,
   uploadedCount,
   syncingConnectors,
+  isSyncingAll = false,
   onConnect,
   onSync,
+  onSyncAll,
   onRevoke,
   onSaveToken,
   onNavigateUploads,
   initialError,
   initialMessage,
+  syncFeedback,
+  onDismissFeedback,
 }: IntegrationsMarketplaceProps) {
   const [filterTab, setFilterTab] = useState<'all' | 'connected' | 'available'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -216,8 +224,8 @@ export function IntegrationsMarketplace({
             </p>
           </div>
 
-          {/* Quick Metrics */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Quick Metrics & Actions */}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <div
               style={{
                 background: 'var(--card-bg)',
@@ -229,11 +237,32 @@ export function IntegrationsMarketplace({
                 gap: '8px',
               }}
             >
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: connectedCount > 0 ? '#10b981' : 'var(--text-subtle)' }} />
               <div style={{ fontSize: '0.78rem', color: 'var(--text)' }}>
                 <strong>{connectedCount}</strong> / {connectors.length} Connected
               </div>
             </div>
+
+            {connectedCount > 0 && onSyncAll && (
+              <button
+                onClick={onSyncAll}
+                disabled={isSyncingAll}
+                className="dash-btn-primary"
+                style={{
+                  fontSize: '0.78rem',
+                  padding: '7px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  opacity: isSyncingAll ? 0.7 : 1,
+                  whiteSpace: 'nowrap',
+                }}
+                title="Trigger immediate re-sync across all connected integrations"
+              >
+                <RefreshCw size={13} className={isSyncingAll ? 'animate-spin' : ''} />
+                <span>{isSyncingAll ? 'Syncing All...' : 'Sync All Connected'}</span>
+              </button>
+            )}
 
             <div
               style={{
@@ -253,6 +282,59 @@ export function IntegrationsMarketplace({
             </div>
           </div>
         </div>
+
+        {/* Sync Feedback Toast / Banner */}
+        {syncFeedback && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: '8px',
+              background: syncFeedback.type === 'error'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : syncFeedback.type === 'success'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : 'rgba(99, 102, 241, 0.12)',
+              border: `1px solid ${
+                syncFeedback.type === 'error'
+                  ? 'rgba(239, 68, 68, 0.35)'
+                  : syncFeedback.type === 'success'
+                  ? 'rgba(16, 185, 129, 0.35)'
+                  : 'rgba(99, 102, 241, 0.35)'
+              }`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              marginTop: '4px',
+              animation: 'fadeIn 0.2s ease-in-out',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {syncFeedback.type === 'error' ? (
+                <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+              ) : (
+                <CheckCircle2 size={16} color="#10b981" style={{ flexShrink: 0 }} />
+              )}
+              <div
+                style={{
+                  fontSize: '0.8rem',
+                  color: syncFeedback.type === 'error' ? '#fca5a5' : syncFeedback.type === 'success' ? '#6ee7b7' : 'var(--text)',
+                }}
+              >
+                {syncFeedback.message}
+              </div>
+            </div>
+            {onDismissFeedback && (
+              <button
+                onClick={onDismissFeedback}
+                className="dash-icon-btn"
+                style={{ color: 'var(--text-subtle)', padding: '2px' }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Global Alert / Unconfigured Error Banner if URL carried an error */}
         {initialError && !dismissedBanner && (

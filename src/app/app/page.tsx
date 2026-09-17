@@ -43,12 +43,14 @@ import {
   CheckCheck,
   Filter,
   CheckSquare,
+  Share2,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { IntegrationsMarketplace, type ConnectorItem } from '@/components/dashboard/IntegrationsMarketplace';
 import { ProfileView } from '@/components/dashboard/ProfileView';
 import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
+import { ShareBriefModal } from '@/components/dashboard/ShareBriefModal';
 import { LatencyPlot } from '@/components/dashboard/LatencyPlot';
 import { ActionDraftCard } from '@/components/dashboard/ActionDraftCard';
 import { FormattedDiffViewer } from '@/components/dashboard/FormattedDiffViewer';
@@ -180,14 +182,42 @@ export default function DashboardPage() {
   const [flagNote, setFlagNote] = useState('');
   const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
 
+  // Brief Sharing Modal State (E5)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Connector & Sync Feedback States (E3)
+  const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [resyncingSources, setResyncingSources] = useState<Record<string, boolean>>({});
+
   // Source Inspection & Filter States
   const [sourceFilterConnector, setSourceFilterConnector] = useState<string>('all');
   const [inspectingSource, setInspectingSource] = useState<{ source: any; chunks: any[] } | null>(null);
   const [isLoadingInspection, setIsLoadingInspection] = useState(false);
 
+  // Smart Suggestions States (E4)
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
   // ----------------------------------------------------
   // Data Fetching Functions
   // ----------------------------------------------------
+
+  const fetchSuggestions = async (filterMode?: string) => {
+    try {
+      setIsLoadingSuggestions(true);
+      const queryParam = filterMode ? `?mode=${encodeURIComponent(filterMode)}` : (mode ? `?mode=${encodeURIComponent(mode)}` : '');
+      const res = await fetch(`/api/suggestions${queryParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSuggestions(data.suggestions || []);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch smart suggestions:', e);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
 
   const fetchBriefs = async () => {
     try {
@@ -515,6 +545,7 @@ export default function DashboardPage() {
         fetchTelemetry(),
         fetchConnectors(),
         fetchAnalytics(),
+        fetchSuggestions(mode),
       ]);
     } catch (e) {
       console.warn('Failed to refresh workspace data:', e);
@@ -553,6 +584,7 @@ export default function DashboardPage() {
           fetchTelemetry(),
           fetchConnectors(),
           fetchAnalytics(),
+          fetchSuggestions(mode),
         ]);
       } catch (err) {
         console.warn('Dashboard auth check failed:', err);
@@ -570,6 +602,13 @@ export default function DashboardPage() {
 
     init();
   }, []);
+
+  // Update suggestions when mode switches between home and world (E4)
+  useEffect(() => {
+    if (user && workspace) {
+      fetchSuggestions(mode);
+    }
+  }, [mode]);
 
   // Fetch brief details when selection changes
   useEffect(() => {
@@ -735,6 +774,7 @@ export default function DashboardPage() {
             fetchAccessLogs(),
             fetchActions(),
             fetchTelemetry(),
+            fetchSuggestions(mode),
           ]);
           setSelectedBriefId(briefId);
         },
@@ -1098,6 +1138,7 @@ export default function DashboardPage() {
 
   const handleSyncConnector = async (connector: ConnectorItem) => {
     setSyncingConnectors((prev) => ({ ...prev, [connector.id]: true }));
+    setSyncFeedback({ type: 'info', message: `Syncing ${connector.name}...` });
     try {
       const res = await fetch(`/api/connectors/${connector.id}/sync`, {
         method: 'POST',
@@ -1106,14 +1147,73 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || `${connector.name} sync failed`);
+        setSyncFeedback({
+          type: 'error',
+          message: data.error || `${connector.name} sync failed. Please verify credentials or retry.`,
+        });
       } else {
+        setSyncFeedback({
+          type: 'success',
+          message: data.message || `✓ ${connector.name} synced: ${data.result?.syncedCount ?? 0} updated, ${data.result?.unchangedCount ?? 0} unchanged.`,
+        });
         await Promise.all([fetchConnectors(), fetchSources(), fetchAccessLogs()]);
       }
     } catch (e: any) {
-      alert(`Sync error: ${e.message}`);
+      setSyncFeedback({ type: 'error', message: `Sync error: ${e.message}` });
     } finally {
       setSyncingConnectors((prev) => ({ ...prev, [connector.id]: false }));
+    }
+  };
+
+  const handleSyncAllConnectors = async () => {
+    setIsSyncingAll(true);
+    setSyncFeedback({ type: 'info', message: 'Syncing all connected sources in background...' });
+    try {
+      const res = await fetch('/api/connectors/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ windowDays: syncWindowDays }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSyncFeedback({
+          type: 'error',
+          message: data.error || 'Batch sync failed. Some connectors encountered errors.',
+        });
+      } else {
+        setSyncFeedback({
+          type: 'success',
+          message: data.message || `✓ Synced all integrations: ${data.totalSynced ?? 0} items updated, ${data.totalUnchanged ?? 0} unchanged.`,
+        });
+        await Promise.all([fetchConnectors(), fetchSources(), fetchAccessLogs()]);
+      }
+    } catch (e: any) {
+      setSyncFeedback({ type: 'error', message: `Batch sync error: ${e.message}` });
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
+  const handleResyncSource = async (sourceId: string) => {
+    setResyncingSources((prev) => ({ ...prev, [sourceId]: true }));
+    try {
+      const res = await fetch(`/api/sources/${sourceId}/resync`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSyncFeedback({ type: 'error', message: data.error || 'Failed to re-sync source' });
+      } else {
+        setSyncFeedback({
+          type: 'success',
+          message: data.message || '✓ Source re-synced and vector chunks updated.',
+        });
+        await Promise.all([fetchSources(), fetchAccessLogs()]);
+      }
+    } catch (e: any) {
+      setSyncFeedback({ type: 'error', message: `Source re-sync error: ${e.message}` });
+    } finally {
+      setResyncingSources((prev) => ({ ...prev, [sourceId]: false }));
     }
   };
 
@@ -1536,6 +1636,18 @@ export default function DashboardPage() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
+                          onClick={() => handleResyncSource(file.id)}
+                          disabled={Boolean(resyncingSources[file.id])}
+                          className="dash-icon-btn"
+                          title="Re-sync / refresh this source record from provider"
+                        >
+                          <RefreshCw
+                            size={14}
+                            color="var(--accent)"
+                            className={resyncingSources[file.id] ? 'animate-spin' : ''}
+                          />
+                        </button>
+                        <button
                           onClick={() => handleInspectSource(file.id)}
                           className="dash-icon-btn"
                           title="Inspect Ingested Chunks & Metadata"
@@ -1845,10 +1957,96 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Quick Suggestion Pills */}
+            {/* Smart Suggestion Pills (E4) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '2px' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Try prompt:</span>
-              {mode === 'world' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '2px' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>✨ Suggested:</span>
+                <button
+                  type="button"
+                  onClick={() => fetchSuggestions(mode)}
+                  disabled={isLoadingSuggestions}
+                  title="Refresh suggestions based on recent sources and briefs"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.7rem',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  className="hover-subtle"
+                >
+                  <span style={{ display: 'inline-block', transform: isLoadingSuggestions ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s ease' }}>
+                    🔄
+                  </span>
+                </button>
+              </div>
+
+              {isLoadingSuggestions && suggestions.length === 0 ? (
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Analyzing sources & brief history...</span>
+              ) : suggestions.length > 0 ? (
+                suggestions.map((s) => {
+                  const isWorld = s.mode === 'world';
+                  const isFollowup = s.category === 'follow_up';
+                  const isSynergy = s.category === 'recency';
+
+                  const getBadgeColors = () => {
+                    if (isWorld) return { bg: 'rgba(6, 182, 212, 0.12)', border: 'rgba(6, 182, 212, 0.3)', text: '#06b6d4' };
+                    if (isFollowup) return { bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.35)', text: '#f59e0b' };
+                    if (isSynergy) return { bg: 'rgba(168, 85, 247, 0.12)', border: 'rgba(168, 85, 247, 0.3)', text: '#a855f7' };
+                    return { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981' };
+                  };
+
+                  const getIcon = () => {
+                    if (s.icon === 'clock' || isFollowup) return '⚡';
+                    if (s.icon === 'calendar') return '📅';
+                    if (s.icon === 'github') return '🐙';
+                    if (s.icon === 'gmail') return '✉️';
+                    if (s.icon === 'drive') return '📁';
+                    if (s.icon === 'slack') return '💬';
+                    if (s.icon === 'notion') return '📝';
+                    if (s.icon === 'layers') return '🔄';
+                    if (isWorld || s.icon === 'globe') return '🌐';
+                    return '💡';
+                  };
+
+                  const colors = getBadgeColors();
+
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setQueryPrompt(s.question);
+                        if (s.mode && s.mode !== mode) {
+                          setMode(s.mode);
+                        }
+                      }}
+                      title={`${s.reason}\n\nClick to load: "${s.question}"`}
+                      style={{
+                        fontSize: '0.7rem',
+                        padding: '3px 9px',
+                        borderRadius: '6px',
+                        background: colors.bg,
+                        color: colors.text,
+                        border: `1px solid ${colors.border}`,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      className="hover-subtle"
+                    >
+                      <span style={{ fontSize: '0.72rem' }}>{getIcon()}</span>
+                      <span style={{ fontWeight: 500 }}>{s.label}</span>
+                    </button>
+                  );
+                })
+              ) : mode === 'world' ? (
                 <>
                   <button
                     type="button"
@@ -1863,7 +2061,7 @@ export default function DashboardPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Stripe Webhook Signatures
+                    🌐 Stripe Webhooks
                   </button>
                   <button
                     type="button"
@@ -1878,22 +2076,7 @@ export default function DashboardPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    GDPR Article 6 Consent
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQueryPrompt('HTTP 429 Too Many Requests retry-after header standard')}
-                    style={{
-                      fontSize: '0.7rem',
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      background: 'rgba(6, 182, 212, 0.12)',
-                      color: '#06b6d4',
-                      border: '1px solid rgba(6, 182, 212, 0.3)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    HTTP 429 Rate Limits
+                    🌐 GDPR Article 6
                   </button>
                 </>
               ) : (
@@ -1911,7 +2094,7 @@ export default function DashboardPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Q3 Billing Deliverables
+                    💡 Q3 Billing Deliverables
                   </button>
                   <button
                     type="button"
@@ -1926,22 +2109,7 @@ export default function DashboardPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Merchant Accounts Status
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQueryPrompt('What database migration scripts are ready for replica dry run?')}
-                    style={{
-                      fontSize: '0.7rem',
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      background: 'rgba(16, 185, 129, 0.12)',
-                      color: '#10b981',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Database Migrations
+                    💡 Merchant Accounts
                   </button>
                 </>
               )}
@@ -2454,6 +2622,23 @@ export default function DashboardPage() {
                       >
                         <FileText size={14} />
                         <span>Notion</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsShareModalOpen(true)}
+                        className="dash-btn-primary"
+                        style={{
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          borderColor: '#6366f1',
+                          padding: '6px 14px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                        }}
+                        title="Create an expiring, read-only public share link (E5)"
+                      >
+                        <Share2 size={13} />
+                        <span>Share Brief</span>
                       </button>
                     </>
                   )}
@@ -3078,13 +3263,17 @@ export default function DashboardPage() {
             connectors={connectors}
             uploadedCount={uploadedFiles.filter((u) => u.connector === 'upload').length}
             syncingConnectors={syncingConnectors}
+            isSyncingAll={isSyncingAll}
             onConnect={handleConnectConnector}
             onSync={handleSyncConnector}
+            onSyncAll={handleSyncAllConnectors}
             onRevoke={handleRevokeConnector}
             onSaveToken={handleSaveToken}
             onNavigateUploads={() => setActiveSection('upload')}
             initialError={initialError}
             initialMessage={initialMessage}
+            syncFeedback={syncFeedback}
+            onDismissFeedback={() => setSyncFeedback(null)}
           />
 
           {/* Live Evidence Stream from Connected Sources */}
@@ -4803,6 +4992,15 @@ export default function DashboardPage() {
         <BriefDiffModal
           diff={diffModalData}
           onClose={() => setDiffModalData(null)}
+        />
+      )}
+
+      {/* Expiring Read-Only Brief Share Modal (E5) */}
+      {isShareModalOpen && currentBrief && (
+        <ShareBriefModal
+          briefId={currentBrief.id}
+          briefQuestion={currentBrief.question}
+          onClose={() => setIsShareModalOpen(false)}
         />
       )}
     </DashboardLayout>

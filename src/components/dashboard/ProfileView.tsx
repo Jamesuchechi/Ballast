@@ -18,6 +18,13 @@ import {
   Plus,
   Check,
   Loader2,
+  Mail,
+  Send,
+  Eye,
+  Sparkles,
+  X,
+  Bell,
+  CalendarDays,
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -64,6 +71,120 @@ export function ProfileView({
   const [newWsName, setNewWsName] = useState('');
   const [showCreateInput, setShowCreateInput] = useState(false);
 
+  // Notification & Digest Preferences State
+  const [prefs, setPrefs] = useState<{
+    email_enabled: boolean;
+    notify_on_publish: boolean;
+    notify_on_fail: boolean;
+    digest_enabled: boolean;
+    digest_frequency: string;
+    digest_day: string;
+  }>({
+    email_enabled: true,
+    notify_on_publish: true,
+    notify_on_fail: true,
+    digest_enabled: true,
+    digest_frequency: 'weekly',
+    digest_day: 'monday',
+  });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(false);
+  const [isUpdatingPref, setIsUpdatingPref] = useState(false);
+
+  // Digest Preview & Test State
+  const [showDigestModal, setShowDigestModal] = useState(false);
+  const [digestPreviewHtml, setDigestPreviewHtml] = useState<string | null>(null);
+  const [digestData, setDigestData] = useState<any | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
+
+  const loadPreferences = async () => {
+    try {
+      setIsLoadingPrefs(true);
+      const res = await fetch('/api/user/preferences');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.preferences) {
+          setPrefs({
+            email_enabled: data.preferences.email_enabled ?? true,
+            notify_on_publish: data.preferences.notify_on_publish ?? true,
+            notify_on_fail: data.preferences.notify_on_fail ?? true,
+            digest_enabled: data.preferences.digest_enabled ?? true,
+            digest_frequency: data.preferences.digest_frequency || 'weekly',
+            digest_day: data.preferences.digest_day || 'monday',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load preferences:', err);
+    } finally {
+      setIsLoadingPrefs(false);
+    }
+  };
+
+  const handleUpdatePref = async (newPrefs: Partial<typeof prefs>) => {
+    const updated = { ...prefs, ...newPrefs };
+    setPrefs(updated);
+    try {
+      setIsUpdatingPref(true);
+      setErrorMsg(null);
+      const res = await fetch('/api/user/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences: newPrefs }),
+      });
+      if (res.ok) {
+        setSuccessMsg('Notification preferences updated');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || 'Failed to update preferences');
+      }
+    } catch (err: any) {
+      setErrorMsg('Failed to update preference: ' + err.message);
+    } finally {
+      setIsUpdatingPref(false);
+    }
+  };
+
+  const handleOpenDigestPreview = async () => {
+    setShowDigestModal(true);
+    try {
+      setIsLoadingPreview(true);
+      const res = await fetch('/api/digest');
+      if (res.ok) {
+        const data = await res.json();
+        setDigestData(data.digest);
+        setDigestPreviewHtml(data.html);
+      }
+    } catch (err) {
+      console.error('Failed to load digest preview:', err);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleSendTestDigest = async () => {
+    try {
+      setIsSendingTest(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+      const res = await fetch('/api/digest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendToSelf: true, force: true }),
+      });
+      const data = await res.json();
+      if (res.ok && data.result?.sent) {
+        setSuccessMsg(`Test digest dispatched to ${data.result.recipients.join(', ')} (${data.result.briefCount} briefs included)`);
+      } else {
+        setErrorMsg(data.error || data.result?.reason || 'Failed to dispatch test digest');
+      }
+    } catch (err: any) {
+      setErrorMsg('Error sending test digest: ' + err.message);
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
   const loadWorkspaces = async () => {
     try {
       setIsLoadingWorkspaces(true);
@@ -93,6 +214,7 @@ export function ProfileView({
         setPlan(data.workspace?.plan || 'operator');
       }
       await loadWorkspaces();
+      await loadPreferences();
     } catch (err) {
       console.error('Failed to load profile:', err);
     } finally {
@@ -592,6 +714,199 @@ export function ProfileView({
             )}
           </div>
 
+          {/* Email & Weekly Digest Notifications Section */}
+          <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Mail size={18} color="#38bdf8" />
+                <div>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                    Email &amp; Weekly Digest Notifications
+                  </h3>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                    Configure transactional notifications, instant brief alerts, and weekly briefing rollups.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleOpenDigestPreview}
+                  className="dash-btn-secondary"
+                  style={{ fontSize: '0.74rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <Eye size={13} />
+                  <span>Preview Digest</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendTestDigest}
+                  disabled={isSendingTest}
+                  className="dash-btn-secondary"
+                  style={{ fontSize: '0.74rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px', color: '#38bdf8' }}
+                >
+                  {isSendingTest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>Send Test Digest</span>
+                </button>
+              </div>
+            </div>
+
+            {isLoadingPrefs ? (
+              <div style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: '8px', fontSize: '0.8rem' }}>
+                <Loader2 size={15} className="animate-spin" />
+                <span>Loading preferences...</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Master Email Switch */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--card-bg-subtle)', borderRadius: '8px', border: '1px solid var(--card-border)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text)' }}>
+                      Global Email Notifications
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Enable or disable all outbound emails from Ballast for this account.
+                    </div>
+                  </div>
+                  <label style={{ position: 'relative', display: 'inline-block', width: '42px', height: '22px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={prefs.email_enabled}
+                      onChange={(e) => handleUpdatePref({ email_enabled: e.target.checked })}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: prefs.email_enabled ? '#10b981' : 'var(--card-border)',
+                        borderRadius: '22px',
+                        transition: '0.2s',
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          height: '16px',
+                          width: '16px',
+                          left: prefs.email_enabled ? '22px' : '3px',
+                          bottom: '3px',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '50%',
+                          transition: '0.2s',
+                        }}
+                      />
+                    </span>
+                  </label>
+                </div>
+
+                {/* Sub-Preferences Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', opacity: prefs.email_enabled ? 1 : 0.5, pointerEvents: prefs.email_enabled ? 'auto' : 'none' }}>
+                  {/* Weekly Digest Card */}
+                  <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--card-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Sparkles size={15} color="#818cf8" />
+                        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text)' }}>
+                          Weekly Intelligence Digest
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={prefs.digest_enabled}
+                        onChange={(e) => handleUpdatePref({ digest_enabled: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </div>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                      Aggregates all briefs published in the last 7 days with executive TL;DRs and claim statistics into one rollup.
+                    </p>
+
+                    {prefs.digest_enabled && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <select
+                          value={prefs.digest_frequency}
+                          onChange={(e) => handleUpdatePref({ digest_frequency: e.target.value as 'weekly' | 'daily' })}
+                          style={{
+                            flex: 1,
+                            padding: '6px 8px',
+                            fontSize: '0.74rem',
+                            borderRadius: '6px',
+                            background: 'var(--input-bg)',
+                            border: '1px solid var(--card-border)',
+                            color: 'var(--text)',
+                            outline: 'none',
+                          }}
+                        >
+                          <option value="weekly">Weekly Rollup</option>
+                          <option value="daily">Daily Summary</option>
+                        </select>
+                        <select
+                          value={prefs.digest_day}
+                          onChange={(e) => handleUpdatePref({ digest_day: e.target.value })}
+                          disabled={prefs.digest_frequency === 'daily'}
+                          style={{
+                            flex: 1,
+                            padding: '6px 8px',
+                            fontSize: '0.74rem',
+                            borderRadius: '6px',
+                            background: 'var(--input-bg)',
+                            border: '1px solid var(--card-border)',
+                            color: 'var(--text)',
+                            outline: 'none',
+                            opacity: prefs.digest_frequency === 'daily' ? 0.5 : 1,
+                          }}
+                        >
+                          <option value="monday">Monday morning</option>
+                          <option value="friday">Friday afternoon</option>
+                          <option value="sunday">Sunday evening</option>
+                          <option value="tuesday">Tuesday</option>
+                          <option value="wednesday">Wednesday</option>
+                          <option value="thursday">Thursday</option>
+                          <option value="saturday">Saturday</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Instant Per-Brief Alerts */}
+                  <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--card-bg)', border: '1px solid var(--card-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Bell size={15} color="#10b981" />
+                      <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text)' }}>
+                        Instant Per-Brief Alerts
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.76rem', color: 'var(--text)', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.notify_on_publish}
+                          onChange={(e) => handleUpdatePref({ notify_on_publish: e.target.checked })}
+                        />
+                        <span>Send email immediately when a brief is published &amp; verified</span>
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.76rem', color: 'var(--text)', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.notify_on_fail}
+                          onChange={(e) => handleUpdatePref({ notify_on_fail: e.target.checked })}
+                        />
+                        <span>Send email immediately if a scheduled pipeline run fails</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Security & System Info */}
           <div className="dash-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -814,6 +1129,188 @@ export function ProfileView({
             </button>
           </div>
         </form>
+      )}
+
+      {/* ========================================================================= */}
+      {/* WEEKLY DIGEST PREVIEW MODAL                                               */}
+      {/* ========================================================================= */}
+      {showDigestModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            className="dash-card"
+            style={{
+              width: '100%',
+              maxWidth: '680px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+              border: '1px solid var(--card-border)',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '16px 20px',
+                background: 'var(--card-bg-subtle)',
+                borderBottom: '1px solid var(--card-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={18} color="#818cf8" />
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+                    Weekly Intelligence Digest Preview
+                  </h3>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                    Live rollup of briefs published in <strong>{workspace?.name || 'Workspace'}</strong> over the past 7 days.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDigestModal(false)}
+                className="dash-btn-secondary"
+                style={{ padding: '6px', borderRadius: '6px' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {isLoadingPreview ? (
+                <div style={{ padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: '12px' }}>
+                  <Loader2 size={24} className="animate-spin" />
+                  <span style={{ fontSize: '0.86rem' }}>Generating live digest preview...</span>
+                </div>
+              ) : digestData ? (
+                <>
+                  {/* Quick Metric Bar */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                    <div style={{ padding: '10px', background: 'var(--card-bg-subtle)', borderRadius: '6px', textAlign: 'center', border: '1px solid var(--card-border)' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text)' }}>{digestData.totalBriefs}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Briefs Published</div>
+                    </div>
+                    <div style={{ padding: '10px', background: 'var(--card-bg-subtle)', borderRadius: '6px', textAlign: 'center', border: '1px solid var(--card-border)' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>{digestData.totalClaims}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Verified Claims</div>
+                    </div>
+                    <div style={{ padding: '10px', background: 'var(--card-bg-subtle)', borderRadius: '6px', textAlign: 'center', border: '1px solid var(--card-border)' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f59e0b' }}>{digestData.totalActions}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Proposed Actions</div>
+                    </div>
+                  </div>
+
+                  {/* Rendered HTML Email Frame */}
+                  <div
+                    style={{
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      border: '1px solid var(--card-border)',
+                      background: '#0b0f19',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        background: '#0f172a',
+                        borderBottom: '1px solid #334155',
+                        fontSize: '0.72rem',
+                        color: '#94a3b8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <span>Subject: [Ballast] Weekly Intelligence Digest — {workspace?.name}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)' }}>HTML Template</span>
+                    </div>
+
+                    {digestPreviewHtml ? (
+                      <iframe
+                        srcDoc={digestPreviewHtml}
+                        title="Digest Preview"
+                        style={{
+                          width: '100%',
+                          height: '380px',
+                          border: 'none',
+                          backgroundColor: '#0b0f19',
+                        }}
+                      />
+                    ) : (
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        No preview available.
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Failed to load digest preview.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              style={{
+                padding: '14px 20px',
+                background: 'var(--card-bg-subtle)',
+                borderTop: '1px solid var(--card-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                Dispatched automatically on <strong>{prefs.digest_day || 'Monday'}s</strong> to subscribed members.
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDigestModal(false)}
+                  className="dash-btn-secondary"
+                  style={{ fontSize: '0.78rem', padding: '6px 14px' }}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendTestDigest}
+                  disabled={isSendingTest}
+                  className="dash-btn-primary"
+                  style={{ fontSize: '0.78rem', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  {isSendingTest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>Send Test Email</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

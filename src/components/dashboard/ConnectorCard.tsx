@@ -323,10 +323,14 @@ export function ConnectorCard({
                 fontSize: '0.78rem',
                 opacity: isSyncing ? 0.7 : 1,
                 whiteSpace: 'nowrap',
+                background: hasError ? 'rgba(239, 68, 68, 0.2)' : undefined,
+                color: hasError ? '#ef4444' : undefined,
+                borderColor: hasError ? 'rgba(239, 68, 68, 0.4)' : undefined,
               }}
+              title={hasError ? 'Retry failed sync immediately' : 'Re-sync latest data from provider'}
             >
               <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+              <span>{isSyncing ? 'Syncing...' : hasError ? 'Retry Sync' : 'Re-sync Now'}</span>
             </button>
             <button
               onClick={() => onRevoke(connector)}

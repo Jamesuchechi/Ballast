@@ -169,8 +169,10 @@ export class CalendarConnector implements SourceConnector {
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
     const tokenInfo = await getCalendarToken(workspaceId);
+    const accessToken = tokenInfo?.token?.access_token;
+    const isMockToken = !accessToken || accessToken.startsWith('mock_') || accessToken.includes('mock');
 
-    if (!tokenInfo && isMockAllowed) {
+    if (isMockAllowed && isMockToken) {
       return SAMPLE_CALENDAR_EVENTS.map((e) => {
         const content = formatCalendarContent(e);
         const checksum = createHash('sha256').update(content).digest('hex');

@@ -28,6 +28,21 @@ export async function POST(
       windowDays,
     });
 
+    // Record manual sync audit entry in access_logs (NFR2.4 / E3)
+    try {
+      const { query } = await import('@/db/client');
+      await query(
+        `INSERT INTO access_logs (workspace_id, source_id, brief_id, action)
+         VALUES ($1, NULL, NULL, $2)`,
+        [
+          workspaceId,
+          `connector_sync:manual:${id}: synced=${result.syncedCount} unchanged=${result.unchangedCount} duration=${result.durationMs}ms`,
+        ]
+      );
+    } catch (logErr) {
+      console.warn(`[API /api/connectors/[id]/sync] Failed recording access log:`, logErr);
+    }
+
     if (result.error) {
       return NextResponse.json(
         {
@@ -40,6 +55,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      connectorId: id,
+      message: `${connector.name} synced: ${result.syncedCount} updated, ${result.unchangedCount} unchanged in ${result.durationMs}ms`,
       result,
     });
   } catch (err: any) {

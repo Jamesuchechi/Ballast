@@ -13,17 +13,22 @@ import { runSchedule } from './core/scheduler';
 import { objectStore } from './storage/objectStore';
 import { generateSimplePdf } from './core/pdfRenderer';
 import { runGlobalRetentionPass } from './core/retention';
+import { checkAndTriggerDueDigests } from './core/digestService';
 
 let briefsProcessedCount = 0;
 let actionsProcessedCount = 0;
 let schedulesTriggeredCount = 0;
 let retentionPrunedTotal = 0;
+let digestsSentTotal = 0;
 let lastRetentionPassAt: string | null = null;
+let lastDigestCheckAt: string | null = null;
 let heartbeatInterval: NodeJS.Timeout | null = null;
 let schedulerInterval: NodeJS.Timeout | null = null;
 let retentionInterval: NodeJS.Timeout | null = null;
+let digestInterval: NodeJS.Timeout | null = null;
 let isCheckingSchedules = false;
 let isRunningRetention = false;
+let isCheckingDigests = false;
 let httpServer: http.Server | null = null;
 
 export function startHeartbeat(intervalMs: number = 60000): void {
@@ -223,6 +228,59 @@ export function stopRetentionLoop(): void {
   }
 }
 
+/**
+ * Evaluates active workspaces for due weekly digests and dispatches them.
+ */
+export async function checkAndTriggerDueDigestsPass(): Promise<number> {
+  if (isCheckingDigests) {
+    return 0;
+  }
+  isCheckingDigests = true;
+
+  try {
+    const sent = await checkAndTriggerDueDigests();
+    if (sent > 0) {
+      digestsSentTotal += sent;
+      lastDigestCheckAt = new Date().toISOString();
+    }
+    return sent;
+  } catch (err: any) {
+    console.error('[Digest Worker] Error during digest pass:', err.message);
+    return 0;
+  } finally {
+    isCheckingDigests = false;
+  }
+}
+
+/**
+ * Starts the background digest loop (checks hourly for due weekly digests).
+ */
+export function startDigestLoop(intervalMs: number = 3600000): void {
+  if (digestInterval) {
+    clearInterval(digestInterval);
+  }
+
+  // Initial check on startup
+  checkAndTriggerDueDigestsPass().catch((err) => {
+    console.error('[Digest Worker] Initial check error:', err);
+  });
+
+  digestInterval = setInterval(() => {
+    checkAndTriggerDueDigestsPass().catch((err) => {
+      console.error('[Digest Worker] Periodic check error:', err);
+    });
+  }, intervalMs);
+
+  console.log(`[Digest Worker] Weekly intelligence digest loop active (polling every ${intervalMs / 60000}m)`);
+}
+
+export function stopDigestLoop(): void {
+  if (digestInterval) {
+    clearInterval(digestInterval);
+    digestInterval = null;
+  }
+}
+
 export function logEnvironmentStatus(): void {
   const hasDb = Boolean(process.env.DATABASE_URL);
   const hasRedis = Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL);
@@ -338,6 +396,10 @@ export function startHttpServer(
             lastPassAt: lastRetentionPassAt,
             totalPruned: retentionPrunedTotal,
           },
+          digests: {
+            lastPassAt: lastDigestCheckAt,
+            totalSent: digestsSentTotal,
+          },
           timestamp: new Date().toISOString(),
         })
       );
@@ -439,11 +501,15 @@ export async function startWorker(): Promise<{
   // Start 24h autonomous daily data retention pass (checks hourly)
   startRetentionLoop(3600000);
 
+  // Start 24h autonomous weekly digest dispatch loop (checks hourly)
+  startDigestLoop(3600000);
+
   const shutdown = async (signal: string) => {
     console.log(`\n[Worker] Received ${signal}. Gracefully stopping workers...`);
     stopHeartbeat();
     stopSchedulerLoop();
     stopRetentionLoop();
+    stopDigestLoop();
     await stopHttpServer();
     await Promise.all([briefWorker.close(), actionWorker.close()]);
     console.log('[Worker] All workers closed cleanly.');

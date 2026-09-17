@@ -187,9 +187,11 @@ export class GmailConnector implements SourceConnector {
     const isMockAllowed = process.env.EVAL_USE_MOCK === 'true' || process.env.NODE_ENV === 'test';
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
-    // If explicit mock mode and no active real token exists, return sample fixtures
     const existingToken = await getDecryptedToken(workspaceId, 'gmail');
-    if (!existingToken && isMockAllowed) {
+    const isMockToken = !existingToken || !existingToken.access_token || existingToken.access_token.startsWith('mock_') || existingToken.access_token.includes('mock');
+
+    // If explicit mock mode and no active real token exists, return sample fixtures
+    if (isMockAllowed && isMockToken) {
       const messages = SAMPLE_GMAIL_MESSAGES.filter(
         (m) => new Date(m.date) >= cutoffDate
       );

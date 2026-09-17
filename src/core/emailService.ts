@@ -4,6 +4,9 @@ export interface UserNotificationPreferences {
   email_enabled?: boolean;
   notify_on_publish?: boolean;
   notify_on_fail?: boolean;
+  digest_enabled?: boolean;
+  digest_frequency?: 'weekly' | 'daily';
+  digest_day?: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday' | string;
 }
 
 interface WorkspaceMemberRecipient {

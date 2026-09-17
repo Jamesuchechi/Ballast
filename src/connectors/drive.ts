@@ -142,8 +142,10 @@ export class DriveConnector implements SourceConnector {
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
     const tokenInfo = await getDriveToken(workspaceId);
+    const accessToken = tokenInfo?.token?.access_token;
+    const isMockToken = !accessToken || accessToken.startsWith('mock_') || accessToken.includes('mock');
 
-    if (!tokenInfo && isMockAllowed) {
+    if (isMockAllowed && isMockToken) {
       return SAMPLE_DRIVE_FILES.map((f) => {
         const checksum = createHash('sha256').update(f.content).digest('hex');
         return {

@@ -6,12 +6,18 @@ export interface UserNotificationPreferences {
   email_enabled?: boolean;
   notify_on_publish?: boolean;
   notify_on_fail?: boolean;
+  digest_enabled?: boolean;
+  digest_frequency?: 'weekly' | 'daily';
+  digest_day?: string;
 }
 
 const DEFAULT_PREFERENCES: Required<UserNotificationPreferences> = {
   email_enabled: true,
   notify_on_publish: true,
   notify_on_fail: true,
+  digest_enabled: true,
+  digest_frequency: 'weekly',
+  digest_day: 'monday',
 };
 
 export async function GET(req: NextRequest) {
@@ -63,6 +69,11 @@ export async function PATCH(req: NextRequest) {
       ...(typeof preferences.email_enabled === 'boolean' ? { email_enabled: preferences.email_enabled } : {}),
       ...(typeof preferences.notify_on_publish === 'boolean' ? { notify_on_publish: preferences.notify_on_publish } : {}),
       ...(typeof preferences.notify_on_fail === 'boolean' ? { notify_on_fail: preferences.notify_on_fail } : {}),
+      ...(typeof preferences.digest_enabled === 'boolean' ? { digest_enabled: preferences.digest_enabled } : {}),
+      ...(typeof preferences.digest_frequency === 'string' && ['weekly', 'daily'].includes(preferences.digest_frequency)
+        ? { digest_frequency: preferences.digest_frequency as 'weekly' | 'daily' }
+        : {}),
+      ...(typeof preferences.digest_day === 'string' ? { digest_day: preferences.digest_day.toLowerCase() } : {}),
     };
 
     await query(

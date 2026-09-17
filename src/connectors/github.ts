@@ -88,8 +88,10 @@ export class GitHubConnector implements SourceConnector {
     const cutoffDate = new Date(Date.now() - windowDays * 86400000);
 
     const token = await getDecryptedToken<{ access_token?: string; token?: string }>(workspaceId, 'github');
+    const bearerToken = token?.access_token || token?.token;
+    const isMockToken = !token || !bearerToken || bearerToken.startsWith('mock_') || bearerToken.includes('mock');
 
-    if (!token && isMockAllowed) {
+    if (isMockAllowed && isMockToken) {
       return SAMPLE_GITHUB_ITEMS.map((item) => {
         const content = formatGitHubContent(item);
         const checksum = createHash('sha256').update(content).digest('hex');
@@ -107,7 +109,6 @@ export class GitHubConnector implements SourceConnector {
       throw new Error('GitHub connector is not connected or token has been revoked');
     }
 
-    const bearerToken = token.access_token || token.token;
     const sinceParam = cutoffDate.toISOString();
 
     const response = await fetch(`https://api.github.com/user/issues?filter=all&state=all&since=${sinceParam}&per_page=${maxResults}`, {
