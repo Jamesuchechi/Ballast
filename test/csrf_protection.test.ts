@@ -108,15 +108,15 @@ async function runTest() {
     }
     console.log('  Passed: Mismatched CSRF tokens rejected.');
 
-    console.log('\n[Test 4] Verifying getSessionCookieOptions SameSite=Strict configuration...');
+    console.log('\n[Test 4] Verifying getSessionCookieOptions SameSite=Lax configuration...');
     const cookieOpts = getSessionCookieOptions();
-    if (cookieOpts.sameSite !== 'strict') {
-      throw new Error(`Expected cookie sameSite to be 'strict', got ${cookieOpts.sameSite}`);
+    if (cookieOpts.sameSite !== 'lax') {
+      throw new Error(`Expected cookie sameSite to be 'lax', got ${cookieOpts.sameSite}`);
     }
     if (!cookieOpts.httpOnly) {
       throw new Error('Expected cookie httpOnly to be true.');
     }
-    console.log('  Passed: Session cookie options configured with SameSite=Strict and HttpOnly=true.');
+    console.log('  Passed: Session cookie options configured with SameSite=Lax and HttpOnly=true.');
 
     console.log('\n[Test 5] Testing auth route login & signup CSRF integration...');
     const maliciousLoginReq = new NextRequest('http://localhost:3000/api/auth/login', {

@@ -391,7 +391,7 @@ export function getSessionCookieOptions() {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     path: '/',
     maxAge: 30 * 24 * 60 * 60, // 30 days
   };

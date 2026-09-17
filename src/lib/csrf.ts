@@ -140,7 +140,7 @@ export function attachCsrfCookie(res: NextResponse, token?: string): string {
   res.cookies.set(CSRF_COOKIE_NAME, csrfToken, {
     httpOnly: false, // Must be readable by client JS to send in x-csrf-token header
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
     maxAge: 30 * 24 * 60 * 60,
   });

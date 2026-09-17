@@ -225,7 +225,7 @@ Previously, BullMQ queues lacked explicit job options, defaulting to 0 attempts 
 Previously, authentication routes (`/api/auth/login`, `/api/auth/signup`) and session cookies lacked explicit CSRF protection and were configured with `SameSite=Lax`, creating vulnerability to cross-site request forgery and form submission abuse.
 
 **Resolution:**
-1. Configured all authentication and profile session cookies with `SameSite=Strict`, `HttpOnly=true`, and `Secure` via `getSessionCookieOptions()` in `src/lib/auth.ts`.
+1. Configured all authentication and profile session cookies with `SameSite=Lax`, `HttpOnly=true`, and `Secure` via `getSessionCookieOptions()` in `src/lib/auth.ts` (enabling seamless OAuth cross-site redirect callback flows while protecting mutating requests via CSRF tokens).
 2. Implemented `src/lib/csrf.ts` providing cryptographic HMAC-signed CSRF tokens, `verifyCsrf()` origin & referer validation against canonical origins, and double-submit token validation.
 3. Created dedicated endpoint `GET /api/auth/csrf` for client token issuance.
 4. Enforced CSRF origin and token validation on mutating authentication routes (`POST /api/auth/login` and `POST /api/auth/signup`).
