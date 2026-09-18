@@ -1,8 +1,10 @@
 # Brief: What are the outstanding deliverables and open questions for the Q3 billing revamp?
 
-As of: 2026-09-16T22:33:22.803Z
+As of: 2026-09-18T08:53:06.448Z
 Mode: home
 Status: published
+
+> **TL;DR:** The new Stripe webhook handler is deployed to staging and passing integration checks. Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.
 
 ## Answer
 - The new Stripe webhook handler is deployed to staging and passing integration checks.

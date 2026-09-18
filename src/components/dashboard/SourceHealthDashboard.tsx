@@ -28,6 +28,7 @@ import {
   Eye,
   AlertOctagon,
   Sparkles,
+  Shield,
 } from 'lucide-react';
 import { SourceHealthData, ConnectorHealthSummary } from '@/app/api/sources/health/route';
 
@@ -140,6 +141,51 @@ export function SourceHealthDashboard({
       alert(e.message || 'Failed to delete source');
     }
   };
+
+  const [updatingTrustMap, setUpdatingTrustMap] = useState<Record<string, boolean>>({});
+
+  const handleToggleTrustBoundary = async (sourceId: string, currentTrust: string) => {
+    const newTrust = currentTrust === 'verified' ? 'untrusted_content' : 'verified';
+    try {
+      setUpdatingTrustMap((prev) => ({ ...prev, [sourceId]: true }));
+      // Optimistic update
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sources: prev.sources.map((s) =>
+            s.id === sourceId ? { ...s, trustBoundary: newTrust } : s
+          ),
+        };
+      });
+
+      const res = await fetch(`/api/sources/${sourceId}/trust`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trustBoundary: newTrust }),
+      });
+
+      if (!res.ok) {
+        // Rollback on failure
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            sources: prev.sources.map((s) =>
+              s.id === sourceId ? { ...s, trustBoundary: currentTrust } : s
+            ),
+          };
+        });
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || 'Failed to update trust boundary');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error updating trust boundary');
+    } finally {
+      setUpdatingTrustMap((prev) => ({ ...prev, [sourceId]: false }));
+    }
+  };
+
 
   const getConnectorIcon = (connector: string) => {
     switch (connector.toLowerCase()) {
@@ -836,18 +882,33 @@ export function SourceHealthDashboard({
                       </td>
 
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                        <span
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTrustBoundary(s.id, s.trustBoundary)}
+                          disabled={updatingTrustMap[s.id]}
+                          title={
+                            s.trustBoundary === 'verified'
+                              ? 'Verified Authoritative Internal Source (Critic prioritizes over untrusted sources in conflicts). Click to change to Untrusted.'
+                              : 'Untrusted Content (Standard external or third-party source). Click to upgrade to Verified.'
+                          }
                           style={{
-                            fontSize: '0.7rem',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            background: s.trustBoundary === 'verified' ? 'rgba(16, 185, 129, 0.12)' : 'var(--card-bg-subtle)',
-                            color: s.trustBoundary === 'verified' ? '#10b981' : 'var(--text-muted)',
-                            border: '1px solid var(--card-border)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.72rem',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: s.trustBoundary === 'verified' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.12)',
+                            color: s.trustBoundary === 'verified' ? '#10b981' : '#f59e0b',
+                            border: `1px solid ${s.trustBoundary === 'verified' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.25)'}`,
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            transition: 'all 0.15s ease',
                           }}
                         >
-                          {s.trustBoundary}
-                        </span>
+                          <Shield size={11} color={s.trustBoundary === 'verified' ? '#10b981' : '#f59e0b'} />
+                          <span>{s.trustBoundary === 'verified' ? 'Verified Doc' : 'Untrusted'}</span>
+                        </button>
                       </td>
 
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>

@@ -28,6 +28,7 @@ import {
   Check,
   Building,
   Layers,
+  Webhook,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { BallastLogo } from '@/components/brand/BallastLogo';
@@ -246,6 +247,13 @@ export function Sidebar({
           id: 'diff',
           label: 'Version Chains & Diff',
           icon: GitBranch,
+        },
+        {
+          id: 'webhooks',
+          label: 'Outbound Webhooks',
+          icon: Webhook,
+          badgeColor: 'rgba(99, 102, 241, 0.15)',
+          badgeText: '#818cf8',
         },
       ],
     },

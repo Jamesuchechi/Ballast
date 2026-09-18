@@ -1,8 +1,10 @@
 # Brief: What were our server infrastructure costs for Q2?
 
-As of: 2026-09-16T22:33:22.880Z
+As of: 2026-09-18T08:53:06.536Z
 Mode: home
 Status: published
+
+> **TL;DR:** Our audited server infrastructure costs for Q2 totaled $42,500 across AWS and Cloudflare.
 
 ## Answer
 - Our audited server infrastructure costs for Q2 totaled $42,500 across AWS and Cloudflare.

@@ -12,6 +12,8 @@ export type ConnectorType =
   | "upload"
   | "web";
 
+export type TrustBoundary = "verified" | "untrusted_content";
+
 export type BriefMode = "home" | "world";
 
 export type BriefStatus =
@@ -27,6 +29,7 @@ export interface SourceBlock {
   class: "private" | "web";
   connector: string;
   body: string;
+  trust_boundary?: TrustBoundary;
 }
 
 export interface RetrievedQuote {
@@ -38,6 +41,7 @@ export interface RetrievedQuote {
   url?: string | null;
   distance?: number;
   similarity?: number;
+  trust_boundary?: TrustBoundary;
 }
 
 export interface UncheckedConnector {
@@ -197,3 +201,28 @@ export interface CriticLog {
   missing: MissingGap[];
   did_not: string[];
 }
+
+export type OutboundWebhookEvent =
+  | "brief.published"
+  | "brief.failed"
+  | "connector.synced"
+  | "action.proposed"
+  | "action.executed"
+  | "ballast.test"
+  | "*";
+
+export interface OutboundWebhookRecord {
+  id: string;
+  workspace_id: string;
+  url: string;
+  secret: string;
+  events: OutboundWebhookEvent[];
+  description?: string | null;
+  is_active: boolean;
+  last_triggered_at?: string | null;
+  last_status_code?: number | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+

@@ -1,8 +1,10 @@
 # Brief: What is our database backup retention schedule and when is the weekly backup taken?
 
-As of: 2026-09-16T22:33:22.857Z
+As of: 2026-09-18T08:53:06.501Z
 Mode: home
 Status: published
+
+> **TL;DR:** Production PostgreSQL snapshots are retained for 30 days in cold storage. Full database backups are executed weekly on Sundays at 02:00 UTC.
 
 ## Answer
 - Production PostgreSQL snapshots are retained for 30 days in cold storage.

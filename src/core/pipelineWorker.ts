@@ -11,7 +11,9 @@ import { renderAndStorePdf } from './pdfRenderer';
 import { createNotification } from './notifications';
 import { sendBriefEmailNotification } from './emailService';
 import { getWorkspaceConflictMemory } from './conflictResolver';
+import { dispatchOutboundWebhook } from './outboundWebhooks';
 import type {
+
   BriefV1,
   CriticInput,
   RetrievedQuote,
@@ -468,6 +470,23 @@ export async function processQueuedBrief(
       pdfUri,
     }).catch((emailErr) => console.warn('[Email Dispatch Publish Error]:', emailErr));
 
+    // Outbound Webhooks dispatch (Feature E11, non-blocking)
+    dispatchOutboundWebhook({
+      workspaceId,
+      event: 'brief.published',
+      payload: {
+        brief_id: briefId,
+        title: draft.title || `Brief: ${question}`,
+        question,
+        mode,
+        summary: assembled.summary || null,
+        claim_count: publishedSections.evidence?.length || 0,
+        action_count: publishedSections.actions?.length || 0,
+        pdf_uri: pdfUri,
+        published_at: new Date().toISOString(),
+      },
+    }).catch((whErr) => console.warn('[Outbound Webhook Publish Error]:', whErr));
+
     const publishedBrief: BriefV1 = {
       id: briefId,
       workspace_id: workspaceId,
@@ -523,6 +542,19 @@ export async function processQueuedBrief(
       summaryOrError: err.message || 'Pipeline generation failed.',
     }).catch((emailErr) => console.warn('[Email Dispatch Fail Error]:', emailErr));
 
+    // Outbound Webhooks dispatch (Feature E11, non-blocking)
+    dispatchOutboundWebhook({
+      workspaceId,
+      event: 'brief.failed',
+      payload: {
+        brief_id: briefId,
+        question,
+        error: err.message || 'Pipeline generation failed.',
+        failed_at: new Date().toISOString(),
+      },
+    }).catch((whErr) => console.warn('[Outbound Webhook Fail Error]:', whErr));
+
     return null;
   }
 }
+

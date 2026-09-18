@@ -27,8 +27,9 @@ export function cleanHtmlAndTracking(text: string): string {
     .replace(/&#x2F;/gi, '/')
     .replace(/&#x3D;/gi, '=');
 
-  // 3. Remove raw HTML tags (e.g. <a ...>, <span ...>, </td>, </tr>, <strong>)
-  cleaned = cleaned.replace(/<[^>]+>/g, ' ');
+  // 3. Remove raw HTML tags cleanly (remove inline tags without adding spaces, replace block tags with space)
+  cleaned = cleaned.replace(/<\/?(p|div|br|tr|td|li|blockquote|h[1-6])[^>]*>/gi, ' ');
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
 
   // 4. Remove residual HTML attribute noise if left over in text
   cleaned = cleaned.replace(/target="_blank"|class="[^"]*"|style="[^"]*"/gi, ' ');
@@ -109,21 +110,24 @@ export function parseAndHumanizeCitationLine(line: string): {
   sourceLabel: string;
   quote: string;
 } {
-  const trimmed = line.trim().replace(/^[-*]\s*/, '');
+  const trimmed = line.trim().replace(/^[-*•]\s*/, '');
   
   // Format: [class] <source> — “<quote>” or [class] <source> - "<quote>"
-  const match = trimmed.match(/^\[(private|web|unchecked)\]\s*([^\s—\-]+)?\s*[—\-]\s*[“"']?([\s\S]*?)[”"']?$/i);
-  
-  if (match) {
-    const rawClass = match[1].toLowerCase();
-    const rawSource = match[2];
-    const rawQuote = match[3];
-
-    return {
-      sourceClass: rawClass,
-      sourceLabel: humanizeSourceLabel(rawSource, rawClass),
-      quote: cleanHtmlAndTracking(rawQuote),
-    };
+  const classMatch = trimmed.match(/^\[(private|web|unchecked)\]\s*(.*)$/i);
+  if (classMatch) {
+    const rawClass = classMatch[1].toLowerCase();
+    const rest = classMatch[2];
+    const sepMatch = rest.match(/\s+[—–-]\s+/);
+    if (sepMatch && sepMatch.index !== undefined) {
+      const rawSource = rest.slice(0, sepMatch.index).trim();
+      let rawQuote = rest.slice(sepMatch.index + sepMatch[0].length).trim();
+      rawQuote = rawQuote.replace(/^[“"']/, '').replace(/[”"']$/, '');
+      return {
+        sourceClass: rawClass,
+        sourceLabel: humanizeSourceLabel(rawSource, rawClass),
+        quote: cleanHtmlAndTracking(rawQuote),
+      };
+    }
   }
 
   return {

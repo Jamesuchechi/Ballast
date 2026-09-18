@@ -1,8 +1,10 @@
 # Brief: What was the cause of the Redis connection leak in PR #142 and how was it verified?
 
-As of: 2026-09-16T22:33:22.839Z
+As of: 2026-09-18T08:53:06.485Z
 Mode: home
 Status: published
+
+> **TL;DR:** Line 84: We are not closing the orphan socket when exponential backoff triggers a reconnect. Commit 4f82a1b explicitly calls client.disconnect() in the catch block before sleeping.
 
 ## Answer
 - Line 84: We are not closing the orphan socket when exponential backoff triggers a reconnect.

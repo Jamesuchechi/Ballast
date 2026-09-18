@@ -32,7 +32,7 @@ export async function runWriter(options: WriterOptions): Promise<DraftBrief> {
   if (llmCall) {
     const delimitedSources = formatDelimitedSources(sources);
     const retrievedQuotesList = retrieved
-      .map((r) => `[Quote ID: ${r.id}] (Source: ${r.source_id}, Class: ${r.source_class})\n"${r.quote}"`)
+      .map((r) => `[Quote ID: ${r.id}] (Source: ${r.source_id}, Class: ${r.source_class}, Trust: ${r.trust_boundary === 'verified' ? 'Verified Authoritative Internal' : 'Untrusted Content'})\n"${r.quote}"`)
       .join("\n\n");
 
     const systemPrompt = `You are the Ballast draft writer. Your job is to draft a structured brief answering the user's question based strictly on the delimited source data and retrieved quotes.
@@ -40,6 +40,7 @@ Mode: ${mode}.
 Rules:
 - Write in plain, clear, natural English that any ordinary reader (e.g. teacher, manager, everyday user) can easily understand.
 - Never output raw UUIDs, database chunk IDs, HTML tags, or tracking URLs into human-facing text.
+- Quotes tagged [Trust: Verified Authoritative Internal] represent verified internal policies, contracts, or authoritative documents. Prioritize verified sources if differing claims exist.
 - In "summary", provide a concise 1-2 sentence executive summary (TL;DR) grounded strictly in the verified facts and evidence.
 - In "evidence", each claim MUST cite the relevant quote ID(s) from the retrieved quotes.
 - What I used: categorize source IDs accurately into private, web, and unchecked.

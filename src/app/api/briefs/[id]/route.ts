@@ -30,7 +30,11 @@ export async function GET(
     }
 
     const citations = await query(
-      `SELECT * FROM citations WHERE brief_id = $1 ORDER BY created_at ASC`,
+      `SELECT c.*, s.connector, s.uri, s.trust_boundary, s.mime_type
+       FROM citations c
+       LEFT JOIN sources s ON c.source_id = s.id
+       WHERE c.brief_id = $1 
+       ORDER BY c.created_at ASC`,
       [id]
     );
 

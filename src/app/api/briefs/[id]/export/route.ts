@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne, query } from '@/db/client';
-import { exportToObsidian, exportToNotion } from '@/core/exporters';
+import { exportToObsidian, exportToNotion, pushBriefToNotion } from '@/core/exporters';
 
 export async function POST(
   req: NextRequest,
@@ -29,7 +29,7 @@ export async function POST(
 
     // Fetch citations
     const citations = await query(
-      `SELECT c.*, s.connector, s.external_id as source_name 
+      `SELECT c.*, s.connector, s.external_id as source_name, s.uri, s.trust_boundary 
        FROM citations c 
        LEFT JOIN sources s ON s.id = c.source_id 
        WHERE c.brief_id = $1`,
@@ -48,6 +48,26 @@ export async function POST(
     }
 
     if (target === 'notion') {
+      if (body.push === true || body.action === 'push') {
+        const pushResult = await pushBriefToNotion({
+          workspaceId: payload.workspaceId,
+          brief,
+          citations,
+          parentId: body.parentId || body.databaseId,
+          parentType: body.databaseId ? 'database_id' : 'page_id',
+        });
+
+        return NextResponse.json({
+          success: true,
+          target: 'notion',
+          action: 'push',
+          pageId: pushResult.pageId,
+          url: pushResult.url,
+          title: pushResult.title,
+          message: pushResult.message || 'Notion page created successfully',
+        });
+      }
+
       const notionResult = await exportToNotion(brief, citations);
       return NextResponse.json({
         success: true,

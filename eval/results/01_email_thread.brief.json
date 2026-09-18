@@ -1,18 +1,20 @@
 {
-  "id": "brief_2a714a13-7fb9-490b-9f26-d6805c9308d5",
+  "id": "brief_681b28e3-83d1-43ea-93f7-7023796dfd92",
   "workspace_id": "ws_dev",
   "parent_brief_id": null,
   "question": "What are the outstanding deliverables and open questions for the Q3 billing revamp?",
   "mode": "home",
   "status": "published",
   "template_version": "v1",
-  "as_of": "2026-09-16T22:33:22.803Z",
-  "published_at": "2026-09-16T22:33:22.803Z",
+  "as_of": "2026-09-18T08:53:06.448Z",
+  "published_at": "2026-09-18T08:53:06.448Z",
   "title": "Brief: What are the outstanding deliverables and open questions for the Q3 billing revamp?",
-  "markdown": "# Brief: What are the outstanding deliverables and open questions for the Q3 billing revamp?\n\nAs of: 2026-09-16T22:33:22.803Z\nMode: home\nStatus: published\n\n## Answer\n- The new Stripe webhook handler is deployed to staging and passing integration checks.\n- Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n- We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro\n- Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.\n\n## What I used\n### Private\n- email_thread_billing_01\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- Claim: The new Stripe webhook handler is deployed to staging and passing integration checks.\n  - [private] email_thread_billing_01 — “The new Stripe webhook handler is deployed to staging and passing integration checks.”\n- Claim: Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n  - [private] email_thread_billing_01 — “Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.”\n- Claim: We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro\n  - [private] email_thread_billing_01 — “We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet from legal.”\n- Claim: Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.\n  - [private] email_thread_billing_01 — “Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.”\n\n## Uncertain / missing\n- None identified.\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not perform actions without verified user approval.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
+  "markdown": "# Brief: What are the outstanding deliverables and open questions for the Q3 billing revamp?\n\nAs of: 2026-09-18T08:53:06.448Z\nMode: home\nStatus: published\n\n> **TL;DR:** The new Stripe webhook handler is deployed to staging and passing integration checks. Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n\n## Answer\n- The new Stripe webhook handler is deployed to staging and passing integration checks.\n- Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n- We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro\n- Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.\n\n## What I used\n### Private\n- email_thread_billing_01\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- Claim: The new Stripe webhook handler is deployed to staging and passing integration checks.\n  - [private] email_thread_billing_01 — “The new Stripe webhook handler is deployed to staging and passing integration checks.”\n- Claim: Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n  - [private] email_thread_billing_01 — “Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.”\n- Claim: We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro\n  - [private] email_thread_billing_01 — “We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet from legal.”\n- Claim: Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.\n  - [private] email_thread_billing_01 — “Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.”\n\n## Uncertain / missing\n- None identified.\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not perform actions without verified user approval.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
   "pdf_uri": null,
   "error": null,
+  "summary": "The new Stripe webhook handler is deployed to staging and passing integration checks. Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.",
   "sections": {
+    "summary": "The new Stripe webhook handler is deployed to staging and passing integration checks. Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.",
     "answer": "- The new Stripe webhook handler is deployed to staging and passing integration checks.\n- Alex needs to confirm the merchant accounts configuration in the new Stripe dashboard.\n- We are waiting on Elena from legal to review the revised consumer terms of service before we enable auto-debit in production. No date promised yet fro\n- Database migration scripts for subscriber tiers are ready, but we should do a dry run on the replica first.",
     "what_i_used": {
       "private": [
@@ -32,8 +34,8 @@
             "source_id": "email_thread_billing_01",
             "url": null,
             "claim_span": {
-              "start": 729,
-              "end": 814
+              "start": 916,
+              "end": 1001
             }
           }
         ]
@@ -48,8 +50,8 @@
             "source_id": "email_thread_billing_01",
             "url": null,
             "claim_span": {
-              "start": 952,
-              "end": 1038
+              "start": 1139,
+              "end": 1225
             }
           }
         ]
@@ -64,8 +66,8 @@
             "source_id": "email_thread_billing_01",
             "url": null,
             "claim_span": {
-              "start": 1177,
-              "end": 1327
+              "start": 1364,
+              "end": 1514
             }
           }
         ]
@@ -80,8 +82,8 @@
             "source_id": "email_thread_billing_01",
             "url": null,
             "claim_span": {
-              "start": 1538,
-              "end": 1645
+              "start": 1725,
+              "end": 1832
             }
           }
         ]

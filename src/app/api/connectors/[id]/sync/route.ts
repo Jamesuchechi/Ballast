@@ -43,6 +43,28 @@ export async function POST(
       console.warn(`[API /api/connectors/[id]/sync] Failed recording access log:`, logErr);
     }
 
+    // Outbound webhook notification (Feature E11)
+    try {
+      const { dispatchOutboundWebhook } = await import('@/core/outboundWebhooks');
+      dispatchOutboundWebhook({
+        workspaceId,
+        event: 'connector.synced',
+        payload: {
+          connector: id,
+          connector_name: connector.name,
+          synced_count: result.syncedCount,
+          unchanged_count: result.unchangedCount,
+          duration_ms: result.durationMs,
+          status: result.error ? 'error' : 'success',
+          error: result.error || null,
+          synced_at: new Date().toISOString(),
+        },
+      }).catch((whErr) => console.warn('[Outbound Webhook Sync Error]:', whErr));
+    } catch (whImportErr) {
+      console.warn('[Outbound Webhook Import Error]:', whImportErr);
+    }
+
+
     if (result.error) {
       return NextResponse.json(
         {

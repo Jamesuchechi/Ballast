@@ -12,7 +12,9 @@ export function formatDelimitedSources(sources: SourceBlock[]): string {
       (src) =>
         `<source id="${escapeAttr(src.id)}" class="${escapeAttr(
           src.class
-        )}" connector="${escapeAttr(src.connector)}">\n${src.body}\n</source>`
+        )}" connector="${escapeAttr(src.connector)}" trust="${escapeAttr(
+          src.trust_boundary || 'untrusted_content'
+        )}">\n${src.body}\n</source>`
     )
     .join("\n\n");
 }
@@ -28,7 +30,7 @@ export function formatRetrievedQuotes(quotes: RetrievedQuote[]): string {
           q.source_id
         )}" class="${escapeAttr(q.source_class)}" connector="${escapeAttr(
           q.connector
-        )}">\n${q.quote}\n</quote>`
+        )}" trust="${escapeAttr(q.trust_boundary || 'untrusted_content')}">\n${q.quote}\n</quote>`
     )
     .join("\n\n");
 }

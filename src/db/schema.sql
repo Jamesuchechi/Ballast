@@ -250,6 +250,36 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 15. conflict_resolutions
+CREATE TABLE IF NOT EXISTS conflict_resolutions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  brief_id UUID REFERENCES briefs(id) ON DELETE CASCADE,
+  citation_id UUID REFERENCES citations(id) ON DELETE CASCADE,
+  source_id UUID REFERENCES sources(id) ON DELETE SET NULL,
+  topic TEXT NOT NULL,
+  resolution_type TEXT NOT NULL CHECK (resolution_type IN ('confirmed_accurate', 'dismissed', 'superseded')),
+  user_note TEXT,
+  resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 16. outbound_webhooks
+CREATE TABLE IF NOT EXISTS outbound_webhooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  secret TEXT NOT NULL,
+  events TEXT[] NOT NULL DEFAULT ARRAY['brief.published'],
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  last_triggered_at TIMESTAMPTZ,
+  last_status_code INTEGER,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes for performance & workspace boundary enforcement
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
@@ -270,3 +300,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_oauth_tokens_workspace_connector_active ON
 CREATE INDEX IF NOT EXISTS idx_conflict_resolutions_workspace ON conflict_resolutions(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conflict_resolutions_citation ON conflict_resolutions(citation_id);
 CREATE INDEX IF NOT EXISTS idx_citations_resolution ON citations(brief_id, resolution_status);
+CREATE INDEX IF NOT EXISTS idx_outbound_webhooks_workspace ON outbound_webhooks(workspace_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_outbound_webhooks_created ON outbound_webhooks(workspace_id, created_at DESC);
+

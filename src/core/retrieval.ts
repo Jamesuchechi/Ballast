@@ -26,6 +26,7 @@ interface RawChunkRow {
   external_id: string;
   checksum: string;
   connector: string;
+  trust_boundary?: string;
   raw_uri?: string | null;
   distance: number;
 }
@@ -56,6 +57,7 @@ export async function retrievePrivateChunks(
        s.external_id, 
        s.checksum,
        s.connector,
+       s.trust_boundary,
        s.raw_uri,
        (c.embedding <=> $1::vector) AS distance
      FROM chunks c
@@ -104,6 +106,7 @@ export async function retrievePrivateChunks(
       url: null,
       distance: dist,
       similarity: Number((1 - dist).toFixed(4)),
+      trust_boundary: r.trust_boundary === 'verified' ? 'verified' : 'untrusted_content',
     };
   });
 
@@ -113,6 +116,7 @@ export async function retrievePrivateChunks(
     class: 'private',
     connector: (r.connector || 'upload') as any,
     body: r.text,
+    trust_boundary: r.trust_boundary === 'verified' ? 'verified' : 'untrusted_content',
   }));
 
   return {

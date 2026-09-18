@@ -1,18 +1,20 @@
 {
-  "id": "brief_037d20c5-c69b-451a-b364-e86e260d8c39",
+  "id": "brief_19d56446-1c2d-4d9c-b9a1-b38815c6a7fd",
   "workspace_id": "ws_dev",
   "parent_brief_id": null,
   "question": "When is the enterprise tier launch scheduled?",
   "mode": "home",
   "status": "published",
   "template_version": "v1",
-  "as_of": "2026-09-16T22:33:22.868Z",
-  "published_at": "2026-09-16T22:33:22.868Z",
+  "as_of": "2026-09-18T08:53:06.516Z",
+  "published_at": "2026-09-18T08:53:06.516Z",
   "title": "Brief: When is the enterprise tier launch scheduled?",
-  "markdown": "# Brief: When is the enterprise tier launch scheduled?\n\nAs of: 2026-09-16T22:33:22.868Z\nMode: home\nStatus: published\n\n## Answer\n- The enterprise tier general availability launch is scheduled for October 15 across all regions.\n- Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n\n*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*\n\n## What I used\n### Private\n- doc_roadmap_v2\n- notes_exec_sync\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- Claim: The enterprise tier general availability launch is scheduled for October 15 across all regions.\n  - [private] doc_roadmap_v2 — “The enterprise tier general availability launch is scheduled for October 15 across all regions.”\n- Claim: Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n  - [private] notes_exec_sync — “Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.”\n\n## Uncertain / missing\n- Conflict detected: Discrepancy regarding date/milestone (October 15 vs November 12) between cited sources.\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not perform actions without verified user approval.\n- Did not arbitrarily resolve cross-source disagreements or silently pick a winner.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
+  "markdown": "# Brief: When is the enterprise tier launch scheduled?\n\nAs of: 2026-09-18T08:53:06.516Z\nMode: home\nStatus: published\n\n> **TL;DR:** The enterprise tier general availability launch is scheduled for October 15 across all regions. Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n\n## Answer\n- The enterprise tier general availability launch is scheduled for October 15 across all regions.\n- Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n\n*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*\n\n## What I used\n### Private\n- doc_roadmap_v2\n- notes_exec_sync\n### Web\n- None\n### Could not be checked\n- None\n\n## Evidence\n- Claim: The enterprise tier general availability launch is scheduled for October 15 across all regions.\n  - [private] doc_roadmap_v2 — “The enterprise tier general availability launch is scheduled for October 15 across all regions.”\n- Claim: Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n  - [private] notes_exec_sync — “Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.”\n\n## Uncertain / missing\n- Conflict detected: Discrepancy regarding date/milestone (October 15 vs November 12) between cited sources.\n\n## Open loops\n- None.\n\n## Actions\n- No actions proposed.\n\n## What I did not do\n- Did not perform actions without verified user approval.\n- Did not arbitrarily resolve cross-source disagreements or silently pick a winner.\n- No unverified claims published. Withheld ungrounded assumptions.\n",
   "pdf_uri": null,
   "error": null,
+  "summary": "The enterprise tier general availability launch is scheduled for October 15 across all regions. Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.",
   "sections": {
+    "summary": "The enterprise tier general availability launch is scheduled for October 15 across all regions. Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.",
     "answer": "- The enterprise tier general availability launch is scheduled for October 15 across all regions.\n- Due to SOC2 audit scheduling, the enterprise tier general availability launch is scheduled for November 12 across all regions.\n\n*Note: Discrepancy detected across cited sources. Disagreements are detailed in the Uncertain section and citations rather than arbitrarily selecting a winner.*",
     "what_i_used": {
       "private": [
@@ -33,8 +35,8 @@
             "source_id": "doc_roadmap_v2",
             "url": null,
             "claim_span": {
-              "start": 649,
-              "end": 744
+              "start": 886,
+              "end": 981
             }
           }
         ]
@@ -49,8 +51,8 @@
             "source_id": "notes_exec_sync",
             "url": null,
             "claim_span": {
-              "start": 883,
-              "end": 1009
+              "start": 1120,
+              "end": 1246
             }
           }
         ]

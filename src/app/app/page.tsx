@@ -53,9 +53,14 @@ import { SourceHealthDashboard } from '@/components/dashboard/SourceHealthDashbo
 import { ProfileView } from '@/components/dashboard/ProfileView';
 import { BriefDiffModal } from '@/components/dashboard/BriefDiffModal';
 import { ShareBriefModal } from '@/components/dashboard/ShareBriefModal';
+import { NotionExportModal } from '@/components/dashboard/NotionExportModal';
+import { BriefTemplatesModal } from '@/components/dashboard/BriefTemplatesModal';
+import { BRIEF_TEMPLATES, type BriefTemplate } from '@/lib/templates';
 import { LatencyPlot } from '@/components/dashboard/LatencyPlot';
 import { ActionDraftCard } from '@/components/dashboard/ActionDraftCard';
 import { FormattedDiffViewer } from '@/components/dashboard/FormattedDiffViewer';
+import { OutboundWebhooksView } from '@/components/dashboard/OutboundWebhooksView';
+import { CitationHoverPreview } from '@/components/dashboard/CitationHoverPreview';
 import {
   SUPPORTED_TEMPLATE_TAGS,
   validateQuestionTemplate,
@@ -186,6 +191,10 @@ export default function DashboardPage() {
 
   // Brief Sharing Modal State (E5)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  // Notion Export & Writeback Modal State (E14)
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState(false);
+  // Brief Templates Library Modal State (E15)
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
 
   // Connector & Sync Feedback States (E3)
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -1372,6 +1381,24 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSelectTemplate = (template: BriefTemplate, action: 'use_now' | 'schedule') => {
+    if (action === 'use_now') {
+      setQueryPrompt(template.question);
+      setMode(template.suggestedMode);
+      setIsTemplatesModalOpen(false);
+      setTimeout(() => {
+        queryInputRef.current?.focus();
+      }, 100);
+    } else {
+      setNewScheduleName(template.title);
+      setNewScheduleQuestion(template.question);
+      setNewScheduleCron(template.suggestedCron || '0 9 * * 1');
+      setNewScheduleMode(template.suggestedMode);
+      setIsTemplatesModalOpen(false);
+      setIsScheduleModalOpen(true);
+    }
+  };
+
   const renderSourcesTable = (title: string, description?: string) => {
     const filtered = uploadedFiles.filter((f) => {
       if (sourceFilterConnector === 'all') return true;
@@ -2000,8 +2027,31 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Smart Suggestion Pills (E4) */}
+            {/* Smart Suggestion Pills (E4) & Templates Library Trigger (E15) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '2px' }}>
+              <button
+                type="button"
+                onClick={() => setIsTemplatesModalOpen(true)}
+                className="dash-btn-secondary"
+                style={{
+                  fontSize: '0.72rem',
+                  padding: '3px 10px',
+                  borderRadius: '16px',
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  borderColor: 'rgba(99, 102, 241, 0.35)',
+                  color: '#a5b4fc',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  marginRight: '4px',
+                }}
+                title="Browse pre-built questions across Engineering, Leadership, Competitors, and Meetings (E15)"
+              >
+                <span>📚</span>
+                <span>Templates Library</span>
+              </button>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '2px' }}>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>✨ Suggested:</span>
                 <button
@@ -2699,9 +2749,9 @@ export default function DashboardPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleExportNotion(currentBrief.id)}
+                        onClick={() => setIsNotionModalOpen(true)}
                         className="dash-btn-secondary"
-                        title="Copy Notion-compatible markdown blocks to clipboard (FR9)"
+                        title="Export or push brief directly into Notion workspace as live blocks (E14)"
                       >
                         <FileText size={14} />
                         <span>Notion</span>
@@ -2868,6 +2918,13 @@ export default function DashboardPage() {
                                     const cleanClaim = cleanHtmlAndTracking(rawClaim);
                                     if (!cleanClaim) return null;
 
+                                    // Find associated citation records in briefDetail.citations
+                                    const matchedCitation = (briefDetail?.citations || []).find((c: any) => {
+                                      if (c.claim_text && cleanClaim.toLowerCase().includes(c.claim_text.toLowerCase())) return true;
+                                      if (c.quote && cleanClaim.toLowerCase().includes(c.quote.slice(0, 20).toLowerCase())) return true;
+                                      return false;
+                                    }) || (briefDetail?.citations || [])[0];
+
                                     return (
                                       <div
                                         key={lineIdx}
@@ -2888,9 +2945,20 @@ export default function DashboardPage() {
                                           wordBreak: 'break-word',
                                         }}
                                       >
-                                        <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                                          <span style={{ color: '#10b981', fontWeight: 700, marginRight: '6px' }}>Claim:</span>
+                                        <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                          <span style={{ color: '#10b981', fontWeight: 700, marginRight: '2px' }}>Claim:</span>
                                           <span>{cleanClaim}</span>
+                                          {matchedCitation && (
+                                            <CitationHoverPreview
+                                              citation={matchedCitation}
+                                              claimText={cleanClaim}
+                                              onFlag={(q, id) => {
+                                                setFlagClaimText(q);
+                                                setFlagCitationId(id || null);
+                                                setIsFlagModalOpen(true);
+                                              }}
+                                            />
+                                          )}
                                         </div>
                                         <button
                                           onClick={() => {
@@ -2919,6 +2987,18 @@ export default function DashboardPage() {
                                     const parsed = parseAndHumanizeCitationLine(trimmed);
                                     if (!parsed.quote) return null;
 
+                                    // Find exact citation record in briefDetail.citations matching quote or source
+                                    const exactCitation = (briefDetail?.citations || []).find((c: any) => {
+                                      if (!c.quote) return false;
+                                      const cleanCQuote = cleanHtmlAndTracking(c.quote);
+                                      return parsed.quote.includes(cleanCQuote.slice(0, 25)) || cleanCQuote.includes(parsed.quote.slice(0, 25));
+                                    }) || {
+                                      source_class: parsed.sourceClass as any,
+                                      quote: parsed.quote,
+                                      source_id: parsed.sourceLabel,
+                                      citation_type: 'support',
+                                    };
+
                                     return (
                                       <div
                                         key={lineIdx}
@@ -2937,21 +3017,32 @@ export default function DashboardPage() {
                                           wordBreak: 'break-word',
                                         }}
                                       >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
-                                          <span
-                                            style={{
-                                              color: parsed.sourceClass === 'web' ? '#06b6d4' : '#10b981',
-                                              fontWeight: 600,
-                                              textTransform: 'uppercase',
-                                            }}
-                                          >
-                                            {parsed.sourceClass === 'web' ? 'Web Source' : 'Your Files'}
-                                          </span>
-                                          {parsed.sourceLabel && (
-                                            <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
-                                              &bull; {parsed.sourceLabel}
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+                                            <span
+                                              style={{
+                                                color: parsed.sourceClass === 'web' ? '#06b6d4' : '#10b981',
+                                                fontWeight: 600,
+                                                textTransform: 'uppercase',
+                                              }}
+                                            >
+                                              {parsed.sourceClass === 'web' ? 'Web Source' : 'Your Files'}
                                             </span>
-                                          )}
+                                            {parsed.sourceLabel && (
+                                              <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                                &bull; {parsed.sourceLabel}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <CitationHoverPreview
+                                            citation={exactCitation}
+                                            badgeLabel="Hover Preview"
+                                            onFlag={(q, id) => {
+                                              setFlagClaimText(q);
+                                              setFlagCitationId(id || null);
+                                              setIsFlagModalOpen(true);
+                                            }}
+                                          />
                                         </div>
                                         <blockquote
                                           style={{
@@ -3713,6 +3804,16 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* SECTION: OUTBOUND WEBHOOKS & AUTOMATIONS (Feature E11)   */}
+      {/* ======================================================== */}
+      {activeSection === 'webhooks' && (
+        <OutboundWebhooksView
+          onNavigateConnectors={() => setActiveSection('sources')}
+          onNavigateBriefs={() => setActiveSection('briefs')}
+        />
       )}
 
       {/* ======================================================== */}
@@ -4680,7 +4781,27 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Question Template</label>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Click tag to insert</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsTemplatesModalOpen(true)}
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.12)',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                        borderRadius: '4px',
+                        color: '#a5b4fc',
+                        fontSize: '0.7rem',
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <span>📚 Browse Library (E15)</span>
+                    </button>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Click tag to insert</span>
+                  </div>
                 </div>
 
                 {/* Tag insertion chips */}
@@ -5041,13 +5162,43 @@ export default function DashboardPage() {
                     <span className="dash-badge dash-badge-mode" style={{ textTransform: 'capitalize' }}>
                       {inspectingSource.source.connector}
                     </span>
-                    <span
-                      className="dash-badge dash-badge-mode"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const cur = inspectingSource.source.trust_boundary;
+                        const next = cur === 'verified' ? 'untrusted_content' : 'verified';
+                        setInspectingSource({
+                          ...inspectingSource,
+                          source: { ...inspectingSource.source, trust_boundary: next },
+                        });
+                        try {
+                          await fetch(`/api/sources/${inspectingSource.source.id}/trust`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ trustBoundary: next }),
+                          });
+                          fetchSources();
+                        } catch (err) {
+                          console.warn('Failed updating trust level:', err);
+                        }
+                      }}
+                      className="dash-badge"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        cursor: 'pointer',
+                        background: inspectingSource.source.trust_boundary === 'verified' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.12)',
+                        color: inspectingSource.source.trust_boundary === 'verified' ? '#10b981' : '#f59e0b',
+                        border: `1px solid ${inspectingSource.source.trust_boundary === 'verified' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.25)'}`,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                      }}
+                      title="Click to toggle trust boundary (Verified internal docs vs Untrusted content)"
                     >
                       <Lock size={10} />
-                      {inspectingSource.source.trust_boundary}
-                    </span>
+                      <span>{inspectingSource.source.trust_boundary === 'verified' ? 'Verified Doc' : 'Untrusted'} (Toggle)</span>
+                    </button>
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                       {inspectingSource.chunks.length} chunk(s)
                     </span>
@@ -5209,6 +5360,23 @@ export default function DashboardPage() {
           briefId={currentBrief.id}
           briefQuestion={currentBrief.question}
           onClose={() => setIsShareModalOpen(false)}
+        />
+      )}
+
+      {/* Live Notion Export & Write-Back Modal (E14) */}
+      {isNotionModalOpen && currentBrief && (
+        <NotionExportModal
+          briefId={currentBrief.id}
+          briefTitle={currentBrief.question || 'Ballast Intelligence Brief'}
+          onClose={() => setIsNotionModalOpen(false)}
+        />
+      )}
+
+      {/* Brief Templates Library Modal (E15) */}
+      {isTemplatesModalOpen && (
+        <BriefTemplatesModal
+          onClose={() => setIsTemplatesModalOpen(false)}
+          onSelectTemplate={handleSelectTemplate}
         />
       )}
     </DashboardLayout>

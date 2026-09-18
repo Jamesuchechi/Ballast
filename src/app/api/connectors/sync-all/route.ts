@@ -98,6 +98,29 @@ export async function POST(req: NextRequest) {
       console.warn(`[API /api/connectors/sync-all] Failed logging audit entry:`, logErr);
     }
 
+    // Outbound webhook notification (Feature E11)
+    try {
+      const { dispatchOutboundWebhook } = await import('@/core/outboundWebhooks');
+      dispatchOutboundWebhook({
+        workspaceId,
+        event: 'connector.synced',
+        payload: {
+          connector: 'batch',
+          connector_name: 'All Connected Integrations',
+          connected_count: connectedConnectors.length,
+          synced_count: totalSynced,
+          unchanged_count: totalUnchanged,
+          error_count: Object.keys(errors).length,
+          results,
+          errors,
+          synced_at: new Date().toISOString(),
+        },
+      }).catch((whErr) => console.warn('[Outbound Webhook Batch Sync Error]:', whErr));
+    } catch (whImportErr) {
+      console.warn('[Outbound Webhook Import Error]:', whImportErr);
+    }
+
+
     const hasAnyError = Object.keys(errors).length > 0;
     const allFailed = hasAnyError && Object.keys(errors).length === connectedConnectors.length;
 

@@ -498,20 +498,116 @@ Brief questions that are identical or near-identical within a 24-hour window cou
 4. Exposed real-time cache telemetry (hits, misses, hit rate percentage) via `getLLMCacheStats()` in the Analytics API [`src/app/api/analytics/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/analytics/route.ts).
 5. Verified with automated test suite in `test/llm_redis_cache.test.ts` (6/6 passed) and full regression tests across `test/cost_calculation.test.ts` (6/6 passed) and `test/llm.test.ts` (7/7 passed).
 
-### E11. **Connector sync status webhooks (outbound)**
-Let users configure a webhook URL that Ballast calls when a brief is published. This enables integrations with tools like Make, Zapier, or n8n without building native integrations.
+### E11. **Connector sync status & brief publication webhooks (outbound)** [RESOLVED]
+Let users configure a webhook URL that Ballast calls when a brief is published, generation fails, or connector sync passes complete. This enables integrations with tools like Make, Zapier, or n8n without building native integrations.
+**Files:** [`schema.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/schema.sql), [`016_add_outbound_webhooks.sql`](file:///home/jamesuchechi/Projects/Ballast/src/db/migrations/016_add_outbound_webhooks.sql), [`types.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/types.ts), [`outboundWebhooks.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/outboundWebhooks.ts), [`pipelineWorker.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/pipelineWorker.ts), [`connectors/[id]/sync/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/connectors/%5Bid%5D/sync/route.ts), [`connectors/sync-all/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/connectors/sync-all/route.ts), [`webhooks/outbound/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/webhooks/outbound/route.ts), [`webhooks/outbound/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/webhooks/outbound/%5Bid%5D/route.ts), [`webhooks/outbound/[id]/test/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/webhooks/outbound/%5Bid%5D/test/route.ts), [`OutboundWebhooksView.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/OutboundWebhooksView.tsx), [`Sidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/Sidebar.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`outbound_webhooks.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/outbound_webhooks.test.ts)
 
-### E12. **Per-source trust level UI**
-The `trust_boundary` column exists in the DB (`untrusted_content` for all connectors currently). Build a UI to let users upgrade a source to `verified` (for their own internal docs) vs `untrusted_content` (for external web pages). The Critic could weight verified sources differently.
+**Resolution:**
+1. Created database migration `016_add_outbound_webhooks.sql` and updated `src/db/schema.sql` adding `outbound_webhooks` table (`url`, `secret`, `events`, `description`, `is_active`, `last_triggered_at`, `last_status_code`, `last_error`) with composite indexes on `(workspace_id, is_active)` and `(workspace_id, created_at DESC)`.
+2. Created core outbound engine [`src/core/outboundWebhooks.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/outboundWebhooks.ts) with:
+   - Cryptographic HMAC-SHA256 signature calculation (`X-Ballast-Signature: sha256=...`).
+   - Standardized event headers (`X-Ballast-Event`, `X-Ballast-Delivery`, `X-Ballast-Timestamp`, `User-Agent: Ballast-Webhooks/1.0`).
+   - Supported event subscriptions: `brief.published`, `brief.failed`, `connector.synced`, `action.proposed`, `action.executed`, and `*` (wildcard).
+   - Safe, non-blocking parallel delivery with 10s `AbortController` timeouts, automatic telemetry updates, and audit trails logged in `access_logs`.
+   - Diagnostic test ping generator (`testOutboundWebhook`) dispatching `ballast.test` payloads.
+3. Integrated webhook event dispatching into core pipelines:
+   - `src/core/pipelineWorker.ts`: Dispatches `brief.published` with full brief metadata (ID, title, question, mode, summary, claims count, actions count, pdf URI) upon successful publication, and `brief.failed` on pipeline errors.
+   - `src/app/api/connectors/[id]/sync/route.ts` & `src/app/api/connectors/sync-all/route.ts`: Dispatches `connector.synced` with synced and unchanged item counts and latency metrics.
+4. Built authenticated REST API routes (`src/app/api/webhooks/outbound/`):
+   - `GET /api/webhooks/outbound` & `POST /api/webhooks/outbound` for listing and registration.
+   - `GET /api/webhooks/outbound/[id]`, `PATCH /api/webhooks/outbound/[id]`, and `DELETE /api/webhooks/outbound/[id]` for lifecycle management.
+   - `POST /api/webhooks/outbound/[id]/test` for instant diagnostic ping dispatch.
+5. Built interactive Outbound Webhooks management view in [`src/components/dashboard/OutboundWebhooksView.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/OutboundWebhooksView.tsx):
+   - Active endpoint KPI counters, event badges, masked secret key preview with one-click copy, and enable/disable toggles.
+   - Interactive **"⚡ Test Payload"** button with live response status code and latency reporting.
+   - "Add / Edit Webhook" modal with URL validation and event presets.
+   - Navigation linked from [`src/components/dashboard/Sidebar.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/Sidebar.tsx) and [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+6. Verified with 100% pass rate in `test/outbound_webhooks.test.ts` (8/8 passed), eval scorecard (6/6 passed), and clean TypeScript compilation (`npx tsc --noEmit`).
 
-### E13. **Citation inline hover preview**
-In the rendered brief markdown, hovering over a citation should show the original quote inline. This requires the claim_span to be surfaced to the frontend alongside the markdown. The data is already in the DB — it just needs wiring to the UI.
+### E12. **Per-source trust level UI & Critic Weighting** [RESOLVED]
+The `trust_boundary` column exists in the DB (`untrusted_content` for all connectors by default). Built a UI and API allowing users to upgrade sources to `verified` (for authoritative internal docs/contracts) vs `untrusted_content` (for external web/third-party data), with Critic weighting verified sources higher in conflict detection.
+**Files:** [`types.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/types.ts), [`retrieval.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/retrieval.ts), [`sourceFormatter.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/sourceFormatter.ts), [`writer.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/writer.ts), [`critic.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/critic.ts), [`sources/[id]/trust/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/%5Bid%5D/trust/route.ts), [`SourceHealthDashboard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/SourceHealthDashboard.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`source_trust_level.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/source_trust_level.test.ts)
 
-### E14. **Notion write-back (export)**
-When a brief is published, optionally push it as a new Notion page in a configured database. The Notion connector already exists for read — write would be a natural extension.
+**Resolution:**
+1. Defined `TrustBoundary = 'verified' | 'untrusted_content'` in `src/core/types.ts` and enriched `RetrievedQuote` and `SourceBlock` with `trust_boundary`.
+2. Updated vector search in `src/core/retrieval.ts` (`retrievePrivateChunks`) to select `s.trust_boundary` from `sources` and populate `quote.trust_boundary`.
+3. Updated XML serialization in `src/core/sourceFormatter.ts` to output `trust="verified"` and `trust="untrusted_content"` attributes on `<source>` and `<quote>` elements.
+4. Integrated trust boundary weighting into generation and verification:
+   - `src/core/writer.ts`: Added prompt instructions and tags (`[Trust: Verified Authoritative Internal]` vs `[Trust: Untrusted Content]`) prioritizing verified internal policies in generated answers.
+   - `src/core/critic.ts`: Instructed Critic and deterministic evaluator to weight verified internal documents when discrepancies arise against untrusted content, surfacing `[Verified Authority vs Untrusted]` in conflict evaluation topics.
+5. Created authenticated API route `PATCH /api/sources/[id]/trust` in [`src/app/api/sources/[id]/trust/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/sources/%5Bid%5D/trust/route.ts) with workspace authorization, parameter validation, and audit trail logging to `access_logs` (`source_trust_update:<id>`).
+6. Upgraded dashboard UI:
+   - Added interactive **Trust Boundary Toggle Buttons** with emerald `🛡️ Verified Doc` vs amber `⚠️ Untrusted` badges and explanatory tooltips in [`src/components/dashboard/SourceHealthDashboard.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/SourceHealthDashboard.tsx).
+   - Added 1-click interactive trust toggle in the Source Details Modal in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+7. Verified with 100% pass rate in `test/source_trust_level.test.ts` (4/4 passed), eval scorecard (6/6 passed), and clean TypeScript compilation (`npx tsc --noEmit`).
 
-### E15. **Brief templates library**
-Pre-built question templates: "Weekly team status", "Project health check", "Competitor news scan", "Meeting prep for [calendar event]". These could dramatically reduce time-to-first-value for new users.
+### E13. **Citation inline hover preview** [RESOLVED]
+In the rendered brief markdown, hovering over a citation shows the original quote inline, with source origin and trust level badges.
+**Files:** [`types.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/types.ts), [`renderer.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/renderer.ts), [`assembler.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/assembler.ts), [`briefs/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/route.ts), [`formatters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/formatters.ts), [`CitationHoverPreview.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/CitationHoverPreview.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`citation_hover_preview.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/citation_hover_preview.test.ts)
+
+**Resolution:**
+1. Computed character-level `claim_span` offsets (`{ start, end }`) directly in `renderer.ts` and attached them to citation records in `assembler.ts` and `pipelineWorker.ts`.
+2. Updated `GET /api/briefs/[id]` in [`src/app/api/briefs/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/route.ts) joining `sources` to deliver citations enriched with `connector`, `trust_boundary`, `uri`, and `mime_type`.
+3. Built reusable, glassmorphic `CitationHoverPreview` component in [`src/components/dashboard/CitationHoverPreview.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/CitationHoverPreview.tsx):
+   - **Rich Popover Header**: Connector icon + badge (✉️ Gmail, 🐙 GitHub, 📁 Drive, 💬 Slack, 📝 Notion, 🌐 Web), Trust Boundary indicator (`🛡️ Verified Internal` vs `⚠️ Untrusted Source`), Conflict status tag (`✓ Confirmed` vs `⚠ Conflict`), and markdown character offset span (`Span: start..end`).
+   - **Verbatim Quote Card**: Styled italic blockquote with quotation marks and trust-coded border accents.
+   - **Interactive Actions**: One-click "Copy Quote", external source URI links, and in-context "Flag Citation" trigger.
+4. Integrated inline citation hover triggers into both Verified Claims and Evidence citation lines in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+5. Enhanced formatting utilities in [`src/lib/formatters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/formatters.ts) to humanize raw citation lines and clean machine tokens.
+6. Verified with automated test suite in `test/citation_hover_preview.test.ts` (5/5 passed), regression test suites across E11, E12, and E13 (7/7 passed), and clean TypeScript compilation (`npx tsc --noEmit`).
+
+### E14. **Notion write-back (export)** [RESOLVED]
+When a brief is published, push it directly into a connected Notion workspace as a native Notion page with structured callouts, citations, to-dos, and scope boundaries, or copy formatted Notion-compatible markdown blocks.
+**Files:** [`exporters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/exporters.ts), [`briefs/[id]/export/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/export/route.ts), [`NotionExportModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/NotionExportModal.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`notion_writeback.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/notion_writeback.test.ts)
+
+**Resolution:**
+1. Built `buildNotionBlockChildren` engine in [`src/core/exporters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/exporters.ts):
+   - Transforms published briefs into native Notion API block objects:
+     - **Callout Block**: Executive summary (`⚡ TL;DR`) with green background and emoji icon.
+     - **Answer Section**: `heading_2` and structured paragraph blocks.
+     - **Grounded Citations**: `quote` blocks formatted with verbatim quotes, humanized source origins, and trust level annotations.
+     - **Action Items**: Interactive `to_do` checkable blocks.
+     - **Scope Boundaries**: `bulleted_list_item` blocks detailing what was not done.
+   - Enforces Notion API constraints: 2,000 max characters per rich text object and maximum 100 block children per creation request.
+2. Built `pushBriefToNotion` in [`src/core/exporters.ts`](file:///home/jamesuchechi/Projects/Ballast/src/core/exporters.ts):
+   - Securely decrypts stored Notion workspace tokens via `tokenStore`.
+   - Auto-resolves top-level Notion parent page/database if no specific parent ID is supplied by the user.
+   - Dispatches `POST https://api.notion.com/v1/pages` with Notion-Version `2022-06-28`.
+   - Records audit access trail in `access_logs` (`notion_writeback_created: page_id=...`).
+   - Supports deterministic mock execution for test environments without internet dependencies.
+3. Updated export API in [`src/app/api/briefs/[id]/export/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/briefs/%5Bid%5D/export/route.ts):
+   - Handles `target: 'notion'` with `push: true`, returning `{ success: true, pageId, url, title, message }`.
+   - Handles clipboard export with `{ target: 'notion', push: false }`, returning structured markdown blocks.
+4. Built interactive `NotionExportModal` component in [`src/components/dashboard/NotionExportModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/NotionExportModal.tsx):
+   - **Option 1: Live Push to Notion**: Supports direct 1-click push with optional parent ID input, live spinner loading state, and created Notion page URL with `Open in Notion ↗` link.
+   - **Option 2: Copy Notion Blocks**: 1-click clipboard copy of formatted markdown blocks with visual copy confirmation.
+   - Integrated into the Brief View toolbar in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+5. Verified with automated test suite in `test/notion_writeback.test.ts` (3/3 passed), regression tests across E11, E12, E13, E14 (10/10 passed), and clean TypeScript compilation (`npx tsc --noEmit`).
+
+### E15. **Brief templates library** [RESOLVED]
+Pre-built question templates across Engineering, Leadership, Market Intelligence, and Meeting Preparation that dramatically reduce time-to-first-value for users with 1-click query synthesis and recurring cron schedule configuration.
+**Files:** [`templates.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/templates.ts), [`templates/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/templates/route.ts), [`templates/[id]/route.ts`](file:///home/jamesuchechi/Projects/Ballast/src/app/api/templates/%5Bid%5D/route.ts), [`BriefTemplatesModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/BriefTemplatesModal.tsx), [`page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx), [`brief_templates.test.ts`](file:///home/jamesuchechi/Projects/Ballast/test/brief_templates.test.ts)
+
+**Resolution:**
+1. Built rich template catalog and query engine in [`src/lib/templates.ts`](file:///home/jamesuchechi/Projects/Ballast/src/lib/templates.ts):
+   - **Leadership & Status**: "Weekly Team Status & Wins" (Slack/Gmail/Drive), "Executive Daily Morning Brief" (`{{today}}`).
+   - **Engineering & Product**: "Project Health & Release Audit" (GitHub/Slack), "Incident & Post-Mortem Synthesis" (Slack/GitHub).
+   - **Market & Intelligence**: "Competitor News & Market Scan" (Live Web), "Customer Voice & Feature Requests" (Slack/Gmail/Notion).
+   - **Meetings & 1-on-1**: "Meeting Prep & Stakeholder Brief" (Calendar/Gmail/Drive), "1-on-1 Sync & Career Growth Prep" (GitHub/Slack/Notion).
+   - Implemented `queryTemplates` supporting category filtering, keyword search, mode scoping, and single template retrieval `getTemplateById`.
+2. Built authenticated REST API routes:
+   - `GET /api/templates`: lists all templates with search, category, and mode query params.
+   - `GET /api/templates/[id]`: returns individual template definition with connectors and suggested cron settings.
+3. Built interactive `BriefTemplatesModal` component in [`src/components/dashboard/BriefTemplatesModal.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/components/dashboard/BriefTemplatesModal.tsx):
+   - **Category Pills & Keyword Search**: Filter across all domains with live counts.
+   - **Live Rendered Tag Preview**: Resolves dynamic tags (e.g., `{{today}}`, `{{weekday}}`) in real time for immediate user clarity.
+   - **One-Click Actions**:
+     - **"Use in New Brief"**: Immediately populates the dashboard prompt and sets optimal synthesis mode (`home` vs `world`).
+     - **"Schedule Recurring"**: Auto-populates schedule name, question template, and recommended cron schedule in the scheduler modal.
+4. Integrated into the Dashboard:
+   - Added **"📚 Templates Library"** trigger badge in the Query Bar in [`src/app/app/page.tsx`](file:///home/jamesuchechi/Projects/Ballast/src/app/app/page.tsx).
+   - Added **"Browse Library"** button directly inside the Recurring Schedule creation dialog.
+5. Verified with automated test suite in `test/brief_templates.test.ts` (4/4 passed), combined regression suites across E11–E15 (14/14 passed), and clean TypeScript compilation (`npx tsc --noEmit`).
 
 ---
 
