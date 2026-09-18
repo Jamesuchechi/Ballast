@@ -1600,16 +1600,16 @@ export default function DashboardPage() {
             <p style={{ fontSize: '0.85rem' }}>No indexed items matching this filter.</p>
           </div>
         ) : (
-          <div style={{ width: '100%', maxWidth: '100%', minWidth: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
-            <table className="dash-table" style={{ minWidth: '600px', width: '100%' }}>
+          <div className="dash-table-container">
+            <table className="dash-table" style={{ minWidth: '680px', width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Source Item / Subject</th>
-                  <th>Chunks</th>
-                  <th>Connector</th>
-                  <th>Trust Boundary</th>
-                  <th>Ingested</th>
-                  <th>Action</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Source Item / Subject</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Chunks</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Connector</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Trust Boundary</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Ingested</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1647,8 +1647,9 @@ export default function DashboardPage() {
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              maxWidth: '320px',
+                              maxWidth: '280px',
                             }}
+                            title={file.name}
                           >
                             {file.name}
                           </div>
@@ -1661,8 +1662,9 @@ export default function DashboardPage() {
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                maxWidth: '320px',
+                                maxWidth: '280px',
                               }}
+                              title={file.subtitle}
                             >
                               {file.subtitle}
                             </div>
@@ -1670,27 +1672,36 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                       {file.size}
                     </td>
-                    <td>
-                      <span className="dash-badge dash-badge-mode" style={{ textTransform: 'capitalize' }}>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <span className="dash-badge dash-badge-mode" style={{ textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
                         {file.connector}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <span
                         className="dash-badge dash-badge-mode"
-                        style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        style={{
+                          fontSize: '0.7rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap',
+                          background: file.trust_boundary === 'verified' ? 'rgba(16, 185, 129, 0.15)' : undefined,
+                          color: file.trust_boundary === 'verified' ? '#10b981' : undefined,
+                          borderColor: file.trust_boundary === 'verified' ? 'rgba(16, 185, 129, 0.3)' : undefined,
+                        }}
                       >
                         <Lock size={10} />
-                        untrusted_content
+                        {file.trust_boundary || 'untrusted_content'}
                       </span>
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                    <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                       {file.date}
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
                           onClick={() => handleResyncSource(file.id)}
@@ -4390,35 +4401,35 @@ export default function DashboardPage() {
                 <p style={{ fontSize: '0.82rem' }}>No execution telemetry recorded in this workspace yet.</p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dash-table">
+              <div className="dash-table-container">
+                <table className="dash-table" style={{ minWidth: '680px', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th>Brief</th>
-                      <th>Latency</th>
-                      <th>Tokens In/Out</th>
-                      <th>Cost</th>
-                      <th>Circuit</th>
-                      <th>Timestamp</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Brief Question</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Latency</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Tokens In/Out</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Cost</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Circuit</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Timestamp</th>
                     </tr>
                   </thead>
                   <tbody>
                     {telemetry.runs.map((r: any) => (
                       <tr key={r.id}>
-                        <td style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <td style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.82rem' }} title={r.brief_question || r.brief_id}>
                           {r.brief_question || r.brief_id}
                         </td>
-                        <td style={{ fontFamily: 'var(--font-mono)' }}>{r.latency_ms} ms</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{r.latency_ms} ms</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {r.tokens_in} / {r.tokens_out}
                         </td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: '#10b981' }}>${r.cost}</td>
-                        <td>
-                          <span className={r.circuit_broken ? 'dash-badge dash-badge-running' : 'dash-badge dash-badge-published'}>
+                        <td style={{ fontFamily: 'var(--font-mono)', color: '#10b981', whiteSpace: 'nowrap' }}>${r.cost}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span className={r.circuit_broken ? 'dash-badge dash-badge-running' : 'dash-badge dash-badge-published'} style={{ whiteSpace: 'nowrap' }}>
                             {r.circuit_broken ? 'Tripped' : 'Clean'}
                           </span>
                         </td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {new Date(r.created_at).toLocaleString()}
                         </td>
                       </tr>
@@ -4455,30 +4466,30 @@ export default function DashboardPage() {
                 <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>Ingesting documents or running briefs will automatically generate verifiable access logs.</p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dash-table">
+              <div className="dash-table-container">
+                <table className="dash-table" style={{ minWidth: '680px', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th>Timestamp</th>
-                      <th>Connector</th>
-                      <th>Operation</th>
-                      <th>Source / Brief</th>
-                      <th>Status</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Timestamp</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Connector</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Operation</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Source / Brief</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {accessLogs.map((log: any) => (
                       <tr key={log.id}>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                           {new Date(log.created_at).toLocaleString()}
                         </td>
-                        <td style={{ fontWeight: 600, color: 'var(--text)' }}>{log.connector}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)' }}>{log.action}</td>
-                        <td style={{ color: 'var(--text-muted)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <td style={{ fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>{log.connector || 'system'}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{log.action}</td>
+                        <td style={{ color: 'var(--text-muted)', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.source_name || log.brief_question || '-'}>
                           {log.source_name || log.brief_question || '-'}
                         </td>
-                        <td>
-                          <span className="dash-badge dash-badge-published">allowed</span>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span className="dash-badge dash-badge-published" style={{ whiteSpace: 'nowrap' }}>allowed</span>
                         </td>
                       </tr>
                     ))}
@@ -4532,38 +4543,38 @@ export default function DashboardPage() {
                 </p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="dash-table">
+              <div className="dash-table-container">
+                <table className="dash-table" style={{ minWidth: '600px', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th>Claim Sentence</th>
-                      <th>Reason</th>
-                      <th>Status</th>
-                      <th>Reported At</th>
-                      <th>Actions</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Claim Sentence</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Reason</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Reported At</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {flags.map((f: any) => (
                       <tr key={f.id}>
-                        <td style={{ fontSize: '0.82rem', maxWidth: '300px' }}>{f.claim}</td>
-                        <td>
+                        <td style={{ fontSize: '0.82rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.claim}>{f.claim}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <span className="dash-badge dash-badge-mode">{f.reason}</span>
                         </td>
-                        <td>
-                          <span className={f.status === 'resolved' ? 'dash-badge dash-badge-published' : 'dash-badge dash-badge-running'}>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <span className={f.status === 'resolved' ? 'dash-badge dash-badge-published' : 'dash-badge dash-badge-running'} style={{ whiteSpace: 'nowrap' }}>
                             {f.status}
                           </span>
                         </td>
-                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                           {new Date(f.reported_at).toLocaleString()}
                         </td>
-                        <td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           <button
                             onClick={() => handleResolveFlag(f.id)}
                             disabled={f.status === 'resolved'}
                             className="dash-btn-secondary"
-                            style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                            style={{ padding: '4px 10px', fontSize: '0.72rem', whiteSpace: 'nowrap' }}
                           >
                             {f.status === 'resolved' ? 'Resolved ✓' : 'Resolve'}
                           </button>
@@ -4603,8 +4614,8 @@ export default function DashboardPage() {
             </div>
 
             {/* Plan Comparison Table */}
-            <div style={{ overflowX: 'auto' }}>
-              <table className="dash-table">
+            <div className="dash-table-container">
+              <table className="dash-table" style={{ minWidth: '550px', width: '100%' }}>
                 <thead>
                   <tr>
                     <th>Tier</th>

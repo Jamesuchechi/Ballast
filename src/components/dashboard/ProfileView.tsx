@@ -643,14 +643,16 @@ export function ProfileView({
                         background: isCurrent ? 'rgba(16, 185, 129, 0.08)' : 'var(--card-bg)',
                         border: isCurrent ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--card-border)',
                         transition: 'all 0.15s ease',
+                        gap: '12px',
+                        flexWrap: 'wrap',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 200px' }}>
                         <div
                           style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '6px',
+                            width: '34px',
+                            height: '34px',
+                            borderRadius: '8px',
                             background: isCurrent ? '#10b981' : 'var(--card-bg-subtle)',
                             color: isCurrent ? '#fff' : 'var(--text-muted)',
                             display: 'flex',
@@ -658,41 +660,57 @@ export function ProfileView({
                             justifyContent: 'center',
                             fontWeight: 700,
                             fontSize: '0.85rem',
+                            flexShrink: 0,
                           }}
                         >
                           {ws.name?.[0]?.toUpperCase() || 'W'}
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text)', wordBreak: 'break-word' }}>
                               {ws.name}
                             </span>
                             {isCurrent && (
                               <span
                                 style={{
                                   fontSize: '0.66rem',
-                                  padding: '1px 6px',
+                                  padding: '1px 7px',
                                   borderRadius: '9999px',
                                   background: 'rgba(16, 185, 129, 0.15)',
                                   color: '#10b981',
                                   fontWeight: 600,
                                   fontFamily: 'var(--font-mono)',
+                                  whiteSpace: 'nowrap',
+                                  flexShrink: 0,
                                 }}
                               >
                                 Active
                               </span>
                             )}
                           </div>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                             {ws.plan?.toUpperCase() || 'FREE'} Tier • Role: {ws.role || 'member'} • {ws.memberCount || 1} member(s)
                           </span>
                         </div>
                       </div>
 
-                      <div>
+                      <div style={{ flexShrink: 0 }}>
                         {isCurrent ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '0.76rem', fontWeight: 600 }}>
-                            <Check size={16} />
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              color: '#10b981',
+                              fontSize: '0.76rem',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              background: 'rgba(16, 185, 129, 0.1)',
+                            }}
+                          >
+                            <Check size={14} />
                             <span>Current</span>
                           </div>
                         ) : (
@@ -701,7 +719,7 @@ export function ProfileView({
                             onClick={() => handleSwitchWorkspace(ws.id)}
                             disabled={isSwitchingWs}
                             className="dash-btn-secondary"
-                            style={{ fontSize: '0.74rem', padding: '6px 12px' }}
+                            style={{ fontSize: '0.74rem', padding: '6px 14px', whiteSpace: 'nowrap' }}
                           >
                             {isSwitchingWs ? <Loader2 size={13} className="animate-spin" /> : 'Switch'}
                           </button>

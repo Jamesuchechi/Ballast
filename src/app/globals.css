@@ -882,9 +882,19 @@ body {
   background: rgba(16, 185, 129, 0.04);
 }
 
-/* Data Table Styling */
+/* Data Table Styling & Mobile Responsiveness */
+.dash-table-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+
 .dash-table {
   width: 100%;
+  min-width: 600px;
   border-collapse: collapse;
   font-size: 0.82rem;
 }
@@ -898,12 +908,21 @@ body {
   letter-spacing: 0.05em;
   color: var(--text-subtle);
   border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
 }
 
 .dash-table td {
   padding: 12px;
   border-bottom: 1px solid var(--card-border);
   color: var(--text);
+  white-space: nowrap;
+}
+
+.dash-table td.cell-wrap {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 320px;
+  word-break: break-word;
 }
 
 .dash-table tr:hover td {

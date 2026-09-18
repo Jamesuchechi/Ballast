@@ -832,17 +832,17 @@ export function SourceHealthDashboard({
             No sources match the selected filter criteria.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+          <div className="dash-table-container">
+            <table style={{ minWidth: '700px', width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--card-border)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Source / Document</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Connector</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Trust Boundary</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Chunks</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Last Sync</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right' }}>Actions</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Source / Document</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Connector</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Trust Boundary</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Chunks</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Last Sync</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Status</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
